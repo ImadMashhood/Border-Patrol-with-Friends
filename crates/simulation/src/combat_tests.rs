@@ -231,9 +231,13 @@ fn ragdoll_uses_jointed_bodies_in_the_cabin_and_can_be_physically_pulled_out() {
     pose(&mut s, [-1.6, 1.7, -0.25]);
     s.pull_body(1, 1).unwrap();
     assert!(s.pull_body(1, 1).is_err());
-    run(&mut s, 5.);
+    run(&mut s, 8.);
     let n = &s.world.vehicles[0].physics.npc;
-    assert!(n.extracted);
+    assert!(
+        n.extracted,
+        "pull active={}, bones={:?}",
+        n.body_pull_active, n.ragdoll
+    );
     assert!(!n.died_seated);
     assert!(
         n.ragdoll[1].position[0] < -1.4,
@@ -265,4 +269,47 @@ fn shattered_glass_is_rigid_body_debris_that_falls_collides_and_expires() {
     assert!(s.world.shards.iter().all(|s| s.position[1] > -0.12));
     run(&mut s, 9.);
     assert!(s.world.shards.is_empty());
+}
+
+#[test]
+fn anatomical_constraints_survive_seated_standing_impacts_and_extraction() {
+    for kind in border_net::vehicle::KINDS {
+        for seated in [true, false] {
+            for yaw in [0., 1.2] {
+                let mut s = active();
+                let v = &mut s.world.vehicles[0];
+                v.kind = kind.into();
+                v.yaw = yaw;
+                v.stage = VehicleStage::Disabled;
+                v.physics.npc.health = 0;
+                v.physics.npc.mode = NpcMode::Dead;
+                v.physics.npc.died_seated = seated;
+                v.physics.npc.yaw = yaw;
+                v.physics.npc.position = [-3., 0., 0.];
+                v.physics.npc.death_impulse = [4., 0.5, -3.];
+                v.physics.door_angles = [1.35, 0.];
+                for g in &mut v.physics.glass {
+                    g.shattered = true;
+                }
+                for step in 0..600 {
+                    if step == 120 && seated {
+                        assert!(s.physics.start_pull(1));
+                    }
+                    if step == 300 {
+                        s.physics.impulse(1, 1, [5., 1., -4.]);
+                    }
+                    s.physics.advance(&mut s.world, 1. / 60.);
+                    s.physics.assert_rig_integrity(&format!(
+                        "kind={kind}, seated={seated}, yaw={yaw}, step={step}"
+                    ));
+                }
+                if seated {
+                    assert!(
+                        s.world.vehicles[0].physics.npc.extracted,
+                        "extraction stalled: {kind}, yaw={yaw}"
+                    );
+                }
+            }
+        }
+    }
 }

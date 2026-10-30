@@ -18,6 +18,7 @@ pub struct Detail {
 pub enum DetailKind {
     Door(Side),
     Glass(Pane),
+    Seal(Pane),
     Npc,
     Bone(u8),
 }
@@ -28,8 +29,7 @@ pub struct GlassVisual {
 }
 #[derive(Component)]
 pub struct BodyPart {
-    base: Vec3,
-    limb: u8,
+    bone: usize,
 }
 #[derive(Component)]
 pub struct Debris {
@@ -74,7 +74,7 @@ fn door(
     id: u64,
     side: Side,
     kind: &str,
-) {
+) -> Entity {
     let root = commands
         .spawn((
             Transform::default(),
@@ -85,9 +85,9 @@ fn door(
             },
         ))
         .id();
-    let truck = border_net::vehicle::pickup(kind);
     let sign = if side == Side::Driver { -1. } else { 1. };
-    let len = 1.15;
+    let layout = vehicle::door_layout(kind);
+    let len = layout.length;
     let paint = materials.add(StandardMaterial {
         base_color: match (((id - 1) / 2) + (id - 1) % 2) % 5 {
             0 => Color::srgb(0.22, 0.41, 0.39),
@@ -107,16 +107,8 @@ fn door(
         metallic: 0.85,
         ..default()
     });
-    let belt = if truck {
-        1.3
-    } else {
-        0.96 + vehicle::cab_lift(kind)
-    };
-    let top = if truck {
-        2.1
-    } else {
-        1.61 + vehicle::cab_lift(kind)
-    };
+    let belt = layout.belt;
+    let top = layout.top;
     block(
         commands,
         meshes,
@@ -173,8 +165,50 @@ fn door(
         root,
         Vec3::new(0.06, 0.025, len),
         Vec3::new(0., belt, len / 2.),
+        liner.clone(),
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.18, 0.055, 0.07),
+        Vec3::new(sign * 0.09, belt + 0.13, 0.12),
+        liner.clone(),
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.17, 0.13, 0.25),
+        Vec3::new(sign * 0.20, belt + 0.13, 0.12),
         liner,
     );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.15, 0.10, 0.015),
+        Vec3::new(sign * 0.20, belt + 0.13, 0.25),
+        chrome,
+    );
+    root
+}
+fn bone_mesh(meshes: &mut Assets<Mesh>, bone: usize) -> Handle<Mesh> {
+    let b = border_net::rig::skeleton(false).bones[bone];
+    match bone {
+        0..=2 => {
+            let size = match bone {
+                0 => Vec3::new(0.21, 0.145, 0.16),
+                1 => Vec3::new(0.235, 0.25, 0.17),
+                _ => Vec3::new(0.15, 0.17, 0.145),
+            };
+            let mut mesh = Sphere::new(1.).mesh().uv(20, 16);
+            mesh.scale_by(size);
+            meshes.add(mesh)
+        }
+        // Rounded sleeves/skin overlap at the joint instead of ending short of it.
+        _ => meshes.add(Capsule3d::new(b.radius, b.length - b.radius)),
+    }
 }
 fn npc(
     commands: &mut Commands,
@@ -210,112 +244,81 @@ fn npc(
         },
     );
     let pants = mat(materials, Color::srgb(0.12, 0.15, 0.18));
-    let hair = mat(materials, Color::srgb(0.12, 0.09, 0.07));
-    for (size, pos, material, limb) in [
-        (
-            Vec3::new(0.43, 0.55, 0.3),
-            Vec3::new(0., 1.06, 0.),
-            shirt.clone(),
-            0,
-        ),
-        (
-            Vec3::new(0.30, 0.34, 0.29),
-            Vec3::new(0., 1.48, 0.),
-            skin.clone(),
-            1,
-        ),
-        (
-            Vec3::new(0.32, 0.11, 0.31),
-            Vec3::new(0., 1.65, 0.01),
-            hair,
-            1,
-        ),
-        (
-            Vec3::new(0.13, 0.48, 0.14),
-            Vec3::new(-0.3, 1.02, -0.15),
-            shirt.clone(),
-            2,
-        ),
-        (
-            Vec3::new(0.13, 0.48, 0.14),
-            Vec3::new(0.3, 1.02, -0.15),
-            shirt,
-            3,
-        ),
-        (
-            Vec3::new(0.14, 0.16, 0.17),
-            Vec3::new(-0.3, 0.77, -0.22),
-            skin.clone(),
-            2,
-        ),
-        (
-            Vec3::new(0.14, 0.16, 0.17),
-            Vec3::new(0.3, 0.77, -0.22),
-            skin.clone(),
-            3,
-        ),
-        (
-            Vec3::new(0.18, 0.58, 0.19),
-            Vec3::new(-0.13, 0.47, 0.),
-            pants.clone(),
-            4,
-        ),
-        (
-            Vec3::new(0.18, 0.58, 0.19),
-            Vec3::new(0.13, 0.47, 0.),
-            pants,
-            5,
-        ),
-    ] {
-        let e = if limb == 1 && size.y > 0.3 {
-            let e = commands
-                .spawn((
-                    Mesh3d(meshes.add(Sphere::new(1.).mesh().uv(16, 12))),
-                    MeshMaterial3d(material),
-                    Transform::from_translation(pos).with_scale(size * 0.56),
-                ))
-                .id();
-            commands.entity(root).add_child(e);
-            e
-        } else if limb == 1 && size.y > 0.1 {
-            let e = commands
-                .spawn((
-                    Mesh3d(meshes.add(Sphere::new(1.).mesh().ico(2).unwrap())),
-                    MeshMaterial3d(material),
-                    Transform::from_translation(pos).with_scale(size * 0.56),
-                ))
-                .id();
-            commands.entity(root).add_child(e);
-            e
+    let dark = mat(materials, Color::srgb(0.08, 0.07, 0.055));
+    for bone in 0..border_net::rig::BONE_COUNT {
+        let material = if bone == 2 || matches!(bone, 4 | 6) {
+            skin.clone()
+        } else if bone == 0 || bone >= 7 {
+            pants.clone()
         } else {
-            block(commands, meshes, root, size, pos, material)
+            shirt.clone()
         };
-        commands.entity(e).insert(BodyPart { base: pos, limb });
+        let e = commands
+            .spawn((
+                Mesh3d(bone_mesh(meshes, bone)),
+                MeshMaterial3d(material),
+                Transform::default(),
+                BodyPart { bone },
+            ))
+            .id();
+        commands.entity(root).add_child(e);
+        extremities(commands, meshes, e, bone, skin.clone(), dark.clone());
     }
-    // Brows, nose and eyes make the driver readable through clear/open glazing.
-    let eyes = mat(materials, Color::srgb(0.04, 0.035, 0.03));
-    for x in [-0.07, 0.07] {
-        let pos = Vec3::new(x, 1.52, -0.15);
-        let e = block(
+}
+fn extremities(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    root: Entity,
+    bone: usize,
+    skin: Handle<StandardMaterial>,
+    dark: Handle<StandardMaterial>,
+) {
+    if bone == 2 {
+        block(
             commands,
             meshes,
             root,
-            Vec3::new(0.035, 0.025, 0.015),
-            pos,
-            eyes.clone(),
+            Vec3::new(0.25, 0.05, 0.18),
+            Vec3::new(0., 0.15, 0.02),
+            dark.clone(),
         );
-        commands.entity(e).insert(BodyPart { base: pos, limb: 1 });
+        for x in [-0.065, 0.065] {
+            block(
+                commands,
+                meshes,
+                root,
+                Vec3::new(0.035, 0.018, 0.015),
+                Vec3::new(x, 0.03, -0.14),
+                dark.clone(),
+            );
+        }
+        block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.045, 0.06, 0.04),
+            Vec3::new(0., -0.015, -0.145),
+            skin,
+        );
+    } else if matches!(bone, 4 | 6) {
+        block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.10, 0.12, 0.08),
+            Vec3::new(0., -0.17, 0.),
+            skin,
+        );
+    } else if matches!(bone, 8 | 10) {
+        block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.15, 0.10, 0.26),
+            Vec3::new(0., -0.17, -0.065),
+            dark,
+        );
     }
-    let pos = Vec3::new(0., 1.46, -0.17);
-    let e = block(
-        commands,
-        meshes,
-        root,
-        Vec3::new(0.05, 0.07, 0.06),
-        pos,
-        skin,
-    );
-    commands.entity(e).insert(BodyPart { base: pos, limb: 1 });
 }
 fn triangle_mesh(triangles: &[[[f32; 2]; 3]], z: f32) -> Mesh {
     let points: Vec<[f32; 3]> = triangles
@@ -419,14 +422,14 @@ pub fn sync(
         Without<BodyPart>,
     >,
     mut parts: Query<(&BodyPart, &ChildOf, &mut Transform), Without<Detail>>,
-    roots: Query<(&Transform, &traffic::Vehicle), (Without<Detail>, Without<BodyPart>)>,
+    roots: Query<(Entity, &Transform, &traffic::Vehicle), (Without<Detail>, Without<BodyPart>)>,
 ) {
     let Some(world) = &shift.world else {
         return;
     };
     let poses: std::collections::HashMap<_, _> = roots
         .iter()
-        .map(|(t, v)| (1 + v.lane as u64 + v.ordinal as u64 * 2, *t))
+        .map(|(e, t, v)| (1 + v.lane as u64 + v.ordinal as u64 * 2, (e, *t)))
         .collect();
     for v in &world.vehicles {
         if v.stage == VehicleStage::Exited {
@@ -434,7 +437,7 @@ pub fn sync(
         }
         if !details.iter().any(|(_, d, ..)| d.vehicle == v.vehicle_id) {
             for side in [Side::Driver, Side::Passenger] {
-                door(
+                let door_root = door(
                     &mut commands,
                     &mut meshes,
                     &mut materials,
@@ -442,9 +445,48 @@ pub fn sync(
                     side,
                     &v.kind,
                 );
+                if let Some((parent, _)) = poses.get(&v.vehicle_id) {
+                    commands.entity(*parent).add_child(door_root);
+                }
             }
             npc(&mut commands, &mut meshes, &mut materials, v.vehicle_id);
             for pane in Pane::ALL {
+                if !matches!(pane, Pane::DriverFront | Pane::PassengerFront) {
+                    let seal = mat(&mut materials, Color::srgb(0.045, 0.05, 0.05));
+                    let frame = commands
+                        .spawn((
+                            Transform::default(),
+                            Visibility::Hidden,
+                            Detail {
+                                vehicle: v.vehicle_id,
+                                kind: DetailKind::Seal(pane),
+                            },
+                        ))
+                        .id();
+                    if let Some((parent, _)) = poses.get(&v.vehicle_id) {
+                        commands.entity(*parent).add_child(frame);
+                    }
+                    for x in [-1., 1.] {
+                        block(
+                            &mut commands,
+                            &mut meshes,
+                            frame,
+                            Vec3::new(0.07, 2.08, 0.045),
+                            Vec3::new(x, 0., 0.),
+                            seal.clone(),
+                        );
+                    }
+                    for y in [-1., 1.] {
+                        block(
+                            &mut commands,
+                            &mut meshes,
+                            frame,
+                            Vec3::new(2.08, 0.09, 0.045),
+                            Vec3::new(0., y, 0.),
+                            seal.clone(),
+                        );
+                    }
+                }
                 let glass = materials.add(StandardMaterial {
                     base_color: Color::srgba(0.52, 0.76, 0.8, 0.25),
                     alpha_mode: AlphaMode::Blend,
@@ -479,6 +521,9 @@ pub fn sync(
                         },
                     ))
                     .id();
+                if let Some((parent, _)) = poses.get(&v.vehicle_id) {
+                    commands.entity(*parent).add_child(root);
+                }
                 let e = commands
                     .spawn((
                         Mesh3d(cracks),
@@ -513,15 +558,8 @@ pub fn sync(
         });
         let dark = materials.add(Color::srgb(0.08, 0.07, 0.055));
         for bone in 0..11u8 {
-            let (radius, length) = match bone {
-                0 => (0.14, 0.08),
-                1 => (0.17, 0.27),
-                2 => (0.165, 0.),
-                3..=6 => (0.07, 0.18),
-                _ => (0.09, 0.23),
-            };
-            let mesh = meshes.add(Capsule3d::new(radius, length));
-            let material = if bone == 2 {
+            let mesh = bone_mesh(&mut meshes, bone as usize);
+            let material = if bone == 2 || matches!(bone, 4 | 6) {
                 skin.clone()
             } else if bone == 0 || bone >= 7 {
                 pants.clone()
@@ -545,26 +583,14 @@ pub fn sync(
                     },
                 ))
                 .id();
-            if bone == 2 {
-                block(
-                    &mut commands,
-                    &mut meshes,
-                    root,
-                    Vec3::new(0.25, 0.05, 0.18),
-                    Vec3::new(0., 0.15, 0.02),
-                    dark.clone(),
-                );
-                for x in [-0.065, 0.065] {
-                    block(
-                        &mut commands,
-                        &mut meshes,
-                        root,
-                        Vec3::new(0.035, 0.018, 0.015),
-                        Vec3::new(x, 0.03, -0.15),
-                        dark.clone(),
-                    );
-                }
-            }
+            extremities(
+                &mut commands,
+                &mut meshes,
+                root,
+                bone as usize,
+                skin.clone(),
+                dark.clone(),
+            );
         }
     }
     for (e, d, mut t, mut visible, glass, mesh) in &mut details {
@@ -577,7 +603,7 @@ pub fn sync(
             continue;
         };
         *visible = Visibility::Visible;
-        let display = poses.get(&d.vehicle).copied().unwrap_or_else(|| {
+        let display = poses.get(&d.vehicle).map(|(_, t)| *t).unwrap_or_else(|| {
             Transform::from_translation(Vec3::from_array(v.position))
                 .with_rotation(Quat::from_rotation_y(v.yaw))
         });
@@ -589,9 +615,23 @@ pub fn sync(
         match d.kind {
             DetailKind::Door(side) => {
                 let angle = v.physics.door_angles[side_index(side)];
-                t.translation = displayed(c::world(v, door_pivot(&v.kind, side)));
-                t.rotation = display.rotation
-                    * Quat::from_rotation_y(if side == Side::Driver { -angle } else { angle });
+                t.translation = Vec3::from_array(door_pivot(&v.kind, side));
+                t.rotation =
+                    Quat::from_rotation_y(if side == Side::Driver { -angle } else { angle });
+            }
+            DetailKind::Seal(pane) => {
+                let mut closed = v.clone();
+                closed.physics.glass[pane.index()].lowered = 0.;
+                if let Some(f) = pane_frame(&closed, pane) {
+                    t.translation = Vec3::from_array(c::local(v, f.center));
+                    t.rotation = Quat::from_rotation_y(-v.yaw)
+                        * Quat::from_mat3(&Mat3::from_cols(
+                            Vec3::from_array(f.u),
+                            Vec3::from_array(f.v),
+                            Vec3::from_array(f.normal),
+                        ));
+                    t.scale = Vec3::new(f.half[0], f.half[1], 1.);
+                }
             }
             DetailKind::Glass(pane) => {
                 let g = &v.physics.glass[pane.index()];
@@ -625,8 +665,8 @@ pub fn sync(
                     *visible = Visibility::Hidden;
                 }
                 if let Some(f) = pane_frame(v, pane) {
-                    t.translation = displayed(f.center);
-                    t.rotation = rotation_delta
+                    t.translation = Vec3::from_array(c::local(v, f.center));
+                    t.rotation = Quat::from_rotation_y(-v.yaw)
                         * Quat::from_mat3(&Mat3::from_cols(
                             Vec3::from_array(f.u).normalize(),
                             Vec3::from_array(f.v).normalize(),
@@ -641,17 +681,8 @@ pub fn sync(
                 if let Some(b) = v.physics.npc.ragdoll.iter().find(|p| p.bone == bone) {
                     let position = Vec3::from_array(b.position);
                     let rotation = Quat::from_array(b.rotation);
-                    if *visible == Visibility::Hidden || t.translation.distance(position) > 3. {
-                        t.translation = position;
-                        t.rotation = rotation;
-                    } else {
-                        t.translation = t
-                            .translation
-                            .lerp(position, (time.delta_secs() * 22.).min(1.));
-                        t.rotation = t
-                            .rotation
-                            .slerp(rotation, (time.delta_secs() * 22.).min(1.));
-                    }
+                    t.translation = position;
+                    t.rotation = rotation;
                 } else {
                     *visible = Visibility::Hidden;
                 }
@@ -690,34 +721,11 @@ pub fn sync(
             continue;
         };
         let n = &v.physics.npc;
-        t.translation = part.base;
-        t.rotation = Quat::IDENTITY;
         let seated = n.mode == NpcMode::Seated || n.mode == NpcMode::Dead && n.died_seated;
-        if seated {
-            if part.limb >= 4 {
-                t.translation.y = 0.67;
-                t.translation.z = -0.25;
-                t.rotation = Quat::from_rotation_x(-1.1);
-            }
-            if part.limb == 2 || part.limb == 3 {
-                t.rotation = Quat::from_rotation_x(-0.65);
-            }
-            if n.mode == NpcMode::Dead {
-                t.translation.z -= 0.22;
-                t.translation.y -= if part.limb == 1 { 0.27 } else { 0.12 };
-                t.rotation = Quat::from_rotation_x(0.85);
-            }
-        } else if matches!(n.mode, NpcMode::Exiting | NpcMode::Entering) {
-            if part.limb <= 1 {
-                t.translation.y += 0.15 * n.exit_progress;
-            }
-            let swing = (time.elapsed_secs() * 8.).sin() * 0.20;
-            if part.limb >= 2 {
-                t.rotation = Quat::from_rotation_x(if part.limb % 2 == 0 { swing } else { -swing });
-            }
-        } else if part.limb <= 1 {
-            t.translation.y += 0.15;
-        }
+        let rig = border_net::rig::skeleton(seated);
+        let bone = rig.bones[part.bone];
+        t.translation = Vec3::from_array(bone.center);
+        t.rotation = Quat::from_rotation_x(bone.angle);
     }
 }
 #[allow(clippy::too_many_arguments)]

@@ -483,32 +483,20 @@ impl Simulation {
                 let pivot = door_pivot(&v.kind, side);
                 let origin = add(pivot, rotate(sub(origin, pivot), -angle));
                 let dir = rotate(dir, -angle);
-                let len = 1.15;
-                let center = add(
-                    pivot,
-                    [
-                        0.,
-                        if border_net::vehicle::pickup(&v.kind) {
-                            1.05
-                        } else {
-                            0.75 + vehicle::cab_lift(&v.kind)
-                        },
-                        len * 0.5,
-                    ],
-                );
-                if let Some(d) = ray_box(origin, dir, center, [0.045, 0.25, len * 0.5], max) {
+                let layout = vehicle::door_layout(&v.kind);
+                let len = layout.length;
+                let belt = layout.belt;
+                let top = layout.top;
+                let center = add(pivot, [0., (belt + 0.55) * 0.5, len * 0.5]);
+                if let Some(d) = ray_box(
+                    origin,
+                    dir,
+                    center,
+                    [0.045, (belt - 0.55) * 0.5, len * 0.5],
+                    max,
+                ) {
                     offer(d, Hit::Body(i), mul(direction, -1.));
                 }
-                let belt = if border_net::vehicle::pickup(&v.kind) {
-                    1.3
-                } else {
-                    0.96
-                };
-                let top = if border_net::vehicle::pickup(&v.kind) {
-                    2.1
-                } else {
-                    1.61
-                };
                 for (offset, half) in [
                     (
                         [0., (belt + top) * 0.5, 0.02],
@@ -531,7 +519,7 @@ impl Simulation {
                 for (head, offset, half) in [
                     (
                         true,
-                        [0., if seated { 1.47 } else { 1.62 }, 0.],
+                        [0., border_net::rig::skeleton(seated).bones[2].center[1], 0.],
                         [0.17, 0.19, 0.17],
                     ),
                     (

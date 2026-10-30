@@ -153,3 +153,121 @@ pub fn departure_path(lane: u8, admitted: bool) -> Vec<[f32; 2]> {
         vec![[x, -11.], [-4., -16.], [-440., -16.]]
     }
 }
+
+/// All door attachments use this same opening, including glazing and collision.
+#[derive(Clone, Copy, Debug)]
+pub struct DoorLayout {
+    pub length: f32,
+    pub belt: f32,
+    pub top: f32,
+}
+pub fn door_layout(kind: &str) -> DoorLayout {
+    DoorLayout {
+        length: 1.15,
+        belt: if pickup(kind) {
+            1.3
+        } else {
+            0.96 + cab_lift(kind)
+        },
+        top: if pickup(kind) {
+            2.1
+        } else {
+            1.61 + cab_lift(kind)
+        },
+    }
+}
+/// Connected shell pieces: roof, pillars, rockers, engine bay and quarter panels.
+/// Centers and half extents are used unchanged by rendering and physical collision.
+pub fn assembly_boxes(kind: &str) -> Vec<([f32; 3], [f32; 3])> {
+    let s = spec(kind);
+    let d = door_layout(kind);
+    let front = s.window_z - if pickup(kind) { 0.85 } else { 0.65 };
+    let rear = rear_glass_z(kind);
+    let bottom = if pickup(kind) { 0.72 } else { 0.56 };
+    let hood = if pickup(kind) { 1.13 } else { d.belt };
+    let mut boxes = vec![(
+        [0., d.top + 0.04, (front + rear) * 0.5],
+        [s.half_width - 0.015, 0.06, (rear - front) * 0.5 + 0.06],
+    )];
+    for sign in [-1., 1.] {
+        let x = sign * (s.half_width - 0.04);
+        // Rocker meets chassis and the bottom of the hinged door.
+        boxes.push((
+            [x, bottom, (front + rear) * 0.5],
+            [0.075, 0.15, (rear - front) * 0.5 + 0.08],
+        ));
+        for z in [front, front + d.length, rear] {
+            boxes.push((
+                [x, (d.top + bottom) * 0.5, z],
+                [0.045, (d.top - bottom) * 0.5, 0.045],
+            ));
+        }
+        // Engine bay walls join hood, lamps and front bumper to the chassis.
+        boxes.push((
+            [x, (bottom + hood) * 0.5, (-s.half_length + front) * 0.5],
+            [
+                0.075,
+                (hood - bottom) * 0.5 + 0.025,
+                (s.half_length + front) * 0.5,
+            ],
+        ));
+        if !pickup(kind) {
+            boxes.push((
+                [
+                    x,
+                    (bottom + d.belt) * 0.5,
+                    (front + d.length + s.half_length) * 0.5,
+                ],
+                [
+                    0.075,
+                    (d.belt - bottom) * 0.5 + 0.025,
+                    (s.half_length - front - d.length) * 0.5,
+                ],
+            ));
+        }
+    }
+    boxes.push((
+        [0., (bottom + hood) * 0.5, -s.half_length],
+        [s.half_width, (hood - bottom) * 0.5, 0.055],
+    ));
+    boxes
+}
+
+#[cfg(test)]
+mod assembly_tests {
+    use super::*;
+    #[test]
+    fn every_structural_piece_connects_to_the_chassis_for_all_six_bodies() {
+        for kind in KINDS {
+            let s = spec(kind);
+            let mut pieces = assembly_boxes(kind);
+            pieces.push((
+                [0., if pickup(kind) { 0.65 } else { 0.5 }, 0.],
+                [s.half_width, 0.16, s.half_length],
+            ));
+            let mut connected = vec![false; pieces.len()];
+            *connected.last_mut().unwrap() = true;
+            loop {
+                let previous = connected.clone();
+                for (a, (ca, ha)) in pieces.iter().enumerate() {
+                    if previous[a] {
+                        for (b, (cb, hb)) in pieces.iter().enumerate() {
+                            if (0..3).all(|axis| {
+                                (ca[axis] - cb[axis]).abs() <= ha[axis] + hb[axis] + 0.005
+                            }) {
+                                connected[b] = true;
+                            }
+                        }
+                    }
+                }
+                if connected == previous {
+                    break;
+                }
+            }
+            assert!(
+                connected.iter().all(|x| *x),
+                "floating structural part in {kind}: {connected:?}"
+            );
+        }
+    }
+}

@@ -8,6 +8,7 @@ pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod combat;
 pub mod map;
 pub mod movement;
+pub mod rig;
 pub mod vehicle;
 pub const PEER_TIMEOUT_MS: u64 = 15_000;
 pub const HTTP_TIMEOUT_SECS: u64 = 5;

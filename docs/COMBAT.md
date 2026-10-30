@@ -45,7 +45,7 @@ Side panes shatter on a hit. Windshield/rear glass first develops a jagged hole,
 
 The seated driver is a separate articulated character, with head, face, torso, arms and legs rather than permanent pieces baked into the car mesh. X opens the driver's door, animates an exit and places the living traveler beside it. Conversation can then be reopened by approaching/aiming at the traveler. X returns them to their seat and closes the door. These physical orders currently use deterministic compliance; personality-dependent refusal and voice-command interpretation are separate future behavior work.
 
-A vehicle cannot depart with an empty or dead driver's seat. A killed seated traveler slumps; a killed traveler outside falls into a prone pose. These are simple death poses, not a full ragdoll system. Dead travelers stop answering and their cases reject further AI output. Their vehicles remain disabled in the queue until recovery, rather than driving away by themselves. Recovery grants no disposition reward and does not count as a correctly processed case. At time expiry the host can return everyone to the office, clearing damage/debris and restoring health and ammunition.
+A vehicle cannot depart with an empty or dead driver's seat. Killed travelers now use the [constrained ragdoll skeleton](PHYSICS.md), with seat restraints in the cabin and physical collapse outside. Dead travelers stop answering and their cases reject further AI output. Their vehicles remain disabled in the queue until recovery, rather than driving away by themselves. Recovery grants no disposition reward and does not count as a correctly processed case. At time expiry the host can return everyone to the office, clearing damage/debris and restoring health and ammunition.
 
 ## Validation
 

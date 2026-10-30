@@ -1724,14 +1724,6 @@ fn spawn_fleet(
 
     part(Vec3::new(2.05, 0.58, 4.45), Vec3::new(0., 0.5, 0.), paint);
     part(Vec3::new(1.74, 0.12, 1.88), Vec3::new(0., 1.65, 0.1), paint);
-    for z in [-0.96, 0.25, 1.15] {
-        part(Vec3::new(0.1, 0.7, 0.1), Vec3::new(-0.91, 1.28, z), paint);
-    }
-    part(
-        Vec3::new(0.06, 0.06, 0.27),
-        Vec3::new(-1.05, 0.85, -0.22),
-        cream,
-    );
     for z in [-2.26, 2.26] {
         part(Vec3::new(1.9, 0.14, 0.1), Vec3::new(0., 0.43, z), dark);
     }
@@ -1745,26 +1737,6 @@ fn spawn_fleet(
     }
     part(Vec3::new(0.6, 0.18, 0.06), Vec3::new(0., 0.52, 2.32), cream);
     part(Vec3::new(0.9, 0.16, 0.04), Vec3::new(0., 0.74, -2.29), dark);
-    for x in [-1.06, 1.06] {
-        part(Vec3::new(0.23, 0.15, 0.28), Vec3::new(x, 1.2, -0.75), dark);
-        part(
-            Vec3::new(0.24, 0.11, 0.025),
-            Vec3::new(x, 1.2, -0.59),
-            glass,
-        );
-    }
-    for x in [-1.026, 1.026] {
-        part(
-            Vec3::new(0.014, 0.32, 0.018),
-            Vec3::new(x, 0.75, 0.24),
-            dark,
-        );
-        part(
-            Vec3::new(0.016, 0.035, 0.22),
-            Vec3::new(x, 0.88, -0.1),
-            cream,
-        );
-    }
     for x in [-1.02, 1.02] {
         for z in [-1.45, 1.43] {
             let mesh = meshes.add(Cylinder::new(0.38, 0.22).mesh().resolution(12));

@@ -92,16 +92,6 @@ pub fn truck(
             );
         }
         block(
-            Vec3::new(0.32, 0.18, 0.34),
-            Vec3::new(x * 1.17, 1.7, -1.92),
-            rubber.clone(),
-        );
-        block(
-            Vec3::new(0.18, 0.13, 0.025),
-            Vec3::new(x * 1.17, 1.7, -1.74),
-            metal.clone(),
-        );
-        block(
             Vec3::new(0.28, 0.12, 1.95),
             Vec3::new(x * 1.05, 0.58, -1.03),
             metal.clone(),
@@ -115,11 +105,6 @@ pub fn truck(
             Vec3::new(0.15, 0.07, 2.97),
             Vec3::new(x, 1.58, 1.63),
             liner.clone(),
-        );
-        block(
-            Vec3::new(0.025, 0.05, 0.22),
-            Vec3::new(x * 1.08, 1.35, -0.7),
-            metal.clone(),
         );
     }
     block(
@@ -135,8 +120,8 @@ pub fn truck(
         );
     }
     block(
-        Vec3::new(1.95, 0.5, 0.14),
-        Vec3::new(0., 1.32, 0.15),
+        Vec3::new(2.08, 0.58, 0.14),
+        Vec3::new(0., 1.06, 0.03),
         paint.clone(),
     );
     block(
@@ -174,12 +159,6 @@ pub fn truck(
         Vec3::new(0.55, 0.18, 0.03),
         Vec3::new(0., 0.75, 3.41),
         lamp.clone(),
-    );
-    // Visible seated driver, steering wheel and bench.
-    block(
-        Vec3::new(1.8, 0.5, 0.45),
-        Vec3::new(0., 1.25, -0.55),
-        rubber.clone(),
     );
     for x in [-1.12_f32, 1.12] {
         for z in [-2.26, 2.18] {
@@ -281,7 +260,7 @@ pub fn sedan_panels(
                 vehicle::rear_glass_z(kind),
             ),
             Vec3::new(
-                1.9,
+                2. * (vehicle::spec(kind).half_width - 0.03),
                 0.07,
                 (vehicle::spec(kind).half_length - vehicle::rear_glass_z(kind)).max(0.3),
             ),
@@ -294,7 +273,11 @@ pub fn sedan_panels(
         (
             VehiclePoint::Hood,
             Vec3::new(0., 0.96 + vehicle::cab_lift(kind), -1.05),
-            Vec3::new(1.9, 0.07, vehicle::spec(kind).half_length - 1.05),
+            Vec3::new(
+                2. * (vehicle::spec(kind).half_width - 0.03),
+                0.07,
+                vehicle::spec(kind).half_length - 1.05,
+            ),
             Vec3::new(0., 0., -(vehicle::spec(kind).half_length - 1.05) * 0.5),
         ),
     ] {
@@ -448,6 +431,13 @@ pub fn dressing(
             .id();
         commands.entity(root).add_child(e);
     };
+    for (center, half) in vehicle::assembly_boxes(kind) {
+        part(
+            Vec3::from_array(half) * 2.,
+            Vec3::from_array(center),
+            paint.clone(),
+        );
+    }
     // Plates, grille slats, hood seams, wipers, sills and fuel cover are visible at officer distance.
     for z in [-spec.half_length - 0.035, spec.half_length + 0.035] {
         part(
@@ -606,6 +596,35 @@ pub fn dressing(
         );
     }
     let seat_lift = if pickup { 0.35 } else { lift };
+    for x in [-0.48, 0.48] {
+        part(
+            Vec3::new(0.52, 0.20, 0.66),
+            Vec3::new(x, 0.55 + seat_lift, spec.window_z + 0.1),
+            dark.clone(),
+        );
+        part(
+            Vec3::new(0.52, 0.56, 0.14),
+            Vec3::new(x, 1.03 + seat_lift, spec.window_z + 0.28),
+            dark.clone(),
+        );
+        part(
+            Vec3::new(0.28, 0.20, 0.14),
+            Vec3::new(x, 1.37 + seat_lift, spec.window_z + 0.28),
+            dark.clone(),
+        );
+        for z in [-0.1, 0.25] {
+            part(
+                Vec3::new(0.38, 0.22 + seat_lift, 0.07),
+                Vec3::new(x, 0.41 + seat_lift * 0.5, spec.window_z + z),
+                metal.clone(),
+            );
+        }
+    }
+    part(
+        Vec3::new(0.06, 0.06, 0.22),
+        Vec3::new(-0.48, 1.04 + seat_lift, spec.window_z - 0.49),
+        dark.clone(),
+    );
     // Interior dash, glove box and radio cluster are separate from the damageable driver.
     part(
         Vec3::new(1.7, 0.22, 0.3),

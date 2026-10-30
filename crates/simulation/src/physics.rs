@@ -100,18 +100,22 @@ impl PhysicalWorld {
             self.joints.remove(belt, true);
         }
         let chest = doll.parts[1];
-        let position = *self.bodies[chest].position();
+        let mut position = *self.bodies[chest].position();
+        position.translation.vector = self.bodies[chest]
+            .position()
+            .transform_point(&point![-0.18, 0.10, 0.])
+            .coords;
         let anchor = self.bodies.insert(
             RigidBodyBuilder::kinematic_position_based()
                 .pose(position)
                 .build(),
         );
-        let joint = self.joints.insert(
-            anchor,
-            chest,
-            SphericalJointBuilder::new().contacts_enabled(false),
-            true,
-        );
+        // A bounded spring transmits the officer's pull. An infinitely strong
+        // kinematic attachment can tear a constrained limb chain through a doorpost.
+        let mut spring = SpringJoint::new(0.01, 7000., 250.);
+        spring.set_local_anchor2(point![-0.18, 0.10, 0.]);
+        spring.data.set_motor_max_force(JointAxis::LinX, 2500.);
+        let joint = self.joints.insert(anchor, chest, spring, true);
         doll.grab = Some((anchor, joint));
         true
     }
@@ -150,132 +154,79 @@ impl PhysicalWorld {
             v.physics.npc.position
         };
         let yaw = v.physics.npc.yaw;
-        // Pelvis, chest, head, left/right upper arm+forearm, left/right thigh+shin.
-        let offsets: Vec<V3> = if seated {
-            vec![
-                [0., 0.88, 0.],
-                [0., 1.16, 0.],
-                [0., 1.51, -0.04],
-                [-0.30, 1.13, -0.03],
-                [-0.30, 0.99, -0.27],
-                [0.30, 1.13, -0.03],
-                [0.30, 0.99, -0.27],
-                [-0.13, 0.78, -0.21],
-                [-0.13, 0.47, -0.42],
-                [0.13, 0.78, -0.21],
-                [0.13, 0.47, -0.42],
-            ]
-        } else {
-            vec![
-                [0., 0.87, 0.],
-                [0., 1.17, 0.],
-                [0., 1.55, 0.],
-                [-0.30, 1.18, 0.],
-                [-0.32, 0.90, 0.],
-                [0.30, 1.18, 0.],
-                [0.32, 0.90, 0.],
-                [-0.13, 0.62, 0.],
-                [-0.13, 0.25, 0.],
-                [0.13, 0.62, 0.],
-                [0.13, 0.25, 0.],
-            ]
-        };
+        let rig = border_net::rig::skeleton(seated);
         let mut parts = vec![];
-        for (i, offset) in offsets.iter().enumerate() {
-            let position = c::add(base, c::rotate(*offset, yaw));
-            let rotation = if seated && matches!(i, 7 | 9) {
-                UnitQuaternion::from_euler_angles(-1.57, 0., 0.)
-            } else {
-                UnitQuaternion::identity()
-            };
-            let rotation = UnitQuaternion::from_axis_angle(&Vector::y_axis(), yaw) * rotation;
+        for bone in &rig.bones {
+            let position = c::add(base, c::rotate(bone.center, yaw));
+            let rotation = UnitQuaternion::from_axis_angle(&Vector::y_axis(), yaw)
+                * UnitQuaternion::from_axis_angle(&Vector::x_axis(), bone.angle);
             let body = self.bodies.insert(
                 RigidBodyBuilder::dynamic()
                     .pose(Isometry::from_parts(
                         Translation::from(vec(position)),
                         rotation,
                     ))
-                    .linear_damping(0.35)
-                    .angular_damping(1.3)
+                    .linear_damping(0.45)
+                    .angular_damping(1.8)
                     .ccd_enabled(true)
-                    .additional_solver_iterations(8)
+                    .additional_solver_iterations(16)
                     .build(),
             );
-            let shape = match i {
-                0 => ColliderBuilder::capsule_y(0.04, 0.13),
-                1 => ColliderBuilder::capsule_y(0.13, 0.15),
-                2 => ColliderBuilder::ball(0.16),
-                3..=6 => ColliderBuilder::capsule_y(0.08, 0.065),
-                _ => ColliderBuilder::capsule_y(0.11, 0.085),
-            };
             self.colliders.insert_with_parent(
-                shape
-                    .density(if i == 1 { 650. } else { 450. })
+                ColliderBuilder::capsule_y((bone.length * 0.5 - bone.radius).max(0.), bone.radius)
+                    .mass(bone.mass)
                     .friction(0.8)
-                    .restitution(0.02)
+                    .restitution(0.)
                     .build(),
                 body,
                 &mut self.bodies,
             );
             parts.push(body);
         }
-        // Spherical neck/shoulders/hips plus limited hinge elbows/knees, adapted to seated spawn poses.
-        let links = [
-            (0, 1, [0., 1.01, 0.], false),
-            (1, 2, [0., 1.37, -0.01], false),
-            (1, 3, [-0.21, 1.30, 0.], false),
-            (3, 4, [-0.30, 1.02, -0.12], true),
-            (1, 5, [0.21, 1.30, 0.], false),
-            (5, 6, [0.30, 1.02, -0.12], true),
-            (0, 7, [-0.13, 0.85, -0.02], false),
-            (
-                7,
-                8,
-                [
-                    -0.13,
-                    if seated { 0.73 } else { 0.44 },
-                    if seated { -0.42 } else { 0. },
-                ],
-                true,
-            ),
-            (0, 9, [0.13, 0.85, -0.02], false),
-            (
-                9,
-                10,
-                [
-                    0.13,
-                    if seated { 0.73 } else { 0.44 },
-                    if seated { -0.42 } else { 0. },
-                ],
-                true,
-            ),
-        ];
-        for (a, b, anchor, hinge) in links {
-            let world_anchor = Point::from(vec(c::add(base, c::rotate(anchor, yaw))));
-            let local_a = self.bodies[parts[a]]
+        for link in &rig.links {
+            let world_anchor = Point::from(vec(c::add(base, c::rotate(link.anchor, yaw))));
+            let local_a = self.bodies[parts[link.parent]]
                 .position()
                 .inverse_transform_point(&world_anchor);
-            let local_b = self.bodies[parts[b]]
+            let local_b = self.bodies[parts[link.child]]
                 .position()
                 .inverse_transform_point(&world_anchor);
-            let joint: GenericJoint = if hinge {
+            // Keep the anatomical reference frames: resetting these to the seated pose
+            // makes the knees bend backwards and gives the spine shoulder-like freedom.
+            let mut joint: GenericJoint = if link.hinge {
                 RevoluteJointBuilder::new(Vector::x_axis())
                     .local_anchor1(local_a)
                     .local_anchor2(local_b)
-                    .limits([-0.15, 2.2])
+                    .limits(link.limits[0])
                     .contacts_enabled(false)
                     .into()
             } else {
                 SphericalJointBuilder::new()
                     .local_anchor1(local_a)
                     .local_anchor2(local_b)
-                    .limits(JointAxis::AngX, [-0.65, 0.65])
-                    .limits(JointAxis::AngY, [-0.5, 0.5])
-                    .limits(JointAxis::AngZ, [-0.65, 0.65])
+                    .limits(JointAxis::AngX, link.limits[0])
+                    .limits(JointAxis::AngY, link.limits[1])
+                    .limits(JointAxis::AngZ, link.limits[2])
                     .contacts_enabled(false)
                     .into()
             };
-            self.joints.insert(parts[a], parts[b], joint, true);
+            for axis in if link.hinge {
+                vec![JointAxis::AngX]
+            } else {
+                vec![JointAxis::AngX, JointAxis::AngY, JointAxis::AngZ]
+            } {
+                joint.set_motor_position(axis, 0., link.stiffness, link.damping);
+                joint.set_motor_max_force(
+                    axis,
+                    if link.parent == 0 && link.child == 1 {
+                        90.
+                    } else {
+                        18.
+                    },
+                );
+            }
+            self.joints
+                .insert(parts[link.parent], parts[link.child], joint, true);
         }
         let belt = if seated {
             self.vehicles.get(&v.vehicle_id).map(|&car| {
@@ -283,7 +234,10 @@ impl PhysicalWorld {
                     car,
                     parts[0],
                     SphericalJointBuilder::new()
-                        .local_anchor1(Point::from(vec(c::add(c::local(v, base), offsets[0]))))
+                        .local_anchor1(Point::from(vec(c::add(
+                            c::local(v, base),
+                            rig.bones[0].center,
+                        ))))
                         .contacts_enabled(false),
                     true,
                 )
@@ -362,7 +316,11 @@ impl PhysicalWorld {
                 (
                     [
                         -0.48,
-                        0.65,
+                        0.55 + if border_net::vehicle::pickup(&v.kind) {
+                            0.35
+                        } else {
+                            border_net::vehicle::cab_lift(&v.kind)
+                        },
                         border_net::vehicle::spec(&v.kind).window_z + 0.1,
                     ],
                     [0.26, 0.10, 0.33],
@@ -370,7 +328,11 @@ impl PhysicalWorld {
                 (
                     [
                         -0.48,
-                        1.03,
+                        1.03 + if border_net::vehicle::pickup(&v.kind) {
+                            0.35
+                        } else {
+                            border_net::vehicle::cab_lift(&v.kind)
+                        },
                         border_net::vehicle::spec(&v.kind).window_z + 0.28,
                     ],
                     [0.26, 0.28, 0.07],
@@ -390,32 +352,42 @@ impl PhysicalWorld {
             for side in [Side::Driver, Side::Passenger] {
                 let angle = v.physics.door_angles[side_index(side)]
                     * if side == Side::Driver { -1. } else { 1. };
-                let center = c::door_point(
-                    &v.kind,
-                    side,
-                    v.physics.door_angles[side_index(side)],
-                    c::add(
-                        c::door_pivot(&v.kind, side),
-                        [
-                            0.,
-                            if border_net::vehicle::pickup(&v.kind) {
-                                1.05
-                            } else {
-                                0.75
-                            },
-                            0.575,
-                        ],
+                let layout = border_net::vehicle::door_layout(&v.kind);
+                for (offset, half) in [
+                    (
+                        [0., (layout.belt + 0.55) * 0.5, layout.length * 0.5],
+                        [0.035, (layout.belt - 0.55) * 0.5, layout.length * 0.5],
                     ),
-                );
-                let h = self.colliders.insert_with_parent(
-                    ColliderBuilder::cuboid(0.04, 0.25, 0.575)
-                        .position(pose(center, angle))
-                        .build(),
-                    handle,
-                    &mut self.bodies,
-                );
-                self.surfaces.get_mut(&v.vehicle_id).unwrap().0.push(h);
+                    (
+                        [0., (layout.belt + layout.top) * 0.5, 0.02],
+                        [0.0275, (layout.top - layout.belt) * 0.5, 0.0275],
+                    ),
+                    (
+                        [0., (layout.belt + layout.top) * 0.5, layout.length - 0.02],
+                        [0.0275, (layout.top - layout.belt) * 0.5, 0.0275],
+                    ),
+                    (
+                        [0., layout.top, layout.length * 0.5],
+                        [0.0275, 0.0275, layout.length * 0.5],
+                    ),
+                ] {
+                    let center = c::door_point(
+                        &v.kind,
+                        side,
+                        v.physics.door_angles[side_index(side)],
+                        c::add(c::door_pivot(&v.kind, side), offset),
+                    );
+                    let h = self.colliders.insert_with_parent(
+                        ColliderBuilder::cuboid(half[0], half[1], half[2])
+                            .position(pose(center, angle))
+                            .build(),
+                        handle,
+                        &mut self.bodies,
+                    );
+                    self.surfaces.get_mut(&v.vehicle_id).unwrap().0.push(h);
+                }
             }
+
             for g in &v.physics.glass {
                 if !g.shattered
                     && let Some(f) = c::pane_frame(v, g.pane)
@@ -536,6 +508,46 @@ impl PhysicalWorld {
             self.remove_body(f.handle);
         }
     }
+    #[cfg(test)]
+    pub(crate) fn assert_rig_integrity(&self, context: &str) {
+        for doll in self.dolls.values() {
+            for (_, j) in self.joints.iter() {
+                let Some(a) = doll.parts.iter().position(|h| *h == j.body1) else {
+                    continue;
+                };
+                let Some(b) = doll.parts.iter().position(|h| *h == j.body2) else {
+                    continue;
+                };
+                let f1 = self.bodies[j.body1].position() * j.data.local_frame1;
+                let f2 = self.bodies[j.body2].position() * j.data.local_frame2;
+                let gap = (f1.translation.vector - f2.translation.vector).norm();
+                assert!(
+                    gap < 0.035,
+                    "{context}: joint {a}->{b} separated by {gap:.4}m"
+                );
+                let relative = f1.rotation.inverse() * f2.rotation;
+                if a == 0 && b == 1 {
+                    assert!(
+                        relative.angle() < 0.45,
+                        "spine folded: {} radians",
+                        relative.angle()
+                    );
+                }
+                if matches!((a, b), (3, 4) | (5, 6) | (7, 8) | (9, 10)) {
+                    let (x, y, z) = relative.euler_angles();
+                    assert!(
+                        y.abs() < 0.08 && z.abs() < 0.08,
+                        "hinge twisted {a}->{b}: {y}, {z}"
+                    );
+                    if a >= 7 {
+                        assert!((-2.55..=0.10).contains(&x), "knee hyperextended: {x}");
+                    } else {
+                        assert!((-0.08..=2.55).contains(&x), "elbow hyperextended: {x}");
+                    }
+                }
+            }
+        }
+    }
     pub fn advance(&mut self, world: &mut WorldSnapshot, dt: f32) {
         if world.phase == border_net::ShiftPhase::Lobby {
             return;
@@ -607,19 +619,46 @@ impl PhysicalWorld {
             if let Some((anchor, _)) = doll.grab
                 && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
             {
+                let pelvis_local = c::local(
+                    v,
+                    [
+                        self.bodies[doll.parts[0]].translation().x,
+                        self.bodies[doll.parts[0]].translation().y,
+                        self.bodies[doll.parts[0]].translation().z,
+                    ],
+                );
+                let clearing_sill =
+                    pelvis_local[0] > -border_net::vehicle::spec(&v.kind).half_width - 0.5;
                 let target = c::world(
                     v,
                     [
                         -border_net::vehicle::spec(&v.kind).half_width - 1.7,
-                        0.65,
-                        border_net::vehicle::spec(&v.kind).window_z + 0.7,
+                        if clearing_sill {
+                            1.25 + if border_net::vehicle::pickup(&v.kind) {
+                                0.35
+                            } else {
+                                border_net::vehicle::cab_lift(&v.kind)
+                            }
+                        } else {
+                            0.65
+                        },
+                        border_net::vehicle::spec(&v.kind).window_z - 0.10,
                     ],
                 );
                 let current = *self.bodies[anchor].translation();
                 let delta = vec(target) - current;
+                let chest = self.bodies[doll.parts[1]]
+                    .position()
+                    .transform_point(&point![-0.18, 0.10, 0.])
+                    .coords;
+                let pull_speed = if (current - chest).norm() < 0.6 {
+                    1.0
+                } else {
+                    0.
+                };
                 let next = current
                     + delta.try_normalize(0.0001).unwrap_or_else(Vector::zeros)
-                        * (dt * 1.5).min(delta.norm());
+                        * (dt * pull_speed).min(delta.norm());
                 self.bodies[anchor].set_next_kinematic_translation(next);
                 if delta.norm() < 0.08 {
                     completed.push(id);
@@ -627,10 +666,12 @@ impl PhysicalWorld {
             }
         }
         self.accumulator = (self.accumulator + dt).min(1.);
-        while self.accumulator >= 1. / 60. {
+        while self.accumulator >= 1. / 120. {
             let params = IntegrationParameters {
-                dt: 1. / 60.,
-                num_solver_iterations: 8,
+                dt: 1. / 120.,
+                num_solver_iterations: 12,
+                num_internal_pgs_iterations: 2,
+                num_internal_stabilization_iterations: 2,
                 ..Default::default()
             };
             self.pipeline.step(
@@ -647,7 +688,7 @@ impl PhysicalWorld {
                 &(),
                 &(),
             );
-            self.accumulator -= 1. / 60.;
+            self.accumulator -= 1. / 120.;
         }
         for id in completed {
             if let Some(d) = self.dolls.get_mut(&id)

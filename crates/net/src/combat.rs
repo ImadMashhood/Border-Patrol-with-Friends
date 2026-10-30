@@ -239,7 +239,7 @@ pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
                 [0., 0.878, 0.479]
             },
             [
-                if truck { 0.955 } else { 0.885 },
+                crate::vehicle::spec(&v.kind).half_width - 0.07,
                 if truck { 0.41 } else { 0.325 },
             ],
         ),
@@ -256,7 +256,7 @@ pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
                 [0., 0.9, -0.435]
             },
             [
-                if truck { 0.955 } else { 0.885 },
+                crate::vehicle::spec(&v.kind).half_width - 0.07,
                 if truck { 0.35 } else { 0.31 },
             ],
         ),
@@ -265,12 +265,13 @@ pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
             let front = matches!(p, Pane::DriverFront | Pane::PassengerFront);
             (
                 [
-                    if driver { -1. } else { 1. } * if truck { 1.04 } else { 0.92 },
+                    if driver { -1. } else { 1. }
+                        * (crate::vehicle::spec(&v.kind).half_width - 0.04),
                     if truck { 1.69 } else { 1.27 },
                     if truck {
-                        if front { -1.48 } else { -0.35 }
+                        if front { -1.475 } else { -0.35 }
                     } else if front {
-                        -0.35
+                        -0.325
                     } else {
                         0.73
                     },
@@ -278,11 +279,7 @@ pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
                 [0., 0., 1.],
                 [0., 1., 0.],
                 [
-                    if front {
-                        if truck { 0.51 } else { 0.5 }
-                    } else {
-                        0.34
-                    },
+                    if front { 0.515 } else { 0.34 },
                     if truck { 0.385 } else { 0.31 },
                 ],
             )
@@ -392,9 +389,9 @@ pub fn seated_position(v: &VehicleView) -> V3 {
         [
             -0.48,
             if crate::vehicle::pickup(&v.kind) {
-                0.35
+                0.20
             } else {
-                crate::vehicle::cab_lift(&v.kind)
+                crate::vehicle::cab_lift(&v.kind) - 0.15
             },
             crate::vehicle::spec(&v.kind).window_z,
         ],
@@ -462,6 +459,7 @@ pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
             ));
         }
     }
+    boxes.extend(crate::vehicle::assembly_boxes(&v.kind));
     boxes
 }
 
