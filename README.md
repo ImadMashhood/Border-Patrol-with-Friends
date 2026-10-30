@@ -8,8 +8,10 @@ The Parts below are **technical work packages in implementation order**, not the
 
 Every checklist detail from the unabridged design is retained, including repeated requirements, the full 20-step playthrough, all acceptance criteria, numerical targets, examples and deferred features. Original M1–M7 labels remain as source milestone checks; the numbered Parts define this roadmap’s build order.
 
-**Checkbox convention:** boxes track acceptance against the new full design and start unchecked. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
+**Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
+
+**Foundation status:** Parts 1–3 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. The graphical co-op loop is delivered in later Parts.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -17,11 +19,13 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Lock the San Ignacio setting, the two-player first release and the conditions that must be met before full-game expansion. The full-game six-player target is implemented in Part 17, not here.
 
-- [ ] Set the game at **San Ignacio**, a fictional border crossing in **Texas**. This theming update supersedes the original design's unnamed location.
-- [ ] First deliver the deliberately smaller **two-player vertical slice** to prove the core checkpoint loop before implementing everything.
-- [ ] Build a compact but complete two-player border checkpoint.
-- [ ] Let two friends begin a shift, question travelers, physically inspect cargo, discover inconsistencies, decide who crosses, share money and purchase an upgrade.
-- [ ] Prioritize entertaining interactions and convincing AI behavior over elaborate graphics.
+- [x] Set the game at **San Ignacio**, a fictional border crossing in **Texas**. This theming update supersedes the original design's unnamed location.
+- [x] First deliver the deliberately smaller **two-player vertical slice** to prove the core checkpoint loop before implementing everything.
+- [x] Build a compact but complete two-player border checkpoint.
+- [x] Let two friends begin a shift, question travelers, physically inspect cargo, discover inconsistencies, decide who crosses, share money and purchase an upgrade.
+- [x] Prioritize entertaining interactions and convincing AI behavior over elaborate graphics.
+
+**Completion meaning:** The requirements below are frozen scope commitments, not a claim that the full checkpoint is already playable. Actual feature delivery is tracked in Parts 4–16.
 
 **Exit gate:** A written slice contract and testable acceptance gates exist; the team agrees to prove the core loop before expanding.
 
@@ -31,15 +35,15 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Define the Bevy client, authoritative simulation, network protocol, scenario types, provider gateway and local speech boundaries before connecting gameplay systems.
 
-- [ ] Separate authoritative scenario facts, traveler knowledge, public claims, observed evidence and conversational state.
-- [ ] Use versioned network messages, replayable event IDs, timeouts and deterministic scenario seeds to aid debugging.
-- [ ] Structure the Rust workspace with `crates/game` for Bevy rendering and interactions.
-- [ ] Include `simulation` for headless authoritative rules and `net` for the network protocol.
-- [ ] Include `scenarios` for content packs and validation.
-- [ ] Include `caller` for prompt/state and `caller-server` for the provider gateway.
-- [ ] Include `speech` for local audio adapters.
-- [ ] Reuse design lessons from Wrong Number without reusing dispatch-specific game logic.
-- [ ] Verify Rust/Bevy dependency versions before pinning them.
+- [x] Separate authoritative scenario facts, traveler knowledge, public claims, observed evidence and conversational state.
+- [x] Use versioned network messages, replayable event IDs, timeouts and deterministic scenario seeds to aid debugging.
+- [x] Structure the Rust workspace with `crates/game` for Bevy rendering and interactions.
+- [x] Include `simulation` for headless authoritative rules and `net` for the network protocol.
+- [x] Include `scenarios` for content packs and validation.
+- [x] Include `caller` for prompt/state and `caller-server` for the provider gateway.
+- [x] Include `speech` for local audio adapters.
+- [x] Reuse design lessons from Wrong Number without reusing dispatch-specific game logic.
+- [x] Verify Rust/Bevy dependency versions before pinning them.
 
 **Exit gate:** The workspace builds with verified dependency pins, and the core world/scenario/event contracts can be exercised without the renderer.
 
@@ -49,12 +53,12 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Implement the host/client session and command boundary early. Establish who may change world state and how approved commands/events are versioned. The complete replicated gameplay is hardened in Part 15.
 
-- [ ] Never let a client send its own guilt verdict or money award to the host.
-- [ ] Make shifts, lane ownership, queues and vehicle motion host-authoritative.
-- [ ] Make hidden truth, evidence and financial results host-authoritative.
-- [ ] Make combat, health, border incidents and purchases host-authoritative.
-- [ ] Use a trusted AI service to validate conversational output; forward only approved actions to the host.
-- [ ] Never trust client-provided rewards or disposition outcomes.
+- [x] Never let a client send its own guilt verdict or money award to the host.
+- [x] Make shifts, lane ownership, queues and vehicle motion host-authoritative.
+- [x] Make hidden truth, evidence and financial results host-authoritative.
+- [x] Make combat, health, border incidents and purchases host-authoritative.
+- [x] Use a trusted AI service to validate conversational output; forward only approved actions to the host.
+- [x] Never trust client-provided rewards or disposition outcomes.
 
 **Exit gate:** Two peers can join a host-owned session; clients submit requests rather than trusted outcomes or rewards.
 

@@ -1327,7 +1327,9 @@ dependencies = [
  "anyhow",
  "axum",
  "border-caller",
+ "border-net",
  "border-scenarios",
+ "border-simulation",
  "reqwest",
  "serde",
  "serde_json",
@@ -1350,10 +1352,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "border-net"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "reqwest",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "border-scenarios"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "border-simulation"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "border-caller",
+ "border-net",
+ "border-scenarios",
  "serde",
  "serde_json",
 ]

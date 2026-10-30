@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/scenarios", "crates/caller", "crates/caller-server", "crates/speech", "crates/game"]
+members = ["crates/net", "crates/simulation", "crates/scenarios", "crates/caller", "crates/caller-server", "crates/speech", "crates/game"]
 resolver = "3"
 
 [workspace.package]
@@ -14,6 +14,8 @@ serde_json = "1"
 anyhow = "1"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "blocking"] }
 tokio = { version = "1", features = ["full"] }
+border-net = { path = "crates/net" }
+border-simulation = { path = "crates/simulation" }
 border-scenarios = { path = "crates/scenarios" }
 border-caller = { path = "crates/caller" }
 border-speech = { path = "crates/speech" }

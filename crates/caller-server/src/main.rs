@@ -161,6 +161,101 @@ async fn session(
         )
     })
 }
+/// Host URL and gateway credential come from server configuration, never player input.
+async fn host_turn(
+    State(s): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<border_net::HostTurnRequest>,
+) -> ApiResult<ActorReply> {
+    authorize(&s, &headers)?;
+    if req.utterance.trim().is_empty() || req.utterance.chars().count() > 500 {
+        return Err(error(
+            StatusCode::BAD_REQUEST,
+            "Question must be 1–500 characters",
+        ));
+    }
+    let url = std::env::var("BORDER_HOST_URL").map_err(|_| {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Host bridge not configured",
+        )
+    })?;
+    let token = std::env::var("BORDER_HOST_GATEWAY_TOKEN").map_err(|_| {
+        error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "Host bridge not configured",
+        )
+    })?;
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Host client unavailable"))?;
+    let context = client
+        .post(format!("{}/actor-context", url.trim_end_matches('/')))
+        .bearer_auth(&token)
+        .json(&border_net::ActorContextRequest {
+            protocol_version: req.protocol_version,
+            session_id: req.session_id.clone(),
+            vehicle_id: req.vehicle_id,
+        })
+        .send()
+        .await
+        .map_err(|_| error(StatusCode::BAD_GATEWAY, "Host unavailable"))?;
+    if !context.status().is_success() {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Host rejected conversation context",
+        ));
+    }
+    let context: border_simulation::ActorContext = context
+        .json()
+        .await
+        .map_err(|_| error(StatusCode::BAD_GATEWAY, "Invalid host context"))?;
+    let reply = tokio::time::timeout(
+        Duration::from_secs(25),
+        s.provider
+            .reply(&context.scenario, false, &context.history, &req.utterance),
+    )
+    .await
+    .map_err(|_| error(StatusCode::GATEWAY_TIMEOUT, "Provider timed out"))?
+    .map_err(|_| error(StatusCode::BAD_GATEWAY, "Provider rejected conversation"))?;
+    let raw = serde_json::to_string(&reply)
+        .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid reply"))?;
+    validate_turn_reply(
+        &context.scenario,
+        false,
+        &context.history,
+        &req.utterance,
+        &raw,
+    )
+    .map_err(|_| {
+        error(
+            StatusCode::BAD_GATEWAY,
+            "Provider returned invalid dialogue",
+        )
+    })?;
+    let response = client
+        .post(format!("{}/actor", url.trim_end_matches('/')))
+        .bearer_auth(&token)
+        .json(&border_net::ActorDelivery {
+            expected_turn: context.expected_turn,
+            protocol_version: req.protocol_version,
+            session_id: req.session_id,
+            vehicle_id: req.vehicle_id,
+            officer_utterance: req.utterance,
+            raw_reply: raw,
+        })
+        .send()
+        .await
+        .map_err(|_| error(StatusCode::BAD_GATEWAY, "Host unavailable"))?;
+    if !response.status().is_success() {
+        return Err(error(
+            StatusCode::CONFLICT,
+            "Host rejected stale or invalid dialogue",
+        ));
+    }
+    Ok(Json(reply))
+}
 async fn health(State(s): State<AppState>) -> Json<Value> {
     Json(json!({"ok":true,"service":"border-caller","protocol":1,"mode":s.provider.mode()}))
 }
@@ -301,6 +396,7 @@ fn router(state: AppState) -> Router {
         .route("/health", get(health))
         .route("/start", post(start))
         .route("/turn", post(turn))
+        .route("/host-turn", post(host_turn))
         .route("/inspect", post(inspect))
         .route("/decide", post(decide))
         .layer(DefaultBodyLimit::max(8192))

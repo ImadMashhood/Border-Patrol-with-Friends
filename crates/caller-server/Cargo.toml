@@ -1,5 +1,6 @@
 [package]
 name = "border-caller-server"
+default-run = "border-caller-server"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,3 +14,10 @@ reqwest.workspace = true
 tokio.workspace = true
 axum = "0.8"
 uuid = { version = "1", features = ["v4"] }
+
+border-net.workspace = true
+border-simulation.workspace = true
+
+[[bin]]
+name = "border-host"
+path = "src/bin/host.rs"
