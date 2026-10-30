@@ -5,6 +5,8 @@ use border_net::*;
 use border_scenarios::{Scenario, seeded_order};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
+#[cfg(test)]
+mod lifecycle_tests;
 mod shift;
 
 struct Case {
@@ -13,6 +15,7 @@ struct Case {
     history: Vec<Turn>,
     secondary: bool,
     waypoint: usize,
+    departure_order: u64,
 }
 struct Peer {
     input: Option<InputFrame>,
@@ -74,6 +77,7 @@ impl Simulation {
                         lane_id,
                         owner: None,
                         barrier_open: false,
+                        entry_barrier_open: false,
                         queue: vec![],
                     })
                     .collect(),
@@ -383,6 +387,9 @@ impl Simulation {
                 ensure!(l.owner == Some(peer), "lane not owned");
                 l.owner = None;
             }
+            ClientCommand::InspectVehiclePoint { vehicle_id, point } => {
+                self.inspect_point(peer, *vehicle_id, *point)?;
+            }
             ClientCommand::InspectEvidence {
                 vehicle_id,
                 evidence_id,
@@ -467,7 +474,7 @@ impl Simulation {
             HostCommand::SpawnNextVehicle { lane_id, kind } => {
                 ensure!(self.world.phase == ShiftPhase::Active, "shift inactive");
                 ensure!(
-                    ["car", "van", "truck"].contains(&kind.as_str()),
+                    ["car", "sedan", "truck"].contains(&kind.as_str()),
                     "unknown vehicle kind"
                 );
                 ensure!(self.cursor < self.order.len(), "scenario pack exhausted");
@@ -484,7 +491,7 @@ impl Simulation {
                 self.world.vehicles.push(VehicleView {
                     vehicle_id,
                     lane_id: *lane_id,
-                    kind: kind.clone(),
+                    kind: vehicle::spec(kind).kind.into(),
                     stage: VehicleStage::Queued,
                     position_mm: 0,
                     traveler_name: scenario.character.name.clone(),
@@ -497,6 +504,7 @@ impl Simulation {
                     history: vec![],
                     outcome: None,
                     secondary_inspected: false,
+                    inspected_points: vec![],
                 });
                 self.cases.insert(
                     vehicle_id,
@@ -506,6 +514,7 @@ impl Simulation {
                         secondary: false,
                         epoch: self.epoch,
                         waypoint: 0,
+                        departure_order: 0,
                     },
                 );
             }

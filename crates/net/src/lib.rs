@@ -2,10 +2,11 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 2;
+pub const PROTOCOL_VERSION: u16 = 3;
 pub const READY_HOLD_MS: u64 = 3000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod map;
+pub mod vehicle;
 pub const PEER_TIMEOUT_MS: u64 = 15_000;
 pub const HTTP_TIMEOUT_SECS: u64 = 5;
 pub const MAX_PLAYERS: usize = 2;
@@ -64,6 +65,10 @@ pub enum ClientCommand {
     },
     ReleaseLane {
         lane_id: u8,
+    },
+    InspectVehiclePoint {
+        vehicle_id: u64,
+        point: vehicle::VehiclePoint,
     },
     InspectEvidence {
         vehicle_id: u64,
@@ -142,6 +147,7 @@ pub struct LaneView {
     pub lane_id: u8,
     pub owner: Option<u64>,
     pub barrier_open: bool,
+    pub entry_barrier_open: bool,
     pub queue: Vec<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -167,6 +173,7 @@ pub struct VehicleView {
     pub history: Vec<border_caller::Turn>,
     pub outcome: Option<border_scenarios::Reveal>,
     pub secondary_inspected: bool,
+    pub inspected_points: Vec<vehicle::VehiclePoint>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {

@@ -18,7 +18,7 @@ Launch the updated graphical prototype with:
 ./play.sh
 ```
 
-Click **Begin patrol**, then use WASD and the mouse. Hold **left Shift** to jog. Press **M** for a site map with your position; press M again to close it. E still starts the existing interview when you aim at the active teal sedan within three metres. Tab switches between mouse look and typing, and Escape releases the mouse.
+Complete the office ready hold, then use WASD and the mouse. Hold **left Shift** to jog. Press **M** for a site map with your position; press M again to close it. E interacts with the stopped vehicle’s driver window, passenger door, hood or cargo point within two metres of its access position. Tab switches between mouse look and typing, and Escape releases the mouse.
 
 The administration office is west of the inspection lanes, storage is immediately farther west, the holding yard is behind the office, and secondary inspection is east of the lanes. The river bridge is south, behind the vehicle queue. Walk through the fence opening and across the bridge to the posted pedestrian limit. Vehicle roads continue beyond the walkable yard, bend into the rocky landscape and fade into haze. Posted signs mark the pedestrian limits; the compound itself is open, with no enclosure fencing; the surrounding desert and reserved future lanes are scenery.
 
@@ -27,7 +27,7 @@ The administration office is west of the inspection lanes, storage is immediatel
 | Space | Implemented detail |
 | --- | --- |
 | Two-lane checkpoint | Separate lane markings/arrows, stop lines, canopy beams, hanging fixtures, cameras, protective bollards, moving striped barriers and timed vehicle queues |
-| Active interview stop | Ten shared-mesh sedans with clean varied automotive paint, chamfered bodies, sloped windscreens and metal wheel hubs, visible drivers, braking/queue spacing, arrival HUD, AI/text/voice conversation and evidence UI |
+| Active interview stop | Ten mixed sedans and pickup trucks with clean varied automotive paint, visible drivers, vehicle-sized braking/queue spacing, four articulated inspection points, AI/text/voice conversation and shared evidence UI |
 | Administration office | Clean textured cinderblock exterior with staggered courses, mortar grooves, subtle concrete pores and consistent block scale; hollow enterable room, doorway, window trim, roof, desks, terminals, chairs, documents, filing cabinets, bulletin board, coffee station, ceiling fixtures and warm interior lighting |
 | Equipment storage | Open-front shelter, shelves, stacked crates, adjacent utility cabinet, service pipes, condensers and barrels |
 | Holding yard | Open concrete pad with painted markings, shaded benches, nearby water tank and location sign; no surrounding fence |
@@ -59,7 +59,7 @@ The detailed scene and Part 5 shared-office/host session are connected. The offi
 
 Validated on Linux with Rust 1.94.0 and the locked dependency graph:
 
-- Full workspace tests: **46 passed**, one existing explicit microphone/model fixture test ignored.
+- Full workspace tests: **50 passed**, one existing explicit microphone/model fixture test ignored.
 - Clippy for the entire workspace/all targets with warnings denied, plus Rust formatting: passed.
 - A headless connectivity test builds the actual scene and flood-fills collision-free walking routes from spawn to the office, storage, holding yard, secondary bay, driver and both ends of the bridge. It also rejects river shortcuts and the reserved future lanes.
 - `./play.sh --smoke-shift` passed with the resident GPU speech models loaded and a clean automatic exit.
@@ -80,3 +80,5 @@ Reproduce captures after `cargo build --locked -p border-game`:
 ```
 
 Other review viewpoints are `yard`, `desert`, `north-road`, `cinematic`, `office-exterior` and `cars`. Smoke captures freeze camera movement to make visual review independent of mouse motion. Captures are written under ignored `output/`; the overview above is the checked-in review image. Smoke mode disables microphone recording and speech playback and exits automatically. These captures validate rendering and layout, not a full human multiplayer playtest.
+
+[Part 6](VEHICLES.md) adds the pickup model, physical inspection panels, vehicle-sized spacing and separate entry/exit barriers for each lane.

@@ -4,6 +4,7 @@ mod shift;
 mod surfaces;
 mod traffic;
 mod ui;
+mod vehicles;
 use bevy::{
     input::mouse::AccumulatedMouseMotion,
     prelude::*,
@@ -138,6 +139,7 @@ struct SmokeTest {
     elapsed: f32,
     capture: bool,
     interview: bool,
+    lifecycle: bool,
     step: u8,
     robot_step: usize,
     ready_capture: bool,
@@ -177,7 +179,8 @@ fn main() {
         tx,
         rx: Arc::new(Mutex::new(rx)),
     };
-    let interview_smoke = std::env::args().any(|a| a == "--smoke-interview");
+    let lifecycle = std::env::args().any(|a| a == "--smoke-lifecycle");
+    let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
     let robot = interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
     let smoke = robot || std::env::args().any(|a| a == "--smoke-test");
     let mut app = App::new();
@@ -204,6 +207,7 @@ fn main() {
             Update,
             (
                 shift::sync,
+                vehicles::animate,
                 controls,
                 receive,
                 traffic::progress,
@@ -223,6 +227,7 @@ fn main() {
             elapsed: 0.,
             capture: false,
             interview: interview_smoke,
+            lifecycle,
             step: 0,
             robot_step: 0,
             ready_capture: false,
@@ -246,7 +251,7 @@ fn controls(
     mut cursor: Single<&mut CursorOptions>,
     cars: Query<(&Transform, &traffic::Vehicle), Without<Player>>,
     smoke: Option<Res<SmokeTest>>,
-    shift: Res<shift::Shift>,
+    mut shift: ResMut<shift::Shift>,
     mut lights: Query<&mut Visibility, With<shift::Flashlight>>,
     mut gui: EguiContexts,
 ) {
@@ -272,7 +277,17 @@ fn controls(
                             .any(|l| l.lane_id == v.lane_id && l.owner == Some(me.peer_id))
                             && v.stage == border_net::VehicleStage::Stopped
                     })
-                    .map(|v| Vec3::from_array(v.position) + Vec3::Y * 1.25)
+                    .map(|v| {
+                        Vec3::from_array(border_net::vehicle::spec(&v.kind).aim_point(
+                            v.position,
+                            v.yaw,
+                            if smoke.lifecycle && smoke.step >= 4 {
+                                border_net::vehicle::VehiclePoint::Cargo
+                            } else {
+                                border_net::vehicle::VehiclePoint::Driver
+                            },
+                        ))
+                    })
                     .unwrap_or(Vec3::new(0., 1.25, 0.))
             };
             t.look_at(target, Vec3::Y);
@@ -287,6 +302,7 @@ fn controls(
     }
     if keys.just_pressed(KeyCode::Escape) {
         g.overlay = false;
+        shift.inspection = None;
         g.looking = false;
         g.settings_open = false;
     }
@@ -406,42 +422,45 @@ fn controls(
         };
     }
     let direction = *t.forward();
-    let hit = cars
-        .iter()
-        .filter(|(_, v)| v.ordinal < 5 && shift.permits(v.lane + 1))
-        .find(|(car, v)| {
-            v.distance == 0.
-                && ray_box(
-                    t.translation,
-                    direction,
-                    car.translation + Vec3::new(-1.05, 0.2, -2.25),
-                    car.translation + Vec3::new(1.05, 1.85, 2.25),
-                )
-                .is_some_and(|d| d <= 3.)
+    if shift.connected {
+        let hit = shift.world.as_ref().and_then(|world| {
+            vehicles::interaction(world, shift.peer_id, t.translation, direction)
         });
-    g.aiming = matches!(g.phase, Phase::Approach | Phase::Interview)
-        && hit.is_some()
-        && shift.world.as_ref().is_some_and(|w| {
-            matches!(
-                w.phase,
-                border_net::ShiftPhase::Active | border_net::ShiftPhase::Grace
-            )
-        });
-    if keys.just_pressed(KeyCode::KeyE) && g.aiming && !g.pending && (!g.overlay || g.looking) {
-        g.overlay = true;
-        g.looking = false;
-        g.request_focus = true;
-        if g.case.is_none() {
-            g.pending = true;
-            g.error.clear();
-            let id = hit
-                .map(|(_, v)| 1 + v.lane as u64 + v.ordinal as u64 * 2)
-                .unwrap();
-            g.vehicle_id = Some(id);
-            net.start(g.generation, id.to_string());
-        } else {
-            g.phase = Phase::Interview;
+        shift.interaction = hit;
+        g.aiming = hit.is_some();
+        if keys.just_pressed(KeyCode::KeyE)
+            && !g.pending
+            && !g.overlay
+            && let Some((id, point)) = hit
+        {
+            g.looking = false;
+            if point == border_net::vehicle::VehiclePoint::Driver {
+                shift.inspection = None;
+                if g.vehicle_id != Some(id) {
+                    g.reset_case();
+                }
+                g.overlay = true;
+                g.request_focus = true;
+                if g.case.is_none() {
+                    g.pending = true;
+                    g.error.clear();
+                    g.vehicle_id = Some(id);
+                    net.start(g.generation, id.to_string());
+                } else {
+                    g.phase = Phase::Interview;
+                }
+            } else {
+                shift.inspection = Some((id, point));
+                shift.send(border_net::ClientCommand::InspectVehiclePoint {
+                    vehicle_id: id,
+                    point,
+                });
+            }
         }
+    } else {
+        // Scene previews never open provider sessions.
+        let _ = cars;
+        g.aiming = false;
     }
 }
 fn ray_box(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
@@ -572,8 +591,25 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
         }
     }
 }
-fn voice(mut g: ResMut<Patrol>, net: Res<Network>) {
-    if g.phase != Phase::Interview || g.case.is_none() || !g.mic_enabled {
+fn voice(mut g: ResMut<Patrol>, net: Res<Network>, shift: Res<shift::Shift>) {
+    let in_range = !shift.connected
+        || shift.world.as_ref().is_some_and(|w| {
+            w.vehicles.iter().any(|v| {
+                Some(v.vehicle_id) == g.vehicle_id
+                    && v.stage == border_net::VehicleStage::Stopped
+                    && shift.me().is_some_and(|p| {
+                        let target = border_net::vehicle::spec(&v.kind).world_point(
+                            v.position,
+                            v.yaw,
+                            border_net::vehicle::VehiclePoint::Driver,
+                        );
+                        (p.position[0] - target[0]).hypot(p.position[2] - target[2])
+                            <= border_net::vehicle::INTERACTION_RANGE
+                    })
+            })
+        });
+    if !g.overlay || !in_range || g.phase != Phase::Interview || g.case.is_none() || !g.mic_enabled
+    {
         g.mic = None;
         g.mic_active = false;
         return;
@@ -595,14 +631,16 @@ fn voice(mut g: ResMut<Patrol>, net: Res<Network>) {
     }
 }
 
+#[allow(clippy::too_many_arguments)] // The rendered walk checks camera targeting as well as host state.
 fn smoke_test(
     time: Res<Time>,
     mut smoke: ResMut<SmokeTest>,
+    camera: Query<&Transform, With<Player>>,
     mut commands: Commands,
     mut exit: MessageWriter<bevy::app::AppExit>,
     mut g: ResMut<Patrol>,
     net: Res<Network>,
-    shift: Res<shift::Shift>,
+    mut shift: ResMut<shift::Shift>,
 ) {
     smoke.elapsed += time.delta_secs();
     if smoke.robot
@@ -645,8 +683,30 @@ fn smoke_test(
                 .map(|l| l.lane_id)
                 .unwrap_or(1);
             let x = if lane == 1 { -1.6 } else { 5.4 };
-            let route = [[-12., -2.], [-4., -2.], [-4., -8.], [x, -8.], [x, 0.]];
-            if smoke.robot_step < route.len() {
+            let cargo_z = world
+                .vehicles
+                .iter()
+                .find(|v| v.lane_id == lane && v.stage == border_net::VehicleStage::Stopped)
+                .map(|v| {
+                    border_net::vehicle::spec(&v.kind)
+                        .local_point(border_net::vehicle::VehiclePoint::Cargo)[2]
+                })
+                .unwrap_or(4.);
+            let route = [
+                [-12., -2.],
+                [-4., -2.],
+                [-4., -4.2],
+                [x, -4.2],
+                [x, -1.2],
+                [x, cargo_z],
+                [(lane - 1) as f32 * 7., cargo_z],
+            ];
+            let allowed = if smoke.lifecycle && smoke.step >= 4 {
+                7
+            } else {
+                5
+            };
+            if smoke.robot_step < allowed {
                 let target = route[smoke.robot_step];
                 let dx = target[0] - me.position[0];
                 let dz = target[1] - me.position[2];
@@ -660,7 +720,7 @@ fn smoke_test(
                     ];
                 }
             }
-            if smoke.elapsed > 12. && !smoke.live_capture {
+            if smoke.robot_step >= 5 && !smoke.live_capture {
                 smoke.live_capture = true;
                 commands
                     .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
@@ -673,6 +733,53 @@ fn smoke_test(
         *shift.controls.lock().unwrap() = controls;
     }
 
+    if smoke.lifecycle
+        && smoke.step == 4
+        && smoke.robot_step >= 7
+        && let Some(v) = shift.world.as_ref().and_then(|w| {
+            w.vehicles
+                .iter()
+                .find(|v| v.stage == border_net::VehicleStage::Stopped && shift.permits(v.lane_id))
+        })
+    {
+        let id = v.vehicle_id;
+        let camera = camera.single().unwrap();
+        if vehicles::interaction(
+            shift.world.as_ref().unwrap(),
+            shift.peer_id,
+            camera.translation,
+            *camera.forward(),
+        ) != Some((id, border_net::vehicle::VehiclePoint::Cargo))
+        {
+            return;
+        }
+        shift.send(border_net::ClientCommand::InspectVehiclePoint {
+            vehicle_id: id,
+            point: border_net::vehicle::VehiclePoint::Cargo,
+        });
+        shift.inspection = Some((id, border_net::vehicle::VehiclePoint::Cargo));
+        g.overlay = false;
+        smoke.step = 5;
+    }
+    if smoke.lifecycle
+        && smoke.step == 5
+        && smoke.elapsed > 31.
+        && shift.world.as_ref().is_some_and(|w| {
+            w.vehicles.iter().any(|v| {
+                shift.permits(v.lane_id)
+                    && v.inspected_points
+                        .contains(&border_net::vehicle::VehiclePoint::Cargo)
+            })
+        })
+    {
+        smoke.step = 6;
+        commands
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                "output/cargo-peer-{}.png",
+                shift.peer_id
+            )));
+    }
     if smoke.interview {
         if smoke.step == 0
             && smoke.robot_step >= 5
@@ -682,6 +789,15 @@ fn smoke_test(
                 .iter()
                 .find(|v| v.stage == border_net::VehicleStage::Stopped && shift.permits(v.lane_id))
         {
+            let camera = camera.single().unwrap();
+            if vehicles::interaction(world, shift.peer_id, camera.translation, *camera.forward())
+                != Some((
+                    vehicle.vehicle_id,
+                    border_net::vehicle::VehiclePoint::Driver,
+                ))
+            {
+                return;
+            }
             smoke.step = 1;
             g.pending = true;
             g.overlay = true;
@@ -758,7 +874,11 @@ fn smoke_test(
             exit.write(bevy::app::AppExit::error());
             return;
         }
-        if smoke.interview && (smoke.step < 4 || !g.secondary || !g.error.is_empty()) {
+        if smoke.interview
+            && (smoke.step < if smoke.lifecycle { 6 } else { 4 }
+                || !g.secondary
+                || !g.error.is_empty())
+        {
             error!(
                 "Interview smoke failed: step={}, secondary={}, error={}",
                 smoke.step, g.secondary, g.error

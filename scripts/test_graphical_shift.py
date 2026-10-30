@@ -17,6 +17,7 @@ def free_port():
         return sock.getsockname()[1]
 
 def main():
+    lifecycle = '--lifecycle' in __import__('sys').argv
     subprocess.run(['cargo', 'build', '--locked', '-p', 'border-game', '-p', 'border-caller-server'], cwd=ROOT, check=True)
     host_port, gateway_port = free_port(), free_port()
     env = dict(os.environ, BORDER_HOST_BIND=f'127.0.0.1:{host_port}', BORDER_HOST_URL=f'http://127.0.0.1:{host_port}', BORDER_GATEWAY_URL=f'http://127.0.0.1:{gateway_port}', BORDER_SERVER_ADDR=f'127.0.0.1:{gateway_port}', BORDER_HOST_JOIN_CODE=secrets.token_hex(8), BORDER_HOST_OPERATOR_TOKEN=secrets.token_hex(24), BORDER_HOST_GATEWAY_TOKEN=secrets.token_hex(24), BORDER_SESSION_TOKEN=secrets.token_hex(24))
@@ -46,8 +47,8 @@ def main():
                 time.sleep(.05)
         else:
             raise RuntimeError('host services failed to start')
-        a = start('border-game', ['--name=Officer-A', '--smoke-interview'], 'part5-client-a.log')
-        b = start('border-game', ['--name=Officer-B', '--smoke-shift'], 'part5-client-b.log')
+        a = start('border-game', ['--name=Officer-A', '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
+        b = start('border-game', ['--name=Officer-B', '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
         deadline = time.monotonic() + 75
         while time.monotonic() < deadline and (a.poll() is None or b.poll() is None):
             time.sleep(.1)
@@ -63,6 +64,13 @@ def main():
         assert list(output.glob('ready-peer-*.png')), 'missing visible ready-hold capture'
         assert (output / 'shift-peer-1.png').exists() and (output / 'shift-peer-2.png').exists()
         assert any(v['history'] and v['observed_evidence'] for v in worlds[0]['vehicles'] + worlds[1]['vehicles']), 'interview/inspection did not complete'
+        if lifecycle:
+            for i,world in enumerate(worlds,1):
+                head = next(v for v in world['vehicles'] if v['vehicle_id']==i)
+                assert head['kind'] == ('sedan' if i==1 else 'truck')
+                assert 'cargo' in head['inspected_points'], (i,head)
+                assert (output / f'cargo-peer-{i}.png').exists()
+            print('PASS: physical sedan trunk and truck tailgate inspections from both real clients')
         print('PASS: two real graphical clients; shared office; timed ready door; host-owned live countdown; shared players and vehicles; interview plus inspection')
     finally:
         for child in reversed(children):

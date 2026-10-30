@@ -66,7 +66,7 @@ impl Simulation {
         for i in 0..self.pack.len() {
             self.operator(HostCommand::SpawnNextVehicle {
                 lane_id: (i % 2 + 1) as u8,
-                kind: "car".into(),
+                kind: vehicle::scheduled_kind(i).into(),
             })?;
         }
         for v in &mut self.world.vehicles {
@@ -113,21 +113,30 @@ impl Simulation {
                                 .iter()
                                 .filter(|v| v.stage != VehicleStage::Exited)
                                 .any(|v| {
-                                    let (sin, cos) = v.yaw.sin_cos();
-                                    let half = [
-                                        1.08 * cos.abs() + 2.3 * sin.abs(),
-                                        0.9,
-                                        1.08 * sin.abs() + 2.3 * cos.abs(),
-                                    ];
                                     map::blocked(
                                         next[0],
                                         next[2],
-                                        &map::Aabb {
-                                            center: v.position,
-                                            half,
-                                        },
+                                        &vehicle::spec(&v.kind).aabb(v.position, v.yaw),
                                     )
                                 })
+                            && !self.world.lanes.iter().any(|lane| {
+                                [
+                                    (!lane.entry_barrier_open, vehicle::ENTRY_GATE_Z),
+                                    (!lane.barrier_open, vehicle::EXIT_GATE_Z),
+                                ]
+                                .iter()
+                                .any(|(closed, z)| {
+                                    *closed
+                                        && map::blocked(
+                                            next[0],
+                                            next[2],
+                                            &map::Aabb {
+                                                center: [(lane.lane_id - 1) as f32 * 7., 1.1, *z],
+                                                half: [2.65, 0.1, 0.1],
+                                            },
+                                        )
+                                })
+                            })
                             && (self.world.door_open
                                 || !map::blocked(next[0], next[2], &closed_door))
                         {
@@ -213,6 +222,11 @@ impl Simulation {
     }
     fn advance_vehicles(&mut self, dt: f32) {
         let old = self.world.vehicles.clone();
+        let departure_orders: HashMap<_, _> = self
+            .cases
+            .iter()
+            .map(|(id, c)| (*id, c.departure_order))
+            .collect();
         for v in &mut self.world.vehicles {
             match v.stage {
                 VehicleStage::Queued => {
@@ -220,23 +234,37 @@ impl Simulation {
                         v.speed = 0.;
                         continue;
                     }
-                    let ahead: Vec<_> = old
-                        .iter()
-                        .filter(|a| {
-                            a.lane_id == v.lane_id
-                                && a.vehicle_id < v.vehicle_id
-                                && matches!(
-                                    a.stage,
-                                    VehicleStage::Queued
-                                        | VehicleStage::Stopped
-                                        | VehicleStage::Resolved
-                                )
+                    let lead = old.iter().rfind(|a| {
+                        a.lane_id == v.lane_id
+                            && a.vehicle_id < v.vehicle_id
+                            && (matches!(
+                                a.stage,
+                                VehicleStage::Queued
+                                    | VehicleStage::Stopped
+                                    | VehicleStage::Resolved
+                            ) || (matches!(
+                                a.stage,
+                                VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                            ) && (a.position[0] - v.position[0]).abs() < 3.
+                                && a.position[2] > -10.))
+                    });
+                    let target = lead
+                        .map(|a| {
+                            let distance = if matches!(
+                                a.stage,
+                                VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                            ) {
+                                a.position[2]
+                            } else {
+                                a.distance_to_stop
+                            };
+                            (distance
+                                + vehicle::spec(&a.kind).half_length
+                                + vehicle::spec(&v.kind).half_length
+                                + vehicle::BUMPER_GAP)
+                                .max(0.)
                         })
-                        .collect();
-                    let mut target = ahead.len() as f32 * 9.;
-                    if let Some(lead) = ahead.last() {
-                        target = target.max(lead.distance_to_stop + 9.);
-                    }
+                        .unwrap_or(0.);
                     let desired = ((v.distance_to_stop - target).max(0.) * 3.6)
                         .sqrt()
                         .min(10.);
@@ -252,7 +280,9 @@ impl Simulation {
                             let z = p.position[2] - v.position[2];
                             let ahead = (x * dx + z * dz) / length;
                             let side = (x * dz - z * dx).abs() / length;
-                            ahead > 0. && ahead < 3.5 && side < 1.35
+                            ahead > 0.
+                                && ahead < vehicle::spec(&v.kind).half_length + 1.2
+                                && side < vehicle::spec(&v.kind).half_width + 0.35
                         });
                     if blocked {
                         v.speed = 0.;
@@ -275,20 +305,7 @@ impl Simulation {
                 VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny => {
                     let case = self.cases.get_mut(&v.vehicle_id).unwrap();
                     let admitted = v.stage == VehicleStage::DepartingAdmit;
-                    let path: Vec<[f32; 2]> = if admitted {
-                        vec![
-                            [(v.lane_id - 1) as f32 * 7., -16.],
-                            [(v.lane_id - 1) as f32 * 7., -95.],
-                            [-113.5 + (v.lane_id - 1) as f32 * 7., -210.],
-                            [-433.5 + (v.lane_id - 1) as f32 * 7., -340.],
-                        ]
-                    } else {
-                        vec![
-                            [(v.lane_id - 1) as f32 * 7., -11.],
-                            [-4., -16.],
-                            [-440., -16.],
-                        ]
-                    };
+                    let path = vehicle::departure_path(v.lane_id, admitted);
                     let target = path[case.waypoint.min(path.len() - 1)];
                     let dx = target[0] - v.position[0];
                     let dz = target[1] - v.position[2];
@@ -299,9 +316,26 @@ impl Simulation {
                             let z = p.position[2] - v.position[2];
                             let ahead = (x * dx + z * dz) / remaining;
                             let side = (x * dz - z * dx).abs() / remaining;
-                            ahead > 0. && ahead < 3.5 && side < 1.35
+                            ahead > 0.
+                                && ahead < vehicle::spec(&v.kind).half_length + 1.2
+                                && side < vehicle::spec(&v.kind).half_width + 0.35
                         });
-                    v.speed = if blocked {
+                    // Only the intersecting return merge is reserved; straight exits remain independent.
+                    let merge_wait = v.position[2] > -7.
+                        && old.iter().any(|a| {
+                            a.vehicle_id != v.vehicle_id
+                                && matches!(
+                                    a.stage,
+                                    VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                                )
+                                && (v.stage == VehicleStage::DepartingDeny
+                                    || a.stage == VehicleStage::DepartingDeny)
+                                && (departure_orders[&a.vehicle_id], a.vehicle_id)
+                                    < (departure_orders[&v.vehicle_id], v.vehicle_id)
+                                && a.position[0] > -15.
+                                && a.position[2] > -23.
+                        });
+                    v.speed = if blocked || merge_wait {
                         0.
                     } else {
                         (v.speed + dt * 2.).min(12.)
@@ -330,9 +364,31 @@ impl Simulation {
                 _ => {}
             }
         }
+        for lane in &mut self.world.lanes {
+            lane.entry_barrier_open = self.world.vehicles.iter().any(|v| {
+                v.lane_id == lane.lane_id
+                    && v.stage == VehicleStage::Queued
+                    && (v.distance_to_stop - vehicle::ENTRY_GATE_Z).abs()
+                        < vehicle::spec(&v.kind).half_length + 2.
+            });
+            lane.barrier_open = self.world.vehicles.iter().any(|v| {
+                v.lane_id == lane.lane_id
+                    && matches!(
+                        v.stage,
+                        VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                    )
+                    && v.position[2] + vehicle::spec(&v.kind).half_length
+                        > vehicle::EXIT_GATE_Z - 1.
+            });
+        }
     }
+
     pub fn authorize_case(&self, peer: u64, id: u64) -> Result<usize> {
         let i = self.owns_vehicle(peer, id)?;
+        self.require_point(peer, i, vehicle::VehiclePoint::Driver)?;
+        Ok(i)
+    }
+    fn require_point(&self, peer: u64, i: usize, point: vehicle::VehiclePoint) -> Result<()> {
         let p = self
             .world
             .peers
@@ -340,11 +396,53 @@ impl Simulation {
             .find(|p| p.peer_id == peer && p.connected && p.health > 0)
             .ok_or_else(|| anyhow::anyhow!("officer unavailable"))?;
         let v = &self.world.vehicles[i];
+        let target = vehicle::spec(&v.kind).world_point(v.position, v.yaw, point);
         ensure!(
-            (p.position[0] - (v.position[0] - 1.2)).hypot(p.position[2] - v.position[2]) <= 3.8,
-            "approach the driver window first"
+            (p.position[0] - target[0]).hypot(p.position[2] - target[2])
+                <= vehicle::INTERACTION_RANGE,
+            "approach the {} first",
+            point.label(&v.kind)
         );
-        Ok(i)
+        Ok(())
+    }
+    pub fn inspect_point(
+        &mut self,
+        peer: u64,
+        id: u64,
+        point: vehicle::VehiclePoint,
+    ) -> Result<()> {
+        ensure!(
+            point != vehicle::VehiclePoint::Driver,
+            "use the driver window to talk"
+        );
+        let i = self.owns_vehicle(peer, id)?;
+        self.require_point(peer, i, point)?;
+        if !self.world.vehicles[i].inspected_points.contains(&point) {
+            self.world.vehicles[i].inspected_points.push(point);
+            if point == vehicle::VehiclePoint::Cargo {
+                self.reveal_cargo(i, id);
+            }
+            self.emit(
+                "vehicle_point_inspected",
+                json!({"vehicle_id":id,"point":point}),
+            );
+        }
+        Ok(())
+    }
+    fn reveal_cargo(&mut self, i: usize, id: u64) -> Vec<Evidence> {
+        let c = self.cases.get_mut(&id).unwrap();
+        c.secondary = true;
+        let evidence = c.scenario.visible_evidence(true);
+        self.world.vehicles[i].observed_evidence = evidence
+            .iter()
+            .map(|e| EvidenceView {
+                id: e.id.clone(),
+                description: e.description.clone(),
+                reveal_condition: e.reveal_condition.clone(),
+            })
+            .collect();
+        self.world.vehicles[i].secondary_inspected = true;
+        evidence
     }
     pub fn public_case(&mut self, peer: u64, id: u64, mode: &str) -> Result<PublicCase> {
         self.authorize_case(peer, id)?;
@@ -361,18 +459,7 @@ impl Simulation {
     }
     pub fn inspect_case(&mut self, peer: u64, id: u64) -> Result<Vec<Evidence>> {
         let i = self.authorize_case(peer, id)?;
-        let c = self.cases.get_mut(&id).unwrap();
-        c.secondary = true;
-        let evidence = c.scenario.visible_evidence(true);
-        self.world.vehicles[i].observed_evidence = evidence
-            .iter()
-            .map(|e| EvidenceView {
-                id: e.id.clone(),
-                description: e.description.clone(),
-                reveal_condition: e.reveal_condition.clone(),
-            })
-            .collect();
-        self.world.vehicles[i].secondary_inspected = true;
+        let evidence = self.reveal_cargo(i, id);
         self.emit("evidence_inspected", json!({"vehicle_id":id}));
         Ok(evidence)
     }
@@ -454,6 +541,7 @@ impl Simulation {
             return Ok(());
         }
         ensure!(v.stage == VehicleStage::Resolved, "case unresolved");
+        self.cases.get_mut(&id).unwrap().departure_order = self.world.latest_event_sequence + 1;
         v.stage = if v.outcome.as_ref().unwrap().decision == Decision::Admit {
             VehicleStage::DepartingAdmit
         } else {
@@ -465,6 +553,7 @@ impl Simulation {
             .find(|l| l.lane_id == v.lane_id)
             .unwrap()
             .barrier_open = true;
+        self.emit("vehicle_released", json!({"vehicle_id":id}));
         Ok(())
     }
     pub(super) fn reset_shift(&mut self, peer: u64) -> Result<()> {
@@ -509,6 +598,7 @@ impl Simulation {
         for l in &mut self.world.lanes {
             l.queue.clear();
             l.barrier_open = false;
+            l.entry_barrier_open = false;
         }
         self.emit("shift_reset", json!({"door_open":false}));
         Ok(())

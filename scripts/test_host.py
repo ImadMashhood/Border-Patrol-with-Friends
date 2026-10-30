@@ -127,7 +127,7 @@ def main():
         command(1, {'type': 'request_lane_swap'})
         command(0, {'type': 'accept_lane_swap'})
         command(1, {'type': 'assist_lane', 'lane_id': 1})
-        for waypoint in [(-12., -2.), (-4., -2.), (-4., -8.), (-1.6, -8.), (-1.6, 0.)]:
+        for waypoint in [(-12., -2.), (-4., -2.), (-4., -4.2), (-1.6, -4.2), (-1.6, 0.)]:
             move_to(1, waypoint)
         for _ in range(80):
             inputs(0)
@@ -148,10 +148,27 @@ def main():
         request('/decide', {'session_id': '1', 'decision': 'admit'}, peers[1]['peer_token'])
         assert len(snapshot()['ledger']) == 1
         command(1, {'type': 'release_vehicle', 'vehicle_id': 1})
+        assert [v['kind'] for v in snapshot()['vehicles'][:2]] == ['sedan','truck']
+        for waypoint in [(-1.6,-4.2),(5.4,-4.2),(5.4,-1.2)]:
+            move_to(1,waypoint)
+        request('/start', {'session_id':'2'}, peers[1]['peer_token'])
+        command(1, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'}, expected=400)
+        for waypoint in [(5.4,3.95),(7.,3.95)]:
+            move_to(1,waypoint)
+        command(0, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'}, expected=400)
+        command(1, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'})
+        truck=snapshot()['vehicles'][1]
+        assert truck['secondary_inspected'] and truck['inspected_points']==['cargo'] and truck['observed_evidence']
+        for waypoint in [(5.4,3.95),(5.4,-1.2)]:
+            move_to(1,waypoint)
+        request('/decide', {'session_id':'2','decision':'deny'}, peers[1]['peer_token'])
+        command(1, {'type':'release_vehicle','vehicle_id':2})
         for _ in range(70):
             inputs(0)
             inputs(1)
             state = tick(1000)
+        assert state['vehicles'][2]['stage'] == state['vehicles'][3]['stage'] == 'stopped', 'both lanes must advance independently'
+        assert state['vehicles'][0]['stage'] == state['vehicles'][1]['stage'] == 'exited'
         assert state['notices'], 'security hooks must activate after shift start'
         while state['remaining_ms']:
             inputs(0)
@@ -162,7 +179,7 @@ def main():
         command(0, {'type': 'reset_shift'})
         state = snapshot()
         assert state['phase'] == 'lobby' and not state['door_open'] and not state['vehicles']
-        print('PASS: two peers; authoritative 3-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; event hooks; safe restart')
+        print('PASS: two peers; authoritative 3-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; sedan/truck physical cargo inspection and both departure routes; event hooks; safe restart')
     finally:
         for child in reversed(children):
             child.terminate()

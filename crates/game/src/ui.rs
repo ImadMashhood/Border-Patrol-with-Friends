@@ -25,7 +25,7 @@ pub fn draw(
     player: Query<&Transform, With<Player>>,
     vehicles: Query<&traffic::Vehicle>,
     mut traffic_state: ResMut<traffic::Traffic>,
-    shift: Res<shift::Shift>,
+    mut shift: ResMut<shift::Shift>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mut visuals = egui::Visuals::dark();
@@ -78,7 +78,7 @@ pub fn draw(
             });
         });
     egui::TopBottomPanel::bottom("footer").frame(egui::Frame::new().fill(egui::Color32::from_rgb(17,30,29)).inner_margin(egui::Margin::symmetric(25,12))).show(ctx,|ui| {
-        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE   SHIFT  JOG   M  MAP     MOUSE  LOOK     E  INTERVIEW     TAB  LOOK / TYPE     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
+        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE   SHIFT  JOG   M  MAP     MOUSE  LOOK     E  INTERACT     TAB  LOOK / TYPE     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
             if g.phase == Phase::Interview {
                 tag(ui, if !g.mic_enabled {"MIC OFF"} else if g.mic_failed {"MIC UNAVAILABLE"} else if g.pending || g.speaking || g.speech_pending {"MIC PAUSED"} else {"MIC LISTENING"});
             }});});
@@ -110,9 +110,22 @@ pub fn draw(
                         .inner_margin(12.)
                         .show(ui, |ui| {
                             ui.label(
-                                egui::RichText::new("[ E ]  Talk to driver")
-                                    .color(GOLD)
-                                    .size(16.),
+                                egui::RichText::new(
+                                    shift
+                                        .interaction
+                                        .and_then(|(id, point)| {
+                                            shift
+                                                .world
+                                                .as_ref()?
+                                                .vehicles
+                                                .iter()
+                                                .find(|v| v.vehicle_id == id)
+                                                .map(|v| format!("[ E ]  {}", point.label(&v.kind)))
+                                        })
+                                        .unwrap_or_else(|| "[ E ]  Interact".into()),
+                                )
+                                .color(GOLD)
+                                .size(16.),
                             );
                         });
                 });
@@ -149,7 +162,7 @@ pub fn draw(
                     });
             });
     }
-    shift::draw(ctx, &shift);
+    shift::draw(ctx, &mut shift);
     if g.map_open {
         site_map(
             ctx,
@@ -231,7 +244,7 @@ pub fn draw(
             ui.add_space(8.);tag(ui,"FINAL DECISIONS CANNOT BE REVERSED");
         });
     }
-    if g.evidence_open && g.phase == Phase::Interview {
+    if g.evidence_open && g.phase == Phase::Interview && shift.inspection.is_none() {
         let mut open = true;
         egui::Window::new("EVIDENCE FILE").open(&mut open).default_width(470.).default_pos([45.,150.]).show(ctx,|ui| {
             tag(ui,if g.secondary{"DOCUMENTS & PHYSICAL CARGO"}else{"DOCUMENTS — CARGO NOT YET INSPECTED"});ui.add_space(10.);

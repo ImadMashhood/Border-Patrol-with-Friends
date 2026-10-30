@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Build status:** Parts 1–5 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Full multiplayer acceptance/hardening remains Part 15.
+**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). Full multiplayer acceptance/hardening remains Part 15.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -105,19 +105,21 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 ## Part 6 — Implement lane and vehicle lifecycle systems
 
-**Prototype progress:** Timed arrivals, braking, queue gaps, two animated barriers, departures and next-case handoff are now visible in `./play.sh`. The host now drives both lanes; these remaining checks cover the complete vehicle types, interaction points and lifecycle acceptance.
+**Implemented:** Two host-driven lanes each process mixed sedan/pickup queues, with vehicle-sized spacing, separate entry/exit barriers, driver-window conversation and physical passenger/hood/cargo inspection points.
 
 **Depends on:** Parts 3–5.
 
 **Technical deliverable:** Build reusable queue, lane reservation, arrival, stopping, driver-window interaction and departure components for the sedan and truck. Use test disposition commands until the complete inspection/decision loop lands in Part 10.
 
-- [ ] Give every vehicle type appropriate doors, cargo points, inspection positions and departure paths.
-- [ ] Queue each vehicle, approach a free lane and stop at its designated inspection point.
-- [ ] Let the officer approach the driver and press E to start microphone or text conversation.
-- [ ] Advance the next car while other lanes operate simultaneously.
-- [ ] Deliver one sedan and one truck with correct queueing, stopping and exit paths.
-- [ ] Two independently operable inspection lanes with entry and exit barriers.
-- [ ] One sedan and one truck with stopping, inspection and departure paths.
+- [x] Give every vehicle type appropriate doors, cargo points, inspection positions and departure paths.
+- [x] Queue each vehicle, approach a free lane and stop at its designated inspection point.
+- [x] Let the officer approach the driver and press E to start microphone or text conversation.
+- [x] Advance the next car while other lanes operate simultaneously.
+- [x] Deliver one sedan and one truck with correct queueing, stopping and exit paths.
+- [x] Two independently operable inspection lanes with entry and exit barriers.
+- [x] One sedan and one truck with stopping, inspection and departure paths.
+
+**Validation:** [Vehicle catalog, controls, lifecycle rules and two-client acceptance](docs/VEHICLES.md). Both vehicle types complete both departure paths; the full decision workflow remains Part 10.
 
 **Exit gate:** Two lanes can process vehicle lifecycle transitions without blocking one another; each initial vehicle has valid interaction and exit points.
 

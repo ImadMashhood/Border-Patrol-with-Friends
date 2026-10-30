@@ -639,14 +639,14 @@ pub fn setup(
         }
         b.block(
             Vec3::new(0.5, 1.2, 0.5),
-            Vec3::new(9.9, 0.6, -4.),
+            Vec3::new(9.9, 0.6, -5.8),
             GOLD,
             true,
         );
         let second = b
             .commands
             .spawn((
-                Transform::from_xyz(9.9, 1.1, -4.),
+                Transform::from_xyz(9.9, 1.1, -5.8),
                 Visibility::default(),
                 Barrier,
                 traffic::LaneBarrier(1),
@@ -664,14 +664,14 @@ pub fn setup(
         // Existing interactive barrier keeps its animated hinge and original coordinates.
         b.block(
             Vec3::new(0.5, 1.2, 0.5),
-            Vec3::new(2.9, 0.6, -4.),
+            Vec3::new(2.9, 0.6, -5.8),
             GOLD,
             true,
         );
         let pivot = b
             .commands
             .spawn((
-                Transform::from_xyz(2.9, 1.1, -4.),
+                Transform::from_xyz(2.9, 1.1, -5.8),
                 Visibility::default(),
                 Barrier,
                 traffic::LaneBarrier(0),
@@ -685,6 +685,35 @@ pub fn setup(
                 false,
             );
             b.commands.entity(pivot).add_child(e);
+        }
+        // Entry gates meter approaching traffic independently of each lane's exit gate.
+        for lane in 0..2 {
+            let x = 2.9 + lane as f32 * 7.;
+            b.block(
+                Vec3::new(0.5, 1.2, 0.5),
+                Vec3::new(x, 0.6, border_net::vehicle::ENTRY_GATE_Z),
+                GOLD,
+                true,
+            );
+            let pivot = b
+                .commands
+                .spawn((
+                    Transform::from_xyz(x, 1.1, border_net::vehicle::ENTRY_GATE_Z),
+                    Visibility::default(),
+                    Barrier,
+                    traffic::LaneBarrier(lane),
+                    vehicles::EntryGate,
+                ))
+                .id();
+            for i in 0..12 {
+                let e = b.block(
+                    Vec3::new(0.46, 0.17, 0.18),
+                    Vec3::new(-0.25 - i as f32 * 0.46, 0., 0.),
+                    if i % 2 == 0 { CREAM } else { RED },
+                    false,
+                );
+                b.commands.entity(pivot).add_child(e);
+            }
         }
         // Administration office: a genuinely hollow room with a broad south-facing doorway.
         b.block(
@@ -1643,17 +1672,6 @@ fn spawn_fleet(
     let cream = Color::srgb(0.91, 0.84, 0.65);
     let dark = Color::srgb(0.045, 0.05, 0.055);
     let red = Color::srgb(0.72, 0.24, 0.16);
-    // Sedan: dark teal paint, open driver's side, visible driver.
-    let car = commands
-        .spawn((
-            Transform::from_translation(traffic::incoming(18., 0).0),
-            Visibility::default(),
-            traffic::Vehicle::new(0, 0),
-            Solid {
-                half: Vec3::new(1.08, 0.9, 2.3),
-            },
-        ))
-        .id();
     let paint = Color::srgb(0.08, 0.32, 0.30);
     let glass = Color::srgb(0.075, 0.15, 0.20);
     let mut template = Vec::new();
@@ -1687,10 +1705,6 @@ fn spawn_fleet(
             ..default()
         });
         template.push((mesh.clone(), material.clone(), local, color == paint));
-        let e = commands
-            .spawn((Mesh3d(mesh), MeshMaterial3d(material), local))
-            .id();
-        commands.entity(car).add_child(e);
     };
 
     part(Vec3::new(2.05, 0.58, 4.45), Vec3::new(0., 0.65, 0.), paint);
@@ -1792,10 +1806,6 @@ fn spawn_fleet(
             let transform = Transform::from_xyz(x, 0.38, z)
                 .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
             template.push((mesh.clone(), material.clone(), transform, false));
-            let wheel = commands
-                .spawn((Mesh3d(mesh), MeshMaterial3d(material), transform))
-                .id();
-            commands.entity(car).add_child(wheel);
             let mesh = meshes.add(Cylinder::new(0.22, 0.025).mesh().resolution(16));
             let material = materials.add(StandardMaterial {
                 base_color: Color::srgb(0.46, 0.49, 0.52),
@@ -1806,17 +1816,10 @@ fn spawn_fleet(
             let transform = Transform::from_xyz(x + x.signum() * 0.13, 0.38, z)
                 .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2));
             template.push((mesh.clone(), material.clone(), transform, false));
-            let hub = commands
-                .spawn((Mesh3d(mesh), MeshMaterial3d(material), transform))
-                .id();
-            commands.entity(car).add_child(hub);
         }
     }
     for lane in 0..2 {
         for ordinal in 0..if lane == 0 { 10 } else { 5 } {
-            if lane == 0 && ordinal == 0 {
-                continue;
-            }
             let vehicle = traffic::Vehicle::new(lane, ordinal);
             let (position, rotation) = traffic::incoming(vehicle.distance, lane);
             let root = commands
@@ -1843,6 +1846,18 @@ fn spawn_fleet(
                 perceptual_roughness: 0.27,
                 ..default()
             });
+            let sedan = commands
+                .spawn((
+                    Transform::default(),
+                    Visibility::default(),
+                    vehicles::Body {
+                        lane,
+                        ordinal,
+                        kind: "sedan",
+                    },
+                ))
+                .id();
+            commands.entity(root).add_child(sedan);
             for (mesh, material, transform, body) in &template {
                 let part = commands
                     .spawn((
@@ -1855,8 +1870,18 @@ fn spawn_fleet(
                         *transform,
                     ))
                     .id();
-                commands.entity(root).add_child(part);
+                commands.entity(sedan).add_child(part);
             }
+            vehicles::sedan_panels(commands, meshes, sedan, paint.clone(), lane, ordinal);
+            vehicles::truck(
+                commands,
+                meshes,
+                materials,
+                root,
+                lane,
+                ordinal,
+                paint.clone(),
+            );
         }
     }
     let mesh = meshes.add(Sphere::new(1.).mesh().ico(2).unwrap());

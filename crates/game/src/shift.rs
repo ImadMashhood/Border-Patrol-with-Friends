@@ -14,6 +14,8 @@ pub struct Shift {
     pub world: Option<WorldSnapshot>,
     pub peer_id: u64,
     pub error: String,
+    pub interaction: Option<(u64, vehicle::VehiclePoint)>,
+    pub inspection: Option<(u64, vehicle::VehiclePoint)>,
     pub connected: bool,
     pub controls: Arc<Mutex<Controls>>,
     pub commands: mpsc::Sender<ClientCommand>,
@@ -37,6 +39,8 @@ impl Shift {
             world: None,
             peer_id: 0,
             error: String::new(),
+            interaction: None,
+            inspection: None,
             connected: false,
             controls: Arc::new(Mutex::new(Controls::default())),
             commands,
@@ -186,6 +190,8 @@ impl Shift {
                 world: Some(joined.snapshot),
                 peer_id,
                 error: String::new(),
+                interaction: None,
+                inspection: None,
                 connected: true,
                 controls,
                 commands,
@@ -245,11 +251,20 @@ pub fn sync(
         ),
     >,
     mut cars: Query<
-        (&mut Transform, &mut Visibility, &mut traffic::Vehicle),
+        (
+            &mut Transform,
+            &mut Visibility,
+            &mut traffic::Vehicle,
+            &mut Solid,
+        ),
         (Without<Player>, Without<ReadyDoor>, Without<RemoteOfficer>),
     >,
     mut barriers: Query<
-        (&mut Transform, &traffic::LaneBarrier),
+        (
+            &mut Transform,
+            &traffic::LaneBarrier,
+            Option<&vehicles::EntryGate>,
+        ),
         (
             With<Barrier>,
             Without<Player>,
@@ -287,6 +302,15 @@ pub fn sync(
             Err(message) => shift.error = message,
         }
     }
+    if previous.as_ref().is_some_and(|p| *p != ShiftPhase::Lobby)
+        && shift
+            .world
+            .as_ref()
+            .is_some_and(|w| w.phase == ShiftPhase::Lobby)
+    {
+        shift.inspection = None;
+        shift.interaction = None;
+    }
     let Some(world) = &shift.world else {
         return;
     };
@@ -318,7 +342,7 @@ pub fn sync(
             (time.delta_secs() * 5.).min(1.),
         );
     }
-    for (mut t, mut visibility, mut car) in &mut cars {
+    for (mut t, mut visibility, mut car, mut solid) in &mut cars {
         let id = 1 + car.lane as u64 + car.ordinal as u64 * 2;
         if let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id) {
             *visibility = if v.stage == VehicleStage::Exited {
@@ -328,6 +352,8 @@ pub fn sync(
             };
             t.translation = Vec3::from_array(v.position);
             t.rotation = Quat::from_rotation_y(v.yaw);
+            solid.half = Vec3::from_array(vehicle::spec(&v.kind).aabb(v.position, v.yaw).half);
+            solid.half.y = vehicle::spec(&v.kind).height;
             car.distance = v.distance_to_stop;
             car.speed = v.speed;
         } else {
@@ -335,11 +361,15 @@ pub fn sync(
             car.speed = 0.;
         }
     }
-    for (mut t, lane) in &mut barriers {
-        let open = world
-            .lanes
-            .iter()
-            .any(|l| l.lane_id == lane.0 + 1 && l.barrier_open);
+    for (mut t, lane, entry) in &mut barriers {
+        let open = world.lanes.iter().any(|l| {
+            l.lane_id == lane.0 + 1
+                && if entry.is_some() {
+                    l.entry_barrier_open
+                } else {
+                    l.barrier_open
+                }
+        });
         t.rotation = t.rotation.slerp(
             Quat::from_rotation_z(if open { -1.35 } else { 0. }),
             (time.delta_secs() * 5.).min(1.),
@@ -451,7 +481,7 @@ pub fn sync(
     }
 }
 
-pub fn draw(ctx: &bevy_egui::egui::Context, shift: &Shift) {
+pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
     use bevy_egui::egui;
     let Some(world) = &shift.world else {
         return;
@@ -459,6 +489,25 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &Shift) {
     let Some(me) = shift.me() else {
         return;
     };
+    let mut close_inspection = false;
+    if let Some((id, point)) = shift.inspection
+        && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
+    {
+        egui::Window::new("VEHICLE INSPECTION").anchor(egui::Align2::CENTER_CENTER,[0.,0.]).default_width(400.).show(ctx, |ui| {
+            ui.heading(format!("Lane {} · {} #{}",v.lane_id,v.kind,id));
+            ui.label(point.label(&v.kind));
+            if v.stage != VehicleStage::Stopped { ui.label("Vehicle released; inspection closed."); }
+            else if v.inspected_points.contains(&point) {
+                match point {
+                    vehicle::VehiclePoint::Cargo => { ui.label("Cargo compartment opened. Recorded findings:"); for e in &v.observed_evidence { ui.label(&e.description); } }
+                    vehicle::VehiclePoint::Hood => { ui.label("Hood opened. Visual access to the engine bay recorded; this check does not establish cargo or legal status."); }
+                    _ => { ui.label("Passenger door opened. Cabin access recorded; continue questioning the driver and checking the cargo."); }
+                }
+            } else { ui.label("Waiting for host inspection confirmation…"); }
+            if !shift.error.is_empty() { ui.colored_label(egui::Color32::LIGHT_RED,&shift.error); }
+            close_inspection = ui.button("Close [Esc]").clicked();
+        });
+    }
     egui::Window::new("DUTY ROSTER")
         .default_pos([20., 105.])
         .default_width(250.)
@@ -503,6 +552,35 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &Shift) {
                         });
                     }
                 });
+                if let Some(v) = world.vehicles.iter().find(|v| {
+                    v.lane_id == lane.lane_id
+                        && matches!(
+                            v.stage,
+                            VehicleStage::Stopped | VehicleStage::Resolved | VehicleStage::Queued
+                        )
+                }) {
+                    ui.small(format!(
+                            "{} #{} · {:?} · {} waiting",
+                            v.kind,
+                            v.vehicle_id,
+                            v.stage,
+                            world
+                                .vehicles
+                                .iter()
+                                .filter(|a| a.lane_id == lane.lane_id
+                                    && a.stage == VehicleStage::Queued)
+                                .count()
+                        ));
+                    ui.small(format!(
+                        "Entry: {}  ·  Exit: {}",
+                        if lane.entry_barrier_open {
+                            "open"
+                        } else {
+                            "closed"
+                        },
+                        if lane.barrier_open { "open" } else { "closed" }
+                    ));
+                }
             }
             if let Some(other) = world
                 .lanes
@@ -575,5 +653,8 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &Shift) {
                     shift.send(ClientCommand::SetReady { ready: false });
                 }
             });
+    }
+    if close_inspection {
+        shift.inspection = None;
     }
 }
