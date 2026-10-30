@@ -25,3 +25,5 @@ The local configuration now uses Gemini 2.5 Flash. The live request uses proper 
 ## Limits
 
 Semantic repetition is not proven absent by JSON validation. Exact repeated lines still receive one repair attempt; the runtime does not falsely claim to validate arbitrary conversational meaning. Models can still invent spoken excuses or miss references. Smugglers are now allowed to invent verbal cover stories, but those cannot create physical evidence or change cargo, documents or guilt. Human playtesting remains necessary. Offline rehearsal remains a separate scripted mode and should not be used to judge generative conversation.
+
+The user subsequently selected Gemini 2.5 Flash-Lite again. The current local configuration follows that preference and retains the revised conversation messages. The measurements above remain historical comparisons rather than a claim that the current configuration uses Flash.

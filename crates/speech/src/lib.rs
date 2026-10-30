@@ -33,7 +33,41 @@ fn wait_success(mut child: Child, limit: Duration) -> Result<()> {
         std::thread::sleep(Duration::from_millis(25));
     }
 }
+fn gpu_service() -> Result<Option<(reqwest::blocking::Client, String, String)>> {
+    let Ok(base) = std::env::var("BORDER_SPEECH_URL") else {
+        return Ok(None);
+    };
+    let url = reqwest::Url::parse(&base)?;
+    ensure!(
+        url.scheme() == "http"
+            && matches!(url.host_str(), Some("127.0.0.1" | "localhost" | "[::1]")),
+        "Speech service must use a loopback HTTP URL"
+    );
+    let token =
+        std::env::var("BORDER_SPEECH_TOKEN").context("Local speech session token missing")?;
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .build()?;
+    Ok(Some((client, base, token)))
+}
 pub fn transcribe(audio: &Path) -> Result<String> {
+    if let Some((client, base, token)) = gpu_service()? {
+        let reply: serde_json::Value = client
+            .post(format!("{base}/stt"))
+            .bearer_auth(token)
+            .header("Content-Type", "audio/wav")
+            .body(std::fs::read(audio)?)
+            .send()
+            .context("GPU speech service unreachable; restart with ./play.sh")?
+            .error_for_status()?
+            .json()?;
+        return Ok(reply["text"]
+            .as_str()
+            .context("Invalid recognition response")?
+            .chars()
+            .take(500)
+            .collect());
+    }
     let executable = std::env::var("WHISPER_BIN").unwrap_or_else(|_| "whisper-cli".into());
     let model=std::env::var("WHISPER_MODEL").context("Voice input needs WHISPER_MODEL pointing to a local whisper.cpp ggml model; typed input is available")?;
     let output = temp("transcript", "out");
@@ -73,6 +107,22 @@ fn voice_model(alternate: bool) -> Result<String> {
 }
 /// Also used by the preview utility; synthesis never opens an audio device.
 pub fn synthesize_to_file(text: &str, path: &Path, alternate: bool) -> Result<()> {
+    if let Some((client, base, token)) = gpu_service()? {
+        let response = client
+            .post(format!("{base}/tts"))
+            .bearer_auth(token)
+            .json(&serde_json::json!({"text":text.replace(['*','_','`'],""),"alternate":alternate}))
+            .send()
+            .context("GPU voice service unreachable; restart with ./play.sh")?
+            .error_for_status()?;
+        let bytes = response.bytes()?;
+        ensure!(
+            bytes.len() > 44 && &bytes[..4] == b"RIFF",
+            "Speech service returned invalid audio"
+        );
+        std::fs::write(path, bytes)?;
+        return Ok(());
+    }
     let model = voice_model(alternate)?;
     let clean = text.replace(['*', '_', '`'], "");
     let mut child = Command::new(std::env::var("PIPER_BIN").unwrap_or_else(|_| "piper".into()))

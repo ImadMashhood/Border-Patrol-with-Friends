@@ -28,3 +28,11 @@ See INTENT_BENCHMARK.md for the 20-utterance comparison across three models and 
 Piper 1.8.0 and the Ryan/ Lessac medium neural voice models were installed locally. Both were synthesized through the Rust adapter to valid 22,050 Hz WAV files (5.12 s and 6.10 s test clips). Audio quality is previewable; hardware playback and microphone echo still need a human playtest. No synthetic voice model is committed to the repository.
 
 After rebuilding the actual game/server binaries with the intent revision, the live service passed 23 turns over all ten cases with Gemini Flash (median 0.88 s, maximum 1.26 s in that run). Cal could argue about the resale goods rather than reciting the old confession. All truth-based dispositions stayed correct. The updated graphical interview smoke check also exited successfully; smoke mode deliberately disables room recording and spoken playback.
+
+## Reference speech model revision
+
+The user selected a six-core CPU, 16 GB RAM and standard 6 GB RTX 2060 as the design reference, and explicitly deferred further character work. The dialogue configuration was switched back to Gemini 2.5 Flash-Lite as requested; context fixes remain in place.
+
+Whisper Large-v3 Turbo with int8/float16 CTranslate2 and Kokoro-82M now run in a persistent local CUDA service. Both models/voices were downloaded, warmed, and exercised through the actual Rust recognition/synthesis functions over authenticated loopback HTTP. The always-on microphone pipeline remains automatic, with a reduced 480 ms phrase-ending pause. Setup checks resident speech memory against a 3 GiB reference budget. The CPU Tiny/Piper profile remains selectable.
+
+Six synthetic/noisy questions and six deterministic human fixture recordings were compared against the prior Tiny path. Recognition latency improved substantially on the available RTX 3080; normalized accuracy tied on these small sets. Both Kokoro voice profiles were rendered to valid WAV previews. Two Python HTTP boundary tests, all sixteen Rust tests, lint and formatting checks passed. A concurrent renderer/service check completed with memory results and the desktop-constrained actual capture size recorded in SPEECH_MODELS.md. This is not a certified RTX 2060 or 60 FPS playthrough.

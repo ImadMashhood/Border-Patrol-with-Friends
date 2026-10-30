@@ -166,7 +166,11 @@ fn main() {
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Border Patrol with Friends • Alder Crossing".into(),
-                resolution: (1440, 900).into(),
+                resolution: if std::env::args().any(|a| a == "--reference-hardware") {
+                    (1920, 1080).into()
+                } else {
+                    (1440, 900).into()
+                },
                 ..default()
             }),
             ..default()

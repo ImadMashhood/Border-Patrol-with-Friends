@@ -1,0 +1,11 @@
+faster-whisper==1.2.1
+ctranslate2==4.8.4
+kokoro==0.9.4
+torch==2.6.0
+torchaudio==2.6.0
+soundfile==0.13.1
+transformers==4.46.3
+nvidia-cublas-cu12
+nvidia-cudnn-cu12
+en_core_web_sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl
+numpy==1.26.4

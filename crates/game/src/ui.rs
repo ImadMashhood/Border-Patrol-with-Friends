@@ -107,6 +107,7 @@ pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>
             ui.label(egui::RichText::new(name).size(29.).strong());tag(ui,&format!("{occupation}  /  {mode}"));ui.add_space(8.);
             ui.horizontal(|ui|{ui.label(egui::RichText::new(g.emotion.clone()).color(GOLD));if ui.small_button("Audio & controls").clicked(){g.settings_open = !g.settings_open;}});
             if g.settings_open {
+                tag(ui, if std::env::var("BORDER_SPEECH_URL").is_ok() {"GPU SPEECH: WHISPER TURBO / KOKORO"} else {"LIGHTWEIGHT SPEECH PROFILE"});
                 ui.checkbox(&mut g.muted,"Mute traveler voice");
                 ui.horizontal(|ui|{tag(ui,"CAPTURE DEVICE");ui.text_edit_singleline(&mut g.mic_device);});
                 ui.checkbox(&mut g.mic_enabled, "Microphone on — automatic listening");

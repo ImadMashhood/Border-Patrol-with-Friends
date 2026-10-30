@@ -11,7 +11,7 @@ const SAMPLE_RATE: usize = 16_000;
 #[cfg(any(target_os = "linux", test))]
 const FRAME_SAMPLES: usize = 480; // 30ms at 16kHz
 #[cfg(any(target_os = "linux", test))]
-const END_SILENCE_FRAMES: usize = 24; // 720ms pause closes a phrase
+const END_SILENCE_FRAMES: usize = 16; // 480ms pause closes a phrase
 #[cfg(any(target_os = "linux", test))]
 const MIN_VOICE_FRAMES: usize = 6; // reject clicks and short noise bursts
 #[cfg(any(target_os = "linux", test))]
@@ -38,7 +38,7 @@ impl OpenMicrophone {
         emit: impl Fn(VoiceEvent) + Send + 'static,
     ) -> Result<Self> {
         ensure!(
-            std::env::var("WHISPER_MODEL").is_ok(),
+            std::env::var("BORDER_SPEECH_URL").is_ok() || std::env::var("WHISPER_MODEL").is_ok(),
             "Automatic voice needs a local speech model. Run scripts/setup-voice.sh, then restart the game."
         );
         let mut child = Command::new("arecord")
@@ -296,7 +296,7 @@ mod tests {
         for _ in 0..8 {
             assert!(gate.feed(&[2000; FRAME_SAMPLES]).is_none());
         }
-        for _ in 0..23 {
+        for _ in 0..END_SILENCE_FRAMES - 1 {
             assert!(gate.feed(&[0; FRAME_SAMPLES]).is_none());
         }
         assert!(gate.feed(&[0; FRAME_SAMPLES]).is_some());
