@@ -4,6 +4,11 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")"
 if [[ -f "$HOME/.cargo/env" ]]; then source "$HOME/.cargo/env"; fi
 if ! command -v cargo >/dev/null; then echo 'Rust is required. Install rustup from https://rustup.rs.' >&2; exit 1; fi
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
+border_log_session="${BORDER_CALL_LOG_DIR:-$PWD/output/call-logs/$(date -u +%Y%m%dT%H%M%SZ)-$$}"
+mkdir -p output "$border_log_session"
+export BORDER_CALL_LOG_DIR="$border_log_session"
+printf '%s\n' "$border_log_session" > output/latest-call-log-dir.txt
+echo 'Conversation diagnostics: python3 scripts/call_logs.py --follow'
 border_join=false
 border_join_url=""
 border_game_args=()

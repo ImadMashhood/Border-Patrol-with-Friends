@@ -548,7 +548,9 @@ fn tablet(
                         ui.label(egui::RichText::new("TRAVELER").small().color(ui::GOLD));ui.label(&v.opening_line);
                         for turn in &v.history {ui.add_space(10.);ui.label(egui::RichText::new(turn.physical.officer_peer.map_or("OFFICER".into(),|id|format!("OFFICER {id}"))).small().color(ui::GOLD));ui.label(&turn.officer);ui.add_space(4.);ui.small(&v.traveler_name);ui.label(&turn.traveler);}
                         if g.vehicle_id==Some(v.vehicle_id) && g.phase==Phase::Interview {
-                            ui.separator();ui.add_enabled_ui(!g.pending && !g.speaking,|ui|{
+                            if !net.ready_for_turn(){ui.label(format!("AI reply retry in {} s. See output/call-logs for diagnostics.",net.retry_seconds()));}
+                            if !g.error.is_empty(){ui.label(&g.error);}
+                            ui.separator();ui.add_enabled_ui(!g.pending && !g.speaking && net.ready_for_turn(),|ui|{
                                 ui.add(egui::TextEdit::multiline(&mut g.input).desired_rows(2).desired_width(f32::INFINITY).hint_text("Type a question…"));
                                 if ui.button("Send question").clicked() && !g.input.trim().is_empty(){let q=g.input.trim().to_owned();g.input.clear();g.subtitle=format!("You: {q}");g.pending=true;net.turn(g.generation,v.vehicle_id.to_string(),q);}
                             });

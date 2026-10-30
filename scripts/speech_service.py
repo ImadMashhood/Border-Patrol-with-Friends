@@ -16,6 +16,18 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROFILE = json.loads((ROOT/'assets/settings/reference_hardware.json').read_text())
 VOICES = json.loads((ROOT/'assets/settings/traveler_voices.json').read_text())
 MAX_AUDIO = 2_000_000
+LOG_LOCK=threading.Lock()
+def speech_log(stage,details):
+    directory=pathlib.Path(os.environ.get('BORDER_CALL_LOG_DIR',ROOT/'output/call-logs'))
+    try:
+        with LOG_LOCK:
+            directory.mkdir(parents=True,exist_ok=True)
+            path=directory/f'calls-{os.getpid()}.jsonl'
+            if path.exists() and path.stat().st_size>10*1024*1024:path.replace(path.with_suffix('.jsonl.1'))
+            line=json.dumps(dict(timestamp_ms=int(time.time()*1000),pid=os.getpid(),stage=stage,details=details))+'\n'
+            with os.fdopen(os.open(path,os.O_WRONLY|os.O_CREAT|os.O_APPEND,0o600),'a') as log:log.write(line)
+    except OSError as exc:print('Speech diagnostics unavailable: '+type(exc).__name__,file=sys.stderr)
+
 
 class Speech:
     def __init__(self):
@@ -40,8 +52,11 @@ class Speech:
         if self.engine=='pocket':
             from pocket_tts import TTSModel
             print('Loading Pocket TTS on CPU…',file=sys.stderr,flush=True)
-            self.tts_name='kyutai/pocket-tts-without-voice-cloning:english_2026-10'
-            self.tts=TTSModel.load_model(language='english_2026-10')
+            self.pocket_model=os.environ.get('BORDER_POCKET_MODEL',PROFILE.get('pocket_model','english_18m_2026-10'))
+            allowed={'english_2026-10','english_18m_2026-10','english_7m_2026-10','english_2m_2026-10'}
+            if self.pocket_model not in allowed:raise ValueError('Unsupported BORDER_POCKET_MODEL')
+            self.tts_name='kyutai/pocket-tts-without-voice-cloning:'+self.pocket_model
+            self.tts=TTSModel.load_model(language=self.pocket_model)
             # Public preset states need no voice-cloning credentials or audio samples.
             self.pocket_voices={voice:self.tts.get_state_for_audio_prompt(voice) for voice in sorted({p['pocket_voice'] for p in VOICES.values()})}
         elif self.engine=='qwen':
@@ -113,7 +128,9 @@ class Speech:
             segments,info=self.asr.transcribe(audio,language='en',beam_size=PROFILE['stt_beam_size'],condition_on_previous_text=False,vad_filter=True,vad_parameters=dict(min_silence_duration_ms=300),temperature=0)
             text=' '.join(segment.text.strip() for segment in segments).strip()[:500]
             self.measure()
-        return dict(text=text,latency_ms=round((time.monotonic()-started)*1000))
+        result=dict(text=text,latency_ms=round((time.monotonic()-started)*1000))
+        speech_log('stt',dict(**result,model=self.stt_name))
+        return result
 
     def synthesize(self,text,alternate=False,scenario_id=None,emotion='cooperative'):
         if not isinstance(text,str) or not text.strip() or len(text)>1000:
@@ -160,6 +177,7 @@ class Speech:
             output=io.BytesIO();self.sf.write(output,audio,sr,format='WAV',subtype='PCM_16')
             self.torch.cuda.empty_cache()
             self.measure()
+        speech_log('tts',dict(text=text,scenario_id=scenario_id,emotion=emotion,model=self.tts_name,latency_ms=round((time.monotonic()-started)*1000),audio_ms=round(len(audio)/sr*1000)))
         print(json.dumps(dict(event='tts',engine=self.engine,scenario=scenario_id,emotion=emotion,latency_s=round(time.monotonic()-started,3),audio_s=round(len(audio)/sr,3))),file=sys.stderr,flush=True)
         return output.getvalue()
 
@@ -185,6 +203,7 @@ def create_server(backend,port,token):
                 else:self.send(404,{'error':'Unknown endpoint'})
             except (ValueError,KeyError) as exc:self.send(400,{'error':str(exc)})
             except Exception as exc:
+                speech_log('speech_error',dict(endpoint=self.path,message=str(exc)[:500],kind=type(exc).__name__))
                 print('Speech inference error: '+type(exc).__name__,file=sys.stderr,flush=True)
                 self.send(503,{'error':'Speech inference failed; see speech-service.log'})
     return ThreadingHTTPServer(('127.0.0.1',port),Handler)

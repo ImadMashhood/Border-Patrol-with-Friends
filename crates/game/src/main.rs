@@ -204,6 +204,7 @@ fn main() {
     let seed = shift_state.world.as_ref().map(|w| w.seed).unwrap_or(seed);
     let (tx, rx) = mpsc::channel();
     let net = Network {
+        retry_until: Arc::new(Mutex::new(std::time::Instant::now())),
         spatial: Default::default(),
         base,
         token,
@@ -679,6 +680,7 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.looking = true;
             }
             NetEvent::Reply(q, r) => {
+                g.error.clear();
                 g.subtitle = r.dialogue.clone();
                 g.emotion = format!("{:?}", r.emotion).to_lowercase();
                 if !shift.as_ref().is_some_and(|s| s.connected) {
@@ -721,7 +723,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.subtitle.clear();
             }
             NetEvent::TurnFailed { message, question } => {
-                let _ = message;
+                border_caller::call_log::record(
+                    "turn_failed",
+                    serde_json::json!({"generation":generation,"officer":question,"message":message}),
+                );
+                g.error = message;
                 g.input = question;
                 g.pending = false;
                 g.speech_pending = false;
@@ -768,11 +774,16 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                     g.mic_active = false;
                 }
                 border_speech::VoiceEvent::Transcript(q) => {
+                    border_caller::call_log::record(
+                        "transcript",
+                        serde_json::json!({"generation":generation,"text":q,"accepted":g.phase==Phase::Interview && !g.pending && !g.speaking && g.mic_enabled && net.ready_for_turn()}),
+                    );
                     g.speech_pending = false;
                     if g.phase == Phase::Interview
                         && !g.pending
                         && !g.speaking
                         && g.mic_enabled
+                        && net.ready_for_turn()
                         && let Some(case) = &g.case
                     {
                         net.turn(g.generation, case.session_id.clone(), q.clone());
@@ -787,6 +798,10 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                         g.playback =
                             Some(net.speak(g.generation, "Excuse me?".into(), String::new()));
                     }
+                    border_caller::call_log::record(
+                        "microphone_error",
+                        serde_json::json!({"generation":generation,"message":e}),
+                    );
                     g.mic_error = e;
                     g.mic_failed = true;
                     g.mic = None;
@@ -857,7 +872,7 @@ fn voice(mut g: ResMut<Patrol>, net: Res<Network>, shift: Res<shift::Shift>) {
         }
     }
     if let Some(mic) = &g.mic {
-        mic.set_paused(g.pending || g.speaking || g.speech_pending);
+        mic.set_paused(g.pending || g.speaking || g.speech_pending || !net.ready_for_turn());
     }
 }
 
@@ -1635,6 +1650,7 @@ mod tests {
         ))
         .unwrap();
         let network = Network {
+            retry_until: Arc::new(Mutex::new(std::time::Instant::now())),
             spatial: Default::default(),
             base: format!("http://{address}"),
             token: "test-token".into(),
@@ -1696,6 +1712,7 @@ mod tests {
         ))
         .unwrap();
         let network = Network {
+            retry_until: Arc::new(Mutex::new(std::time::Instant::now())),
             spatial: Default::default(),
             base: String::new(),
             token: String::new(),

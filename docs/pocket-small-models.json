@@ -1,0 +1,146 @@
+[
+  {
+    "model": "english_18m_2026-10",
+    "threads": 2,
+    "samples": [
+      {
+        "case": "09_cal",
+        "text": "C'mon, man. That's one hell of a way to ask.",
+        "transcript": "Simon, man, that's one hell of a way to ask.",
+        "tts_s": 1.47,
+        "audio_s": 3.84
+      },
+      {
+        "case": "09_cal",
+        "text": "Hey! Back off! Put that gun down!",
+        "transcript": "Hey, back off. Put that gun down.",
+        "tts_s": 1.189,
+        "audio_s": 3.92
+      },
+      {
+        "case": "07_amir",
+        "text": "Wait! Please! I do not want to get hurt!",
+        "transcript": "Wait, please, I do not want to get hurt.",
+        "tts_s": 0.901,
+        "audio_s": 2.96
+      },
+      {
+        "case": "01_mara",
+        "text": "Oh, lovely. Do you want the camera or the bag?",
+        "transcript": "Oh, lovely. Do you want the camera or the bag?",
+        "tts_s": 0.835,
+        "audio_s": 2.96
+      },
+      {
+        "case": "08_rosa",
+        "text": "Buddy, I heard you. I just don't like the question.",
+        "transcript": "Buddy, I heard you, I just don't like the question.",
+        "tts_s": 0.631,
+        "audio_s": 2.64
+      },
+      {
+        "case": "10_priya",
+        "text": "Right. Was that a question, or are you workshopping a joke?",
+        "transcript": "Right, was that a question or are you workshopping a joke?",
+        "tts_s": 1.104,
+        "audio_s": 4.8
+      }
+    ]
+  },
+  {
+    "model": "english_7m_2026-10",
+    "threads": 2,
+    "samples": [
+      {
+        "case": "09_cal",
+        "text": "C'mon, man. That's one hell of a way to ask.",
+        "transcript": "C'mon, man. That's one hell of a way to ask.",
+        "tts_s": 1.278,
+        "audio_s": 4.08
+      },
+      {
+        "case": "09_cal",
+        "text": "Hey! Back off! Put that gun down!",
+        "transcript": "Hey back off put that gun down",
+        "tts_s": 0.559,
+        "audio_s": 3.12
+      },
+      {
+        "case": "07_amir",
+        "text": "Wait! Please! I do not want to get hurt!",
+        "transcript": "Wait, please. I do not want to get hurt",
+        "tts_s": 0.502,
+        "audio_s": 2.96
+      },
+      {
+        "case": "01_mara",
+        "text": "Oh, lovely. Do you want the camera or the bag?",
+        "transcript": "Oh, lovely. Do you want the camera or the bag?",
+        "tts_s": 0.507,
+        "audio_s": 2.96
+      },
+      {
+        "case": "08_rosa",
+        "text": "Buddy, I heard you. I just don't like the question.",
+        "transcript": "Buddy, I heard you. I just don't like the question.",
+        "tts_s": 0.448,
+        "audio_s": 2.56
+      },
+      {
+        "case": "10_priya",
+        "text": "Right. Was that a question, or are you workshopping a joke?",
+        "transcript": "Right, was that a question or are you work-stopping a joke?",
+        "tts_s": 0.639,
+        "audio_s": 3.92
+      }
+    ]
+  },
+  {
+    "model": "english_2m_2026-10",
+    "threads": 2,
+    "samples": [
+      {
+        "case": "09_cal",
+        "text": "C'mon, man. That's one hell of a way to ask.",
+        "transcript": "Come on, man. That's one hell of a way to ask.",
+        "tts_s": 0.437,
+        "audio_s": 3.28
+      },
+      {
+        "case": "09_cal",
+        "text": "Hey! Back off! Put that gun down!",
+        "transcript": "But hey, back off, put that gun down.",
+        "tts_s": 0.473,
+        "audio_s": 3.36
+      },
+      {
+        "case": "07_amir",
+        "text": "Wait! Please! I do not want to get hurt!",
+        "transcript": "Wait, please, I do not want to get hurt.",
+        "tts_s": 0.382,
+        "audio_s": 2.88
+      },
+      {
+        "case": "01_mara",
+        "text": "Oh, lovely. Do you want the camera or the bag?",
+        "transcript": "Oh, lovely. Do you want the camera or the bag?",
+        "tts_s": 0.389,
+        "audio_s": 2.96
+      },
+      {
+        "case": "08_rosa",
+        "text": "Buddy, I heard you. I just don't like the question.",
+        "transcript": "I heard you. I just don't like the question.",
+        "tts_s": 0.385,
+        "audio_s": 2.8
+      },
+      {
+        "case": "10_priya",
+        "text": "Right. Was that a question, or are you workshopping a joke?",
+        "transcript": "Right. Was that a question or are you workshopping a joke?",
+        "tts_s": 0.578,
+        "audio_s": 4.08
+      }
+    ]
+  }
+]

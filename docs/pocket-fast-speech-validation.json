@@ -1,0 +1,105 @@
+{
+  "health": {
+    "ok": true,
+    "gpu_process_mib": 554.0,
+    "stt": "small",
+    "compute_type": "int8_float16",
+    "stt_device": "cuda",
+    "tts": "kyutai/pocket-tts-without-voice-cloning:english_7m_2026-10",
+    "tts_engine": "pocket",
+    "tts_device": "cpu",
+    "tts_instruction_control": false,
+    "voice_profiles": 10,
+    "device": "NVIDIA GeForce RTX 3080",
+    "speech_vram_delta_mib": 371.1,
+    "observed_peak_delta_mib": 445.1,
+    "rss_mib": 1754.3,
+    "reference": {
+      "cpu_physical_cores": 6,
+      "system_ram_gib": 16,
+      "gpu": "NVIDIA GeForce RTX 2060",
+      "gpu_vram_gib": 6,
+      "render_resolution": [
+        1920,
+        1080
+      ],
+      "render_target_fps": 60,
+      "speech_vram_budget_mib": 4608,
+      "speech_cpu_threads": 2,
+      "stt_model": "small",
+      "stt_compute_type": "int8_float16",
+      "stt_beam_size": 3,
+      "tts_model": "kyutai/pocket-tts-without-voice-cloning:english_7m_2026-10",
+      "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600.",
+      "tts_engine": "pocket",
+      "tts_quantization": "float32_cpu",
+      "stt_device": "cuda",
+      "pocket_model": "english_7m_2026-10"
+    }
+  },
+  "samples": [
+    {
+      "scenario": "09_cal",
+      "emotion": "cooperative",
+      "text": "C'mon, man. That's one hell of a way to ask.",
+      "path": "character-voice-09_cal-cooperative.wav",
+      "tts_s": 2.987,
+      "stt_s": 0.43,
+      "transcript": "Come on, man. That's one hell of a way to ask."
+    },
+    {
+      "scenario": "09_cal",
+      "emotion": "angry",
+      "text": "Hey! Back off! Put that gun down!",
+      "path": "character-voice-09_cal-angry.wav",
+      "tts_s": 0.472,
+      "stt_s": 0.119,
+      "transcript": "Hey, back off. Put that gun down."
+    },
+    {
+      "scenario": "07_amir",
+      "emotion": "panicked",
+      "text": "Wait! Please! I do not want to get hurt!",
+      "path": "character-voice-07_amir-panicked.wav",
+      "tts_s": 0.482,
+      "stt_s": 0.115,
+      "transcript": "Wait, please, I do not want to get hurt."
+    },
+    {
+      "scenario": "01_mara",
+      "emotion": "cooperative",
+      "text": "Oh, lovely. Do you want the camera or the bag?",
+      "path": "character-voice-01_mara-cooperative.wav",
+      "tts_s": 0.374,
+      "stt_s": 0.126,
+      "transcript": "Oh, lovely. Do you want the camera or the bag?"
+    },
+    {
+      "scenario": "08_rosa",
+      "emotion": "irritated",
+      "text": "Buddy, I heard you. I just don't like the question.",
+      "path": "character-voice-08_rosa-irritated.wav",
+      "tts_s": 0.368,
+      "stt_s": 0.129,
+      "transcript": "Buddy, I heard you, I just don't like the question."
+    },
+    {
+      "scenario": "10_priya",
+      "emotion": "cooperative",
+      "text": "Right. Was that a question, or are you workshopping a joke?",
+      "path": "character-voice-10_priya-cooperative.wav",
+      "tts_s": 0.573,
+      "stt_s": 0.142,
+      "transcript": "Right, was that a question or are you work-stopping a joke?"
+    },
+    {
+      "scenario": "09_cal",
+      "emotion": "panicked",
+      "text": "AAAH!",
+      "path": "character-voice-09_cal-panicked.wav",
+      "tts_s": 0.177,
+      "stt_s": 0.074,
+      "transcript": "Hey"
+    }
+  ]
+}

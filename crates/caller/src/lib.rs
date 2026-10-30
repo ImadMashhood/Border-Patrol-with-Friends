@@ -1,3 +1,4 @@
+pub mod call_log;
 use anyhow::{Result, ensure};
 use border_scenarios::{Decision, Evidence, Reveal, Scenario};
 use serde::{Deserialize, Serialize};

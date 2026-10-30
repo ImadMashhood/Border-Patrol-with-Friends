@@ -36,6 +36,8 @@ def main():
                 status, body = response.status, json.load(response)
         except urllib.error.HTTPError as error:
             status, body = error.code, error.read().decode()
+            try:body=json.loads(body)
+            except ValueError:pass
         assert status == expected, (path, status, body)
         return body
     try:
@@ -147,9 +149,25 @@ def main():
         # A dead gateway must produce neutral remembered speech, with no new facts.
         children[0].terminate()
         children[0].wait(timeout=5)
-        fallback = request('/turn', {'session_id': '1', 'utterance': 'Could you repeat that?'}, peers[1]['peer_token'])
-        assert fallback['dialogue'] == 'Excuse me?' and fallback['fact_ids'] == []
+        failure = request('/turn', {'session_id': '1', 'utterance': 'Could you repeat that?'}, peers[1]['peer_token'], expected=502)
+        assert failure['error'] == 'AI gateway unavailable'
+        assert snapshot()['vehicles'][0]['history'][-1]['traveler'] == 'Excuse me?'
         assert snapshot()['vehicles'][0]['history'][-1]['officer'] == 'Could you repeat that?'
+        # Preserve upstream status/backoff instead of disguising quota failures as HTTP 200.
+        import http.server, threading
+        class Limited(http.server.BaseHTTPRequestHandler):
+            def log_message(self,*args):pass
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get('Content-Length','0')))
+                body=json.dumps({'error':'Test provider rate limit','retry_after_seconds':2}).encode()
+                self.send_response(429);self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)));self.end_headers();self.wfile.write(body)
+        limited=http.server.ThreadingHTTPServer(('127.0.0.1',gateway_port),Limited)
+        worker=threading.Thread(target=limited.serve_forever,daemon=True);worker.start()
+        try:
+            failure=request('/turn',{'session_id':'1','utterance':'Are you there?'},peers[1]['peer_token'],expected=429)
+            assert failure['retry_after_seconds']==2
+            assert snapshot()['vehicles'][0]['history'][-1]['officer']=='Are you there?'
+        finally:limited.shutdown();limited.server_close();worker.join()
         children[0] = subprocess.Popen([str(ROOT / 'target/debug' / ('border-caller-server' + EXT))], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         request('/inspect', {'session_id': '1'}, peers[1]['peer_token'], expected=400)
         command(1, {'type':'request_secondary','vehicle_id':1})

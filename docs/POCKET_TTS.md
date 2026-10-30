@@ -1,6 +1,6 @@
 # Pocket TTS voice profile
 
-The installed default is **Pocket TTS 4.0.1, English October 2026 model**, running locally on CPU. This is one of the engines listed in the **Scam With Your Friends 0.1.95** developer notes, alongside MOSS TTS Nano and Qwen3 TTS. Those notes do not identify a universal English default or publish the game's exact runtime integration/voice assignments. We use the official Pocket Python implementation through our existing authenticated local speech service. [Developer announcement](https://steamcommunity.com/app/4954910/allnews/), [official implementation](https://github.com/kyutai-labs/pocket-tts), [Python API](https://github.com/kyutai-labs/pocket-tts/blob/main/docs/API%20Reference/python-api.md).
+The installed default is **Pocket TTS 4.0.1, 7M English October 2026 model**, running locally on CPU. This is one of the engines listed in the **Scam With Your Friends 0.1.95** developer notes, alongside MOSS TTS Nano and Qwen3 TTS. Those notes do not identify a universal English default or publish the game's exact runtime integration/voice assignments. We use the official Pocket Python implementation through our existing authenticated local speech service. [Developer announcement](https://steamcommunity.com/app/4954910/allnews/), [official implementation](https://github.com/kyutai-labs/pocket-tts), [Python API](https://github.com/kyutai-labs/pocket-tts/blob/main/docs/API%20Reference/python-api.md).
 
 ## Launch
 
@@ -24,7 +24,22 @@ BORDER_TTS_ENGINE=qwen ./play.sh
 
 Kokoro remains selectable with `BORDER_TTS_ENGINE=kokoro` on both commands. Engine selection is explicit; inference errors use the existing local “Excuse me?” fallback rather than silently downloading another engine.
 
-## Validation
+## Faster model choices
+
+The default is now `english_7m_2026-10`, using two CPU threads. The official package also provides 18M and 2M English models. On the same six-line direct-model comparison, median generation was **1.00 s (18M)**, **0.53 s (7M)** and **0.41 s (2M)**. The smaller models can change pronunciation or omit words; the 7M transcription rendered “workshopping” as “work-stopping,” while 2M added/dropped words on other lines. These are small synthetic samples, not human-rated quality scores. [Comparison results](pocket-small-models.json), [official model descriptions](https://github.com/kyutai-labs/pocket-tts).
+
+Choose another size explicitly on both setup and launch:
+
+```bash
+BORDER_POCKET_MODEL=english_18m_2026-10 ./scripts/setup-voice.sh
+BORDER_POCKET_MODEL=english_18m_2026-10 ./play.sh
+```
+
+Other values: `english_2m_2026-10` for the smallest model, `english_2026-10` for the previous full-size model. Compare all three small models with `./scripts/gpu-speech.sh --compare-models`.
+
+The final authenticated HTTP test with 7M measured **0.37–2.99 s**, median **0.48 s**, for six spoken lines. The first request was the slow outlier; other CPU work was active on the machine. Combined speech process memory after the run was **554 MiB GPU / 1754 MiB RSS**. [Fast profile results](pocket-fast-speech-validation.json). Complete WAV generation still precedes playback; this is not a streaming first-audio measurement. The intentional 1.5-second speech endpoint wait and separate LLM latency also contribute to conversational delay.
+
+## Previous full-size model validation
 
 On the available **six-core Ryzen 5 3600 / RTX 3080**, six short spoken lines generated in **1.24–1.82 seconds**, median **1.42 s**. The previous Qwen sample median was **11.58 s**. These measure complete WAV generation, not streaming first-audio latency or complete LLM response latency. The HTTP playback interface still waits for the whole WAV.
 

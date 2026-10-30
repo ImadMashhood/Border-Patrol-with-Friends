@@ -10,6 +10,10 @@ if [[ "${BORDER_TTS_ENGINE:-pocket}" == kokoro ]]; then border_speech_python=.to
 if [[ ! -x "$border_speech_python" ]]; then echo 'Run ./scripts/setup-voice.sh to install the selected speech profile.' >&2; exit 1; fi
 border_cuda_libs="$("$border_speech_python" -c 'import site,glob,os; print(":".join(p for root in site.getsitepackages() for p in glob.glob(os.path.join(root,"nvidia","*","lib"))))')"
 export LD_LIBRARY_PATH="$border_cuda_libs${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+if [[ "${1:-}" == --compare-models ]]; then
+  shift
+  exec env -u OPENROUTER_API_KEY -u OPENROUTER_MODEL "$border_speech_python" scripts/benchmark_pocket_models.py "$@"
+fi
 if [[ "${1:-}" == --benchmark ]]; then
   shift
   exec env -u OPENROUTER_API_KEY -u OPENROUTER_MODEL "$border_speech_python" scripts/benchmark_speech.py "$@"

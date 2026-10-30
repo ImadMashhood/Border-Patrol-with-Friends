@@ -9,13 +9,14 @@
   ],
   "render_target_fps": 60,
   "speech_vram_budget_mib": 4608,
-  "speech_cpu_threads": 4,
+  "speech_cpu_threads": 2,
   "stt_model": "small",
   "stt_compute_type": "int8_float16",
   "stt_beam_size": 3,
-  "tts_model": "kyutai/pocket-tts-without-voice-cloning:english_2026-10",
+  "tts_model": "kyutai/pocket-tts-without-voice-cloning:english_7m_2026-10",
   "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600.",
   "tts_engine": "pocket",
   "tts_quantization": "float32_cpu",
-  "stt_device": "cuda"
+  "stt_device": "cuda",
+  "pocket_model": "english_7m_2026-10"
 }

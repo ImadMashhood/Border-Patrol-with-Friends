@@ -284,7 +284,7 @@ async fn turn_case(
         state: s.clone(),
         vehicle,
     };
-    let result=async {
+    let result = async {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -300,13 +300,18 @@ async fn turn_case(
             })
             .send()
             .await
-            .map_err(|_| error("AI gateway unavailable"))?;
+            .map_err(|_| {
+                (
+                    StatusCode::BAD_GATEWAY,
+                    Json(json!({"error":"AI gateway unavailable","retry_after_seconds":5})),
+                )
+            })?;
         if !response.status().is_success() {
-            return Err(match response.status() {
-                StatusCode::TOO_MANY_REQUESTS => (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error":"AI provider is rate-limited. Wait a minute, then retry your question. The conversation is preserved."}))),
-                StatusCode::SERVICE_UNAVAILABLE => error("AI provider unavailable. The host must check the provider account or try later."),
-                _ => error("AI reply unavailable; retry the question. No traveler reply was invented."),
-            });
+            let status = response.status();
+            let body: Value = response.json().await.unwrap_or_else(
+                |_| json!({"error":"AI gateway reply unavailable","retry_after_seconds":5}),
+            );
+            return Err((status, Json(body)));
         }
         response
             .json::<border_caller::ActorReply>()
@@ -317,12 +322,18 @@ async fn turn_case(
     .await;
     match result {
         Ok(reply) => Ok(reply),
-        Err(_) => {
+        Err(failure) => {
+            border_caller::call_log::record(
+                "gateway_failure",
+                json!({"vehicle_id":vehicle,"officer":question,"status":failure.0.as_u16(),"message":failure.1.0["error"],"retry_after_seconds":failure.1.0["retry_after_seconds"]}),
+            );
             let mut h = s.lock().unwrap();
             h.sim
                 .delivery_failure(speaker, vehicle, epoch, turn, &question)
-                .map(Json)
-                .map_err(error)
+                .map_err(error)?;
+            // Remember the pardon, but preserve the failure status for the client's
+            // diagnostics and backoff. An HTTP 200 here concealed every outage.
+            Err(failure)
         }
     }
 }

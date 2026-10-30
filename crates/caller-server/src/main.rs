@@ -64,7 +64,7 @@ impl Provider for Offline {
     }
 }
 #[derive(Debug)]
-struct ProviderHttp(StatusCode);
+struct ProviderHttp(StatusCode, u64);
 impl std::fmt::Display for ProviderHttp {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "upstream status {}", self.0)
@@ -72,11 +72,19 @@ impl std::fmt::Display for ProviderHttp {
 }
 impl std::error::Error for ProviderHttp {}
 fn provider_error(e: anyhow::Error) -> (StatusCode, Json<Value>) {
-    if let Some(ProviderHttp(code)) = e.downcast_ref::<ProviderHttp>() {
+    // Display sanitized transport/timeout categories only; reqwest errors may
+    // retain request URLs, and unvalidated provider output must not enter logs.
+    border_caller::call_log::record(
+        "provider_failure",
+        json!({"category":if e.downcast_ref::<ProviderHttp>().is_some(){"http"}else{"transport_timeout_or_invalid_reply"}}),
+    );
+    if let Some(ProviderHttp(code, retry_seconds)) = e.downcast_ref::<ProviderHttp>() {
         return match *code {
-            StatusCode::TOO_MANY_REQUESTS => error(
+            StatusCode::TOO_MANY_REQUESTS => (
                 StatusCode::TOO_MANY_REQUESTS,
-                "AI provider is rate-limited. Wait a minute, then retry your question. The conversation is preserved.",
+                Json(
+                    json!({"error":"AI provider is rate-limited. Wait before asking again. The conversation is preserved.","retry_after_seconds":retry_seconds}),
+                ),
             ),
             StatusCode::UNAUTHORIZED | StatusCode::PAYMENT_REQUIRED => error(
                 StatusCode::SERVICE_UNAVAILABLE,
@@ -116,23 +124,25 @@ impl Provider for OpenRouter {
         q: &'a str,
     ) -> ProviderFuture<'a> {
         Box::pin(async move {
-            if self
+            if let Some(seconds) = self
                 .cooldown
                 .lock()
                 .unwrap()
-                .is_some_and(|until| until > Instant::now())
+                .filter(|until| *until > Instant::now())
+                .map(|until| until.saturating_duration_since(Instant::now()).as_secs() + 1)
             {
-                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS, seconds).into());
             }
             let mut last = self.gate.lock().await;
             let spacing = Duration::from_millis(1200);
-            if self
+            if let Some(seconds) = self
                 .cooldown
                 .lock()
                 .unwrap()
-                .is_some_and(|until| until > Instant::now())
+                .filter(|until| *until > Instant::now())
+                .map(|until| until.saturating_duration_since(Instant::now()).as_secs() + 1)
             {
-                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS, seconds).into());
             }
             let started = Instant::now();
             let mut messages = conversation_messages(s, secondary, h, q);
@@ -164,10 +174,24 @@ impl Provider for OpenRouter {
                         .clamp(5, 120);
                     *self.cooldown.lock().unwrap() =
                         Some(Instant::now() + Duration::from_secs(seconds));
+                    border_caller::call_log::record(
+                        "provider_rate_limit",
+                        json!({"model":self.model,"retry_after_seconds":seconds}),
+                    );
                     eprintln!("provider rate limit; cooldown_seconds={seconds}");
                 }
                 if !response.status().is_success() {
-                    return Err(ProviderHttp(response.status()).into());
+                    border_caller::call_log::record(
+                        "provider_http_error",
+                        json!({"status":response.status().as_u16(),"model":self.model}),
+                    );
+                    let seconds = self
+                        .cooldown
+                        .lock()
+                        .unwrap()
+                        .map(|until| until.saturating_duration_since(Instant::now()).as_secs() + 1)
+                        .unwrap_or(5);
+                    return Err(ProviderHttp(response.status(), seconds).into());
                 }
                 let body: Value = response.json().await?;
                 let input = body["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
@@ -182,12 +206,26 @@ impl Provider for OpenRouter {
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("Provider missing dialogue"))?;
                 match validate_turn_reply(s, secondary, h, q, raw) {
-                    Ok(r) => return Ok(r),
+                    Ok(r) => {
+                        border_caller::call_log::record(
+                            "provider_reply",
+                            json!({"scenario_id":s.scenario_id,"model":self.model,"officer":q,"traveler":r.dialogue,"emotion":r.emotion,"latency_ms":started.elapsed().as_millis(),"repair":attempt,"input_tokens":input,"output_tokens":output}),
+                        );
+                        return Ok(r);
+                    }
                     Err(e) if attempt == 0 => {
+                        border_caller::call_log::record(
+                            "provider_validation_failed",
+                            json!({"scenario_id":s.scenario_id,"attempt":attempt,"repair_will_follow":true}),
+                        );
                         eprintln!("provider output rejected before repair: {e}");
                         messages = repair_messages(s, secondary, h, q);
                     }
                     Err(e) => {
+                        border_caller::call_log::record(
+                            "provider_validation_failed",
+                            json!({"scenario_id":s.scenario_id,"attempt":attempt,"repair_will_follow":false}),
+                        );
                         eprintln!("provider output rejected after repair: {e}");
                         anyhow::bail!(
                             "Provider returned invalid dialogue after repair. Retry the question."
@@ -570,7 +608,7 @@ mod tests {
     #[test]
     fn provider_failures_are_actionable_and_never_expose_provider_bodies() {
         let (status, Json(body)) =
-            provider_error(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+            provider_error(ProviderHttp(StatusCode::TOO_MANY_REQUESTS, 30).into());
         assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
         assert!(
             body["error"]
