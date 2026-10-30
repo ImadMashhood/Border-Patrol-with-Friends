@@ -2,9 +2,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 3;
+pub const PROTOCOL_VERSION: u16 = 4;
 pub const READY_HOLD_MS: u64 = 3000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
+pub mod combat;
 pub mod map;
 pub mod vehicle;
 pub const PEER_TIMEOUT_MS: u64 = 15_000;
@@ -48,6 +49,30 @@ pub struct CommandEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientCommand {
+    SetWeaponDrawn {
+        drawn: bool,
+    },
+    Fire {
+        direction: [f32; 3],
+    },
+    Reload,
+    ToggleDoor {
+        vehicle_id: u64,
+        side: combat::Side,
+    },
+    ToggleWindow {
+        vehicle_id: u64,
+        pane: combat::Pane,
+    },
+    OrderEnter {
+        vehicle_id: u64,
+    },
+    OrderExit {
+        vehicle_id: u64,
+    },
+    TowVehicle {
+        vehicle_id: u64,
+    },
     SetReady {
         ready: bool,
     },
@@ -126,6 +151,7 @@ pub enum VehicleStage {
     DepartingAdmit,
     DepartingDeny,
     Detained,
+    Disabled,
     Exited,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -141,6 +167,7 @@ pub struct PeerView {
     pub hold_ms: u64,
     pub assisting: Option<u8>,
     pub next_command_sequence: u64,
+    pub weapon: combat::WeaponState,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaneView {
@@ -174,6 +201,7 @@ pub struct VehicleView {
     pub outcome: Option<border_scenarios::Reveal>,
     pub secondary_inspected: bool,
     pub inspected_points: Vec<vehicle::VehiclePoint>,
+    pub physics: combat::VehiclePhysics,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
@@ -229,6 +257,8 @@ pub struct WorldSnapshot {
     pub events_active: bool,
     pub lane_swap: Option<[u64; 2]>,
     pub notices: Vec<ShiftNotice>,
+    pub projectiles: Vec<combat::Projectile>,
+    pub impacts: Vec<combat::Impact>,
 }
 /// Only the operator endpoint may deserialize these commands. Never put them in ClientCommand.
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -29,7 +29,7 @@ Defaults: `127.0.0.1:8090`, seed 42, scenario pack `assets/scenarios`. Override 
 
 Normal host time advances automatically. Only explicitly setting `BORDER_HOST_MANUAL_CLOCK=1` enables trusted operator `advance_world` requests for deterministic debugging. Launchers force real-time mode. Public game clients cannot advance the clock.
 
-## Wire contract, version 3
+## Wire contract, version 4
 
 `POST /join` requires `protocol_version`, invite code and display name. It returns a room UUID, peer ID, random bearer token, next command sequence and public snapshot. Exactly two live peers may join in the lobby; active-shift reconnect is deferred.
 
@@ -74,3 +74,5 @@ Set the invite through `BORDER_HOST_JOIN_CODE`. It keeps its token private and a
 Rust/Bevy pins remain Rust 1.94.0, Bevy 0.17.3 and bevy_egui 0.38.1 with the committed lockfile. These are project pins, not a claim to be the latest releases. Full replication/reconnect/audio polish and the complete multiplayer acceptance pass remain Part 15; production Internet transport remains later security work.
 
 Part 6 adds physical `inspect_vehicle_point` commands, shared inspected-panel state, a vehicle-size catalog and separate entry/exit gate state. See [vehicle lifecycle and controls](VEHICLES.md).
+
+Protocol 4 adds authoritative pistol/projectile state, door/window commands, physical traveler exit/return, damage and disabled-vehicle recovery. See [combat and vehicle mechanics](COMBAT.md).

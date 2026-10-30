@@ -1,6 +1,6 @@
 # Part 5 — Shared office, ready door and host clock
 
-Normal play now joins a real host session. Both officers spawn inside the administration office with 100 health and a flashlight, radio and clipboard. The exit stays closed, the clock stays at ten minutes, and vehicle queues/security scheduling stay inactive until the ready condition passes.
+Normal play now joins a real host session. Both officers spawn inside the administration office with 100 health and a pistol, flashlight, radio and clipboard. The exit stays closed, the clock stays at ten minutes, and vehicle queues/security scheduling stay inactive until the ready condition passes.
 
 ## Start and join
 
@@ -56,7 +56,7 @@ At zero, the clock stays at zero, fresh arrivals pause, and already stopped driv
 
 ## What is authoritative
 
-- The protocol is now **version 3**. Clients send movement direction, looking yaw, jogging intent and a held-ready input flag; they cannot submit coordinates, hold duration, elapsed shift time, readiness completion or rewards.
+- The protocol is now **version 4**. Clients send movement direction, looking yaw, jogging intent and a held-ready input flag; they cannot submit coordinates, hold duration, elapsed shift time, readiness completion or rewards.
 - The host measures time using its own monotonic clock, checks doorway range and input freshness, applies the three-second threshold, validates the host/majority rule and publishes the shared transition.
 - Input frames are monotonic and stay replay-protected across shift resets. Timed-out commands retry the same request identity; snapshots also acknowledge the accepted command sequence.
 - Static collision comes from the committed scene export, plus the host's dynamic ready-door/vehicle rules. A regression test compares the bake with the actual rendered scene. Positions freeze when communication is lost.
@@ -81,3 +81,5 @@ Windows scripts/CI are updated, but a Windows desktop run has not been verified 
 ![Shared active shift](shared-shift.webp)
 
 Part 6 adds physical `inspect_vehicle_point` commands, shared inspected-panel state, a vehicle-size catalog and separate entry/exit gate state. See [vehicle lifecycle and controls](VEHICLES.md).
+
+Protocol 4 adds authoritative pistol/projectile state, door/window commands, physical traveler exit/return, damage and disabled-vehicle recovery. See [combat and vehicle mechanics](COMBAT.md).

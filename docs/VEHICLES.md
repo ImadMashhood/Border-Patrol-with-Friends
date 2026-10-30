@@ -52,8 +52,10 @@ python3 scripts/test_host.py
 python3 scripts/test_graphical_shift.py --lifecycle
 ```
 
-The locked Rust suite passes **50 tests**, with one existing microphone/model fixture ignored; Clippy and formatting pass. The simulation tests check mixed-length bumper gaps, both gate pairs, physical inspection permissions/range, repeated inspection idempotency, rotated access positions, pickup-sized pedestrian yielding, independent next-car advancement, and all ten vehicles reaching the ends of the admit/deny roads. The HTTP check exercises both first vehicles, rejects remote/other-lane cargo access, shares physical evidence, releases both routes and verifies that both next vehicles stop.
+The locked Rust suite passes **57 tests**, with one existing microphone/model fixture ignored; Clippy and formatting pass. The simulation tests check mixed-length bumper gaps, both gate pairs, physical inspection permissions/range, repeated inspection idempotency, rotated access positions, pickup-sized pedestrian yielding, independent next-car advancement, and all ten vehicles reaching the ends of the admit/deny roads. The HTTP check exercises both first vehicles, rejects remote/other-lane cargo access, shares physical evidence, releases both routes and verifies that both next vehicles stop.
 
 The Linux graphical check starts two actual Bevy clients with a local offline AI gateway. Both walk out of the office, select their driver window using the normal interaction targeting code, complete an interview, walk to the rear cargo point and inspect it. It captures the sedan trunk and truck tailgate after host confirmation. Recording and voice playback are disabled in this automated check; it makes no paid AI requests. This is automated desktop acceptance, not a human playtest or RTX 2060 performance certification. Windows desktop operation remains unverified.
 
 ![Pickup cargo inspection from the second live client](truck-inspection.webp)
+
+The subsequent [combat/vehicle interaction update](COMBAT.md) adds functioning front doors and side windows, transparent/destructible glazing, physical driver exit/return/death, pistol projectiles and recovery. Its current controls supersede the original cosmetic panel behavior described above.

@@ -434,7 +434,10 @@ pub fn sync(
         if let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id) {
             if matches!(
                 v.stage,
-                VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny | VehicleStage::Exited
+                VehicleStage::DepartingAdmit
+                    | VehicleStage::DepartingDeny
+                    | VehicleStage::Exited
+                    | VehicleStage::Disabled
             ) || !shift.permits(v.lane_id)
             {
                 g.reset_case();
@@ -528,6 +531,7 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                 me.equipment
                     .iter()
                     .map(|item| match item.as_str() {
+                        "pistol" => "Pistol",
                         "flashlight" => "Flashlight",
                         "radio" => "Radio",
                         "document_clipboard" => "Clipboard",
@@ -612,6 +616,13 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                 shift.send(ClientCommand::RequestLaneSwap);
             }
             ui.small("Tab releases the mouse for roster controls.");
+            if world.phase == ShiftPhase::Grace
+                && world.host_peer_id == Some(me.peer_id)
+                && ui.button("End shift / return to office").clicked()
+            {
+                shift.send(ClientCommand::ResetShift);
+            }
+
             if let Some(notice) = world.notices.last() {
                 ui.separator();
                 ui.label(format!("RADIO · {}", notice.message));

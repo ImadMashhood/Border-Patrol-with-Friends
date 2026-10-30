@@ -59,7 +59,7 @@ The detailed scene and Part 5 shared-office/host session are connected. The offi
 
 Validated on Linux with Rust 1.94.0 and the locked dependency graph:
 
-- Full workspace tests: **50 passed**, one existing explicit microphone/model fixture test ignored.
+- Full workspace tests: **57 passed**, one existing explicit microphone/model fixture test ignored.
 - Clippy for the entire workspace/all targets with warnings denied, plus Rust formatting: passed.
 - A headless connectivity test builds the actual scene and flood-fills collision-free walking routes from spawn to the office, storage, holding yard, secondary bay, driver and both ends of the bridge. It also rejects river shortcuts and the reserved future lanes.
 - `./play.sh --smoke-shift` passed with the resident GPU speech models loaded and a clean automatic exit.
@@ -82,3 +82,5 @@ Reproduce captures after `cargo build --locked -p border-game`:
 Other review viewpoints are `yard`, `desert`, `north-road`, `cinematic`, `office-exterior` and `cars`. Smoke captures freeze camera movement to make visual review independent of mouse motion. Captures are written under ignored `output/`; the overview above is the checked-in review image. Smoke mode disables microphone recording and speech playback and exits automatically. These captures validate rendering and layout, not a full human multiplayer playtest.
 
 [Part 6](VEHICLES.md) adds the pickup model, physical inspection panels, vehicle-sized spacing and separate entry/exit barriers for each lane.
+
+[Projectile combat and destructible glazing](COMBAT.md) extend the sedan/pickup models with moving front doors/windows and separate physical drivers.

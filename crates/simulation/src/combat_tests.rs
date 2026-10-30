@@ -1,0 +1,211 @@
+use super::*;
+use border_net::combat::*;
+fn active() -> Simulation {
+    let mut s = Simulation::new(
+        "combat".into(),
+        42,
+        border_scenarios::load_pack(
+            &std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/scenarios"),
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    s.join("Host".into(), 0).unwrap();
+    s.join("Guest".into(), 0).unwrap();
+    s.world.peers[0].ready = true;
+    s.start_shift().unwrap();
+    run(&mut s, 15.);
+    s.world.peers[0].weapon.drawn = true;
+    s
+}
+fn run(s: &mut Simulation, seconds: f32) {
+    for _ in 0..(seconds * 100.) as usize {
+        s.tick(s.world.server_time_ms + 10);
+    }
+}
+fn pose(s: &mut Simulation, p: V3) {
+    s.world.peers[0].position = p;
+}
+#[test]
+fn projectile_has_travel_time_and_cannot_inject_damage_or_origin() {
+    let mut s = active();
+    pose(&mut s, [-0.48, 1.47, -4.]);
+    s.fire(1, [0., 0., 1.]).unwrap();
+    assert_eq!(s.world.vehicles[0].physics.npc.health, 100);
+    assert_eq!(s.world.projectiles.len(), 1);
+    run(&mut s, 0.01);
+    assert_eq!(s.world.vehicles[0].physics.npc.health, 100);
+    run(&mut s, 0.1);
+    assert!(s.world.vehicles[0].physics.npc.health < 100);
+    for raw in [
+        r#"{"type":"fire","direction":[0,0,1],"damage":1000}"#,
+        r#"{"type":"fire","direction":[0,0,1],"origin":[0,0,0]}"#,
+        r#"{"type":"fire","direction":[0,0,1],"target_id":1}"#,
+    ] {
+        assert!(serde_json::from_str::<ClientCommand>(raw).is_err());
+    }
+}
+#[test]
+fn windshield_hole_penetrates_but_bodywork_and_world_walls_stop_shots() {
+    let mut s = active();
+    pose(&mut s, [-0.48, 1.47, -4.]);
+    s.fire(1, [0., 0., 1.]).unwrap();
+    run(&mut s, 0.25);
+    let first = &s.world.vehicles[0].physics;
+    assert_eq!(first.glass[Pane::Windshield.index()].impacts.len(), 1);
+    assert!(!first.glass[0].shattered);
+    assert!(first.npc.health > 0 && first.npc.health < 100);
+    s.fire(1, [0., 0., 1.]).unwrap();
+    run(&mut s, 0.25);
+    let second = &s.world.vehicles[0].physics;
+    assert_eq!(second.glass[0].impacts.len(), 1, "same hole must transmit");
+    assert_eq!(second.npc.health, 0);
+    assert!(second.npc.died_seated);
+    assert_eq!(s.world.vehicles[0].stage, VehicleStage::Disabled);
+    pose(&mut s, [0.45, 1.45, -4.]);
+    s.fire(1, [0., 0., 1.]).unwrap();
+    run(&mut s, 0.25);
+    assert!(
+        s.world.vehicles[0].physics.glass[0].shattered,
+        "second distinct windshield strike removes the pane"
+    );
+    let mut s = active();
+    pose(&mut s, [-3., 0.7, -0.25]);
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.1);
+    assert_eq!(s.world.vehicles[0].physics.npc.health, 100);
+    assert!(s.world.impacts.iter().any(|i| i.kind == "metal"));
+    pose(&mut s, [-12., 1.5, -7.]);
+    run(&mut s, 0.25);
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.2);
+    assert!(s.world.impacts.iter().any(|i| i.kind == "world"));
+}
+#[test]
+fn moving_side_window_and_open_door_use_actual_apertures() {
+    let mut s = active();
+    pose(&mut s, [1.6, 1.47, -0.25]);
+    s.toggle_window(1, 1, Pane::PassengerFront).unwrap();
+    run(&mut s, 0.8);
+    assert!(pane_frame(&s.world.vehicles[0], Pane::PassengerFront).is_none());
+    s.fire(1, [-1., 0., 0.]).unwrap();
+    run(&mut s, 0.1);
+    assert!(s.world.vehicles[0].physics.npc.health < 100);
+    assert!(
+        s.world.vehicles[0].physics.glass[Pane::PassengerFront.index()]
+            .impacts
+            .is_empty()
+    );
+    s.toggle_window(1, 1, Pane::PassengerFront).unwrap();
+    run(&mut s, 0.8);
+    let before = pane_frame(&s.world.vehicles[0], Pane::PassengerFront)
+        .unwrap()
+        .center;
+    s.toggle_door(1, 1, Side::Passenger).unwrap();
+    run(&mut s, 0.7);
+    let after = pane_frame(&s.world.vehicles[0], Pane::PassengerFront)
+        .unwrap()
+        .center;
+    assert!(length(sub(after, before)) > 0.4);
+    assert!(s.world.vehicles[0].physics.door_angles[1] > 1.);
+}
+#[test]
+fn side_glass_shatters_and_repeated_shots_kill_an_occupant() {
+    let mut s = active();
+    pose(&mut s, [2., 1.47, -0.25]);
+    s.fire(1, [-1., 0., 0.]).unwrap();
+    run(&mut s, 0.25);
+    assert!(s.world.vehicles[0].physics.glass[Pane::PassengerFront.index()].shattered);
+    assert!(s.world.vehicles[0].physics.npc.health < 100);
+    s.fire(1, [-1., 0., 0.]).unwrap();
+    run(&mut s, 0.25);
+    assert_eq!(s.world.vehicles[0].physics.npc.mode, NpcMode::Dead);
+    assert!(s.public_case(1, 1, "offline").is_err());
+    assert!(s.actor_context(1).is_err());
+}
+#[test]
+fn npc_can_exit_return_and_be_hit_outside_without_driving_an_empty_car() {
+    let mut s = active();
+    pose(&mut s, [-1.6, 1.7, -0.25]);
+    s.order_exit(1, 1).unwrap();
+    run(&mut s, 3.);
+    assert_eq!(s.world.vehicles[0].physics.npc.mode, NpcMode::Outside);
+    assert!(s.world.vehicles[0].physics.npc.position[0] < -2.);
+    s.decide_case(1, 1, Disposition::Admit).unwrap();
+    assert!(s.release_case(1, 1).is_err());
+    s.order_enter(1, 1).unwrap();
+    run(&mut s, 2.);
+    assert_eq!(s.world.vehicles[0].physics.npc.mode, NpcMode::Seated);
+    s.release_case(1, 1).unwrap();
+    let mut s = active();
+    pose(&mut s, [-1.6, 1.7, -0.25]);
+    s.order_exit(1, 1).unwrap();
+    run(&mut s, 3.);
+    let target = s.world.vehicles[0].physics.npc.position;
+    pose(&mut s, [target[0] - 2., target[1] + 1.62, target[2]]);
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.1);
+    assert_eq!(s.world.vehicles[0].physics.npc.health, 0);
+    assert!(!s.world.vehicles[0].physics.npc.died_seated);
+}
+#[test]
+fn dead_driver_holds_queue_until_recovery_and_reset_restores_everything() {
+    let mut s = active();
+    pose(&mut s, [-1.6, 1.47, -0.25]);
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.1);
+    assert_eq!(s.world.vehicles[0].physics.npc.health, 0);
+    run(&mut s, 5.);
+    assert_eq!(s.world.vehicles[2].stage, VehicleStage::Queued);
+    assert!(s.tow_vehicle(2, 1).is_err());
+    s.tow_vehicle(1, 1).unwrap();
+    run(&mut s, 4.);
+    assert_eq!(s.world.vehicles[0].stage, VehicleStage::Disabled);
+    run(&mut s, 16.);
+    assert_eq!(s.world.vehicles[0].stage, VehicleStage::Exited);
+    assert_eq!(s.world.vehicles[2].stage, VehicleStage::Stopped);
+    s.world.phase = ShiftPhase::Grace;
+    s.reset_shift(1).unwrap();
+    assert!(s.world.projectiles.is_empty() && s.world.impacts.is_empty());
+    assert_eq!(s.world.peers[0].weapon.magazine, MAGAZINE);
+    assert!(!s.world.peers[0].weapon.drawn);
+}
+#[test]
+fn fire_rate_ammunition_reload_and_friendly_damage_are_host_owned() {
+    let mut s = active();
+    pose(&mut s, [-4., 1.7, -2.]);
+    assert!(s.fire(1, [0., 0., 10.]).is_err());
+    assert!(s.fire(1, [f32::NAN, 0., 1.]).is_err());
+    s.fire(1, [0., 1., 0.]).unwrap();
+    assert!(s.fire(1, [0., 1., 0.]).is_err());
+    assert_eq!(s.world.peers[0].weapon.magazine, 11);
+    s.reload(1).unwrap();
+    assert!(s.fire(1, [0., 1., 0.]).is_err());
+    run(&mut s, 1.6);
+    assert_eq!(s.world.peers[0].weapon.magazine, 12);
+    assert_eq!(s.world.peers[0].weapon.reserve, 59);
+    s.world.peers[1].position = [-2., 1.7, -2.];
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.1);
+    assert!(s.world.peers[1].health < 100);
+    assert_eq!(s.world.peers[0].health, 100);
+    s.world.phase = ShiftPhase::Lobby;
+    assert!(s.fire(1, [0., 1., 0.]).is_err());
+    s.world.phase = ShiftPhase::Grace;
+    s.world.peers[0].health = 0;
+    let sequence = s.peers[&1].next_sequence;
+    s.command(
+        1,
+        CommandEnvelope {
+            protocol_version: PROTOCOL_VERSION,
+            session_id: "combat".into(),
+            request_id: "incapacitated-reset".into(),
+            sequence,
+            expected_revision: None,
+            command: ClientCommand::ResetShift,
+        },
+        s.world.server_time_ms,
+    )
+    .unwrap();
+    assert_eq!(s.world.peers[0].health, 100);
+}

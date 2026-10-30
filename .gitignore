@@ -11,3 +11,6 @@
 
 __pycache__/
 *.pyc
+
+# Authored game effects, distinct from recorded speech fixtures.
+!assets/audio/*.wav

@@ -1,0 +1,741 @@
+//! Snapshot-driven articulated doors, fractured glazing, seated/exiting travelers and debris.
+use super::*;
+use bevy::{
+    asset::RenderAssetUsages,
+    mesh::{Indices, PrimitiveTopology},
+};
+use border_net::{
+    VehicleStage,
+    combat::{self as c, *},
+};
+#[derive(Component)]
+pub struct Detail {
+    pub vehicle: u64,
+    pub kind: DetailKind,
+}
+#[derive(Clone, Copy)]
+pub enum DetailKind {
+    Door(Side),
+    Glass(Pane),
+    Npc,
+}
+#[derive(Component)]
+pub struct GlassVisual {
+    revision: usize,
+    cracks: Handle<Mesh>,
+}
+#[derive(Component)]
+pub struct BodyPart {
+    base: Vec3,
+    limb: u8,
+}
+#[derive(Component)]
+pub struct Debris {
+    velocity: Vec3,
+    spin: Vec3,
+    ttl: f32,
+}
+#[derive(Resource, Default)]
+pub struct Effects {
+    seen: std::collections::HashSet<u64>,
+    epoch: Option<u64>,
+}
+fn mat(materials: &mut Assets<StandardMaterial>, color: Color) -> Handle<StandardMaterial> {
+    materials.add(StandardMaterial {
+        base_color: color,
+        perceptual_roughness: 0.65,
+        ..default()
+    })
+}
+fn block(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    parent: Entity,
+    size: Vec3,
+    pos: Vec3,
+    material: Handle<StandardMaterial>,
+) -> Entity {
+    let e = commands
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::from_size(size))),
+            MeshMaterial3d(material),
+            Transform::from_translation(pos),
+        ))
+        .id();
+    commands.entity(parent).add_child(e);
+    e
+}
+fn door(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    id: u64,
+    side: Side,
+    kind: &str,
+) {
+    let root = commands
+        .spawn((
+            Transform::default(),
+            Visibility::Hidden,
+            Detail {
+                vehicle: id,
+                kind: DetailKind::Door(side),
+            },
+        ))
+        .id();
+    let truck = kind == "truck";
+    let sign = if side == Side::Driver { -1. } else { 1. };
+    let len = 1.15;
+    let paint = materials.add(StandardMaterial {
+        base_color: match (((id - 1) / 2) + (id - 1) % 2) % 5 {
+            0 => Color::srgb(0.22, 0.41, 0.39),
+            1 => Color::srgb(0.69, 0.42, 0.28),
+            2 => Color::srgb(0.81, 0.76, 0.60),
+            3 => Color::srgb(0.36, 0.4, 0.44),
+            _ => Color::srgb(0.55, 0.25, 0.18),
+        },
+        metallic: 0.42,
+        perceptual_roughness: 0.27,
+        clearcoat: 1.,
+        ..default()
+    });
+    let liner = mat(materials, Color::srgb(0.11, 0.12, 0.12));
+    let chrome = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.6, 0.62, 0.64),
+        metallic: 0.85,
+        ..default()
+    });
+    let belt = if truck { 1.3 } else { 0.96 };
+    let top = if truck { 2.1 } else { 1.61 };
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.07, 0.5, len),
+        Vec3::new(0., belt - 0.25, len / 2.),
+        paint.clone(),
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.025, 0.37, len - 0.1),
+        Vec3::new(-sign * 0.05, belt - 0.25, len / 2.),
+        liner.clone(),
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.1, 0.08, 0.45),
+        Vec3::new(-sign * 0.08, belt - 0.2, len * 0.5),
+        liner.clone(),
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.035, 0.035, 0.22),
+        Vec3::new(sign * 0.05, belt - 0.08, len * 0.8),
+        chrome.clone(),
+    );
+    for z in [0.02, len - 0.02] {
+        block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.055, top - belt, 0.055),
+            Vec3::new(0., (belt + top) * 0.5, z),
+            paint.clone(),
+        );
+    }
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.055, 0.055, len),
+        Vec3::new(0., top, len / 2.),
+        paint,
+    );
+    block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.06, 0.025, len),
+        Vec3::new(0., belt, len / 2.),
+        liner,
+    );
+}
+fn npc(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    id: u64,
+) {
+    let root = commands
+        .spawn((
+            Transform::default(),
+            Visibility::Hidden,
+            Detail {
+                vehicle: id,
+                kind: DetailKind::Npc,
+            },
+        ))
+        .id();
+    let skin = mat(
+        materials,
+        match id % 3 {
+            0 => Color::srgb(0.43, 0.29, 0.20),
+            1 => Color::srgb(0.75, 0.55, 0.40),
+            _ => Color::srgb(0.62, 0.42, 0.28),
+        },
+    );
+    let shirt = mat(
+        materials,
+        match id % 4 {
+            0 => Color::srgb(0.23, 0.3, 0.38),
+            1 => Color::srgb(0.5, 0.32, 0.2),
+            2 => Color::srgb(0.34, 0.4, 0.27),
+            _ => Color::srgb(0.48, 0.26, 0.23),
+        },
+    );
+    let pants = mat(materials, Color::srgb(0.12, 0.15, 0.18));
+    let hair = mat(materials, Color::srgb(0.12, 0.09, 0.07));
+    for (size, pos, material, limb) in [
+        (
+            Vec3::new(0.43, 0.55, 0.3),
+            Vec3::new(0., 1.06, 0.),
+            shirt.clone(),
+            0,
+        ),
+        (
+            Vec3::new(0.30, 0.34, 0.29),
+            Vec3::new(0., 1.48, 0.),
+            skin.clone(),
+            1,
+        ),
+        (
+            Vec3::new(0.32, 0.11, 0.31),
+            Vec3::new(0., 1.65, 0.01),
+            hair,
+            1,
+        ),
+        (
+            Vec3::new(0.13, 0.48, 0.14),
+            Vec3::new(-0.3, 1.02, -0.15),
+            shirt.clone(),
+            2,
+        ),
+        (
+            Vec3::new(0.13, 0.48, 0.14),
+            Vec3::new(0.3, 1.02, -0.15),
+            shirt,
+            3,
+        ),
+        (
+            Vec3::new(0.14, 0.16, 0.17),
+            Vec3::new(-0.3, 0.77, -0.22),
+            skin.clone(),
+            2,
+        ),
+        (
+            Vec3::new(0.14, 0.16, 0.17),
+            Vec3::new(0.3, 0.77, -0.22),
+            skin.clone(),
+            3,
+        ),
+        (
+            Vec3::new(0.18, 0.58, 0.19),
+            Vec3::new(-0.13, 0.47, 0.),
+            pants.clone(),
+            4,
+        ),
+        (
+            Vec3::new(0.18, 0.58, 0.19),
+            Vec3::new(0.13, 0.47, 0.),
+            pants,
+            5,
+        ),
+    ] {
+        let e = if limb == 1 && size.y > 0.3 {
+            let e = commands
+                .spawn((
+                    Mesh3d(meshes.add(Sphere::new(1.).mesh().uv(16, 12))),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(pos).with_scale(size * 0.56),
+                ))
+                .id();
+            commands.entity(root).add_child(e);
+            e
+        } else if limb == 1 && size.y > 0.1 {
+            let e = commands
+                .spawn((
+                    Mesh3d(meshes.add(Sphere::new(1.).mesh().ico(2).unwrap())),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(pos).with_scale(size * 0.56),
+                ))
+                .id();
+            commands.entity(root).add_child(e);
+            e
+        } else {
+            block(commands, meshes, root, size, pos, material)
+        };
+        commands.entity(e).insert(BodyPart { base: pos, limb });
+    }
+    // Brows, nose and eyes make the driver readable through clear/open glazing.
+    let eyes = mat(materials, Color::srgb(0.04, 0.035, 0.03));
+    for x in [-0.07, 0.07] {
+        let pos = Vec3::new(x, 1.52, -0.15);
+        let e = block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.035, 0.025, 0.015),
+            pos,
+            eyes.clone(),
+        );
+        commands.entity(e).insert(BodyPart { base: pos, limb: 1 });
+    }
+    let pos = Vec3::new(0., 1.46, -0.17);
+    let e = block(
+        commands,
+        meshes,
+        root,
+        Vec3::new(0.05, 0.07, 0.06),
+        pos,
+        skin,
+    );
+    commands.entity(e).insert(BodyPart { base: pos, limb: 1 });
+}
+fn triangle_mesh(triangles: &[[[f32; 2]; 3]], z: f32) -> Mesh {
+    let points: Vec<[f32; 3]> = triangles
+        .iter()
+        .flat_map(|t| t.iter().map(|p| [p[0], p[1], z]))
+        .collect();
+    let n = points.len();
+    Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::default(),
+    )
+    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, points)
+    .with_inserted_attribute(Mesh::ATTRIBUTE_NORMAL, vec![[0., 0., 1.]; n])
+    .with_inserted_attribute(Mesh::ATTRIBUTE_UV_0, vec![[0., 0.]; n])
+    .with_inserted_indices(Indices::U32((0..n as u32).collect()))
+}
+fn grid() -> Vec<[[f32; 2]; 3]> {
+    let mut t = vec![];
+    for x in 0..12 {
+        for y in 0..8 {
+            let a = [-1. + x as f32 / 6., -1. + y as f32 / 4.];
+            let b = [a[0] + 1. / 6., a[1]];
+            let c = [a[0] + 1. / 6., a[1] + 0.25];
+            let d = [a[0], a[1] + 0.25];
+            t.push([a, b, c]);
+            t.push([a, c, d]);
+        }
+    }
+    t
+}
+fn crack_mesh(impacts: &[GlassImpact]) -> Mesh {
+    let mut t = vec![];
+    let mut line = |a: [f32; 2], b: [f32; 2], width: f32| {
+        let dx = b[0] - a[0];
+        let dy = b[1] - a[1];
+        let l = dx.hypot(dy).max(0.001);
+        let n = [-dy / l * width, dx / l * width];
+        let p = [
+            [a[0] + n[0], a[1] + n[1]],
+            [a[0] - n[0], a[1] - n[1]],
+            [b[0] + n[0], b[1] + n[1]],
+            [b[0] - n[0], b[1] - n[1]],
+        ];
+        t.push([p[0], p[1], p[2]]);
+        t.push([p[2], p[1], p[3]]);
+    };
+    for h in impacts {
+        for i in 0..14 {
+            let angle = i as f32 * std::f32::consts::TAU / 14. + (h.seed % 11) as f32 * 0.031;
+            let direction = [angle.cos(), angle.sin()];
+            let mut a = h.uv;
+            for j in 1..=5 {
+                let r = j as f32 * 0.17;
+                let bend = if j % 2 == 0 { 0.025 } else { -0.025 };
+                let b = [
+                    (h.uv[0] + direction[0] * r + direction[1] * bend).clamp(-1., 1.),
+                    (h.uv[1] + direction[1] * r - direction[0] * bend).clamp(-1., 1.),
+                ];
+                line(a, b, 0.004 / (j as f32).sqrt());
+                if j % 2 == 0 {
+                    line(
+                        b,
+                        [
+                            (b[0] + angle.sin() * 0.12).clamp(-1., 1.),
+                            (b[1] - angle.cos() * 0.12).clamp(-1., 1.),
+                        ],
+                        0.002,
+                    );
+                }
+                a = b;
+            }
+        }
+        for i in 0..18 {
+            let a = i as f32 * std::f32::consts::TAU / 18.;
+            let b = (i + 1) as f32 * std::f32::consts::TAU / 18.;
+            line(
+                [h.uv[0] + a.cos() * 0.19, h.uv[1] + a.sin() * 0.19],
+                [h.uv[0] + b.cos() * 0.19, h.uv[1] + b.sin() * 0.19],
+                0.003,
+            );
+        }
+    }
+    triangle_mesh(&t, 0.003)
+}
+#[allow(clippy::too_many_arguments, clippy::type_complexity)]
+pub fn sync(
+    shift: Res<shift::Shift>,
+    time: Res<Time>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut details: Query<
+        (
+            Entity,
+            &Detail,
+            &mut Transform,
+            &mut Visibility,
+            Option<&mut GlassVisual>,
+            Option<&Mesh3d>,
+        ),
+        Without<BodyPart>,
+    >,
+    mut parts: Query<(&BodyPart, &ChildOf, &mut Transform), Without<Detail>>,
+) {
+    let Some(world) = &shift.world else {
+        return;
+    };
+    for v in &world.vehicles {
+        if v.stage == VehicleStage::Exited {
+            continue;
+        }
+        if !details.iter().any(|(_, d, ..)| d.vehicle == v.vehicle_id) {
+            for side in [Side::Driver, Side::Passenger] {
+                door(
+                    &mut commands,
+                    &mut meshes,
+                    &mut materials,
+                    v.vehicle_id,
+                    side,
+                    &v.kind,
+                );
+            }
+            npc(&mut commands, &mut meshes, &mut materials, v.vehicle_id);
+            for pane in Pane::ALL {
+                let glass = materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.52, 0.76, 0.8, 0.25),
+                    alpha_mode: AlphaMode::Blend,
+                    metallic: 0.15,
+                    perceptual_roughness: 0.10,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                });
+                let cracks = meshes.add(crack_mesh(&[]));
+                let cracks_material = materials.add(StandardMaterial {
+                    base_color: Color::srgba(0.90, 0.96, 1., 0.90),
+                    alpha_mode: AlphaMode::Blend,
+                    unlit: true,
+                    double_sided: true,
+                    cull_mode: None,
+                    ..default()
+                });
+                let root = commands
+                    .spawn((
+                        Mesh3d(meshes.add(triangle_mesh(&grid(), 0.))),
+                        MeshMaterial3d(glass),
+                        Transform::default(),
+                        Visibility::Hidden,
+                        Detail {
+                            vehicle: v.vehicle_id,
+                            kind: DetailKind::Glass(pane),
+                        },
+                        GlassVisual {
+                            revision: usize::MAX,
+                            cracks: cracks.clone(),
+                        },
+                    ))
+                    .id();
+                let e = commands
+                    .spawn((
+                        Mesh3d(cracks),
+                        MeshMaterial3d(cracks_material),
+                        Transform::default(),
+                    ))
+                    .id();
+                commands.entity(root).add_child(e);
+            }
+        }
+    }
+    for (e, d, mut t, mut visible, glass, mesh) in &mut details {
+        let Some(v) = world
+            .vehicles
+            .iter()
+            .find(|v| v.vehicle_id == d.vehicle && v.stage != VehicleStage::Exited)
+        else {
+            commands.entity(e).despawn();
+            continue;
+        };
+        *visible = Visibility::Visible;
+        match d.kind {
+            DetailKind::Door(side) => {
+                let angle = v.physics.door_angles[side_index(side)];
+                t.translation = Vec3::from_array(c::world(v, door_pivot(&v.kind, side)));
+                t.rotation = Quat::from_rotation_y(
+                    v.yaw + if side == Side::Driver { -angle } else { angle },
+                );
+            }
+            DetailKind::Glass(pane) => {
+                let g = &v.physics.glass[pane.index()];
+                let revision = g.impacts.len() + if g.shattered { 100 } else { 0 };
+                if let Some(mut visual) = glass
+                    && let Some(mesh) = mesh
+                    && visual.revision != revision
+                {
+                    let cells: Vec<_> = grid()
+                        .into_iter()
+                        .filter(|cell| {
+                            !g.shattered
+                                && !g.impacts.iter().any(|h| {
+                                    let center = [
+                                        (cell[0][0] + cell[1][0] + cell[2][0]) / 3.,
+                                        (cell[0][1] + cell[1][1] + cell[2][1]) / 3.,
+                                    ];
+                                    (center[0] - h.uv[0]).hypot(center[1] - h.uv[1]) < 0.15
+                                })
+                        })
+                        .collect();
+                    if let Some(m) = meshes.get_mut(&mesh.0) {
+                        *m = triangle_mesh(&cells, 0.);
+                    }
+                    if let Some(m) = meshes.get_mut(&visual.cracks) {
+                        *m = crack_mesh(&g.impacts);
+                    }
+                    visual.revision = revision;
+                }
+                if g.shattered {
+                    *visible = Visibility::Hidden;
+                }
+                if let Some(f) = pane_frame(v, pane) {
+                    t.translation = Vec3::from_array(f.center);
+                    t.rotation = Quat::from_mat3(&Mat3::from_cols(
+                        Vec3::from_array(f.u).normalize(),
+                        Vec3::from_array(f.v).normalize(),
+                        Vec3::from_array(f.normal).normalize(),
+                    ));
+                    t.scale = Vec3::new(f.half[0], f.half[1], 1.);
+                } else {
+                    *visible = Visibility::Hidden;
+                }
+            }
+            DetailKind::Npc => {
+                let n = &v.physics.npc;
+                t.translation = Vec3::from_array(n.position);
+                t.rotation = Quat::from_rotation_y(n.yaw);
+                if n.mode == NpcMode::Dead && !n.died_seated {
+                    t.translation.y = 0.22;
+                    t.rotation *= Quat::from_rotation_z(-1.48);
+                }
+            }
+        }
+    }
+    for (part, parent, mut t) in &mut parts {
+        let Ok((_, d, ..)) = details.get(parent.parent()) else {
+            continue;
+        };
+        let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == d.vehicle) else {
+            continue;
+        };
+        let n = &v.physics.npc;
+        t.translation = part.base;
+        t.rotation = Quat::IDENTITY;
+        let seated = n.mode == NpcMode::Seated || n.mode == NpcMode::Dead && n.died_seated;
+        if seated {
+            if part.limb >= 4 {
+                t.translation.y = 0.67;
+                t.translation.z = -0.25;
+                t.rotation = Quat::from_rotation_x(-1.1);
+            }
+            if part.limb == 2 || part.limb == 3 {
+                t.rotation = Quat::from_rotation_x(-0.65);
+            }
+            if n.mode == NpcMode::Dead {
+                t.translation.z -= 0.22;
+                t.translation.y -= if part.limb == 1 { 0.27 } else { 0.12 };
+                t.rotation = Quat::from_rotation_x(0.85);
+            }
+        } else if matches!(n.mode, NpcMode::Exiting | NpcMode::Entering) {
+            if part.limb <= 1 {
+                t.translation.y += 0.15 * n.exit_progress;
+            }
+            let swing = (time.elapsed_secs() * 8.).sin() * 0.20;
+            if part.limb >= 2 {
+                t.rotation = Quat::from_rotation_x(if part.limb % 2 == 0 { swing } else { -swing });
+            }
+        } else if part.limb <= 1 {
+            t.translation.y += 0.15;
+        }
+    }
+}
+#[allow(clippy::too_many_arguments)]
+pub fn effects(
+    shift: Res<shift::Shift>,
+    patrol: Res<Patrol>,
+    smoke: Option<Res<SmokeTest>>,
+    time: Res<Time>,
+    mut state: ResMut<Effects>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut debris: Query<(Entity, &mut Transform, &mut Debris)>,
+) {
+    let Some(world) = &shift.world else {
+        return;
+    };
+    if state.epoch != world.shift_started_ms {
+        state.seen.clear();
+        state.epoch = world.shift_started_ms;
+        for (e, ..) in &debris {
+            commands.entity(e).despawn();
+        }
+    }
+    for impact in &world.impacts {
+        if !state.seen.insert(impact.id) {
+            continue;
+        }
+        if world.server_time_ms.saturating_sub(impact.at_ms) > 500 {
+            continue;
+        }
+        let delta = Vec3::from_array(impact.position) - Vec3::from_array(impact.origin);
+        if delta.length() > 0.6 && delta.length() < 150. {
+            let m = materials.add(StandardMaterial {
+                base_color: Color::srgb(1., 0.82, 0.38),
+                unlit: true,
+                ..default()
+            });
+            let source = Vec3::from_array(impact.origin) + delta.normalize() * 0.5;
+            commands.spawn((
+                Mesh3d(meshes.add(Cuboid::new(0.008, 0.008, delta.length() - 0.5))),
+                MeshMaterial3d(m),
+                Transform::from_translation((Vec3::from_array(impact.position) + source) * 0.5)
+                    .with_rotation(Quat::from_rotation_arc(Vec3::Z, delta.normalize())),
+                Debris {
+                    velocity: Vec3::ZERO,
+                    spin: Vec3::ZERO,
+                    ttl: 0.065,
+                },
+            ));
+        }
+        let glass = impact.kind.starts_with("glass");
+        if glass
+            && !patrol.muted
+            && smoke.is_none()
+            && shift
+                .me()
+                .is_some_and(|p| c::length(c::sub(p.position, impact.position)) < 20.)
+        {
+            weapon::sound("glass");
+        }
+        let count = if glass { 36 } else { 8 };
+        let material = materials.add(StandardMaterial {
+            base_color: if glass {
+                Color::srgba(0.65, 0.88, 0.92, 0.7)
+            } else {
+                Color::srgb(1., 0.65, 0.16)
+            },
+            alpha_mode: if glass {
+                AlphaMode::Blend
+            } else {
+                AlphaMode::Opaque
+            },
+            metallic: 0.5,
+            double_sided: true,
+            cull_mode: None,
+            unlit: !glass,
+            ..default()
+        });
+        let shard_mesh = meshes.add(triangle_mesh(
+            &[[[-0.5, -0.3], [0.5, -0.2], [0.0, 0.65]]],
+            0.,
+        ));
+        for j in 0..count {
+            let seed = impact.id.wrapping_mul(7919) + j * 313;
+            let a = (seed % 1000) as f32 * 0.013;
+            let b = ((seed / 7) % 100) as f32 / 100.;
+            commands.spawn((
+                Mesh3d(shard_mesh.clone()),
+                MeshMaterial3d(material.clone()),
+                Transform::from_translation(Vec3::from_array(impact.position))
+                    .with_scale(Vec3::splat(if glass { 0.035 + b * 0.07 } else { 0.025 })),
+                bevy::light::NotShadowCaster,
+                Debris {
+                    velocity: Vec3::new(
+                        a.cos() * (1. + b * 2.),
+                        0.7 + b * 2.,
+                        a.sin() * (1. + b * 2.),
+                    ),
+                    spin: Vec3::new(a, 3., a * 0.7),
+                    ttl: if glass { 2.4 } else { 0.35 },
+                },
+            ));
+        }
+        if !glass && impact.kind != "npc_hit" && impact.kind != "officer_hit" {
+            let m = materials.add(StandardMaterial {
+                base_color: Color::srgb(0.025, 0.025, 0.02),
+                double_sided: true,
+                cull_mode: None,
+                ..default()
+            });
+            commands.spawn((
+                Mesh3d(meshes.add(Circle::new(0.035))),
+                MeshMaterial3d(m),
+                Transform::from_translation(
+                    Vec3::from_array(impact.position) + Vec3::from_array(impact.normal) * 0.015,
+                )
+                .with_rotation(Quat::from_rotation_arc(
+                    Vec3::Z,
+                    Vec3::from_array(impact.normal),
+                )),
+                Debris {
+                    velocity: Vec3::ZERO,
+                    spin: Vec3::ZERO,
+                    ttl: 15.,
+                },
+            ));
+        }
+    }
+    if state.seen.len() > 2048 {
+        let live: std::collections::HashSet<_> = world.impacts.iter().map(|i| i.id).collect();
+        state.seen.retain(|id| live.contains(id));
+    }
+    for (e, mut t, mut d) in &mut debris {
+        d.ttl -= time.delta_secs();
+        if d.ttl <= 0. {
+            commands.entity(e).despawn();
+            continue;
+        }
+        if d.spin != Vec3::ZERO {
+            d.velocity.y -= 9.8 * time.delta_secs();
+            t.translation += d.velocity * time.delta_secs();
+            t.rotate(Quat::from_euler(
+                EulerRot::XYZ,
+                d.spin.x * time.delta_secs(),
+                d.spin.y * time.delta_secs(),
+                d.spin.z * time.delta_secs(),
+            ));
+            if t.translation.y < 0.04 {
+                t.translation.y = 0.04;
+                d.velocity *= 0.25;
+                d.velocity.y = d.velocity.y.abs() * 0.3;
+            }
+        }
+    }
+}

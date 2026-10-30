@@ -80,7 +80,7 @@ def main():
                 tick()
             raise AssertionError(('movement blocked', i, target, p))
         assert len(peers[0]['snapshot']['lanes']) == 2
-        assert all(p['health'] == 100 and len(p['equipment']) == 3 for p in peers[1]['snapshot']['peers'])
+        assert all(p['health'] == 100 and len(p['equipment']) == 4 for p in peers[1]['snapshot']['peers'])
         request('/join', {'protocol_version': version, 'join_code': env['BORDER_HOST_JOIN_CODE'], 'display_name': 'Third'}, expected=400)
         command(0, {'type': 'set_ready', 'ready': True}, expected=400)
         inputs(0, held=True, elapsed_ms=3000, expected=422)

@@ -1,10 +1,13 @@
-//! Renderer-free authority. Hidden cases and conversation history never enter public snapshots.
+//! Renderer-free authority. Hidden scenario truth stays server-side; observations are shared.
 use anyhow::{Result, bail, ensure};
 use border_caller::{Turn, validate_turn_reply};
 use border_net::*;
 use border_scenarios::{Scenario, seeded_order};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
+mod combat;
+#[cfg(test)]
+mod combat_tests;
 #[cfg(test)]
 mod lifecycle_tests;
 mod shift;
@@ -46,6 +49,8 @@ pub struct Simulation {
     collision: Vec<border_net::map::Aabb>,
     next_notice_ms: u64,
     epoch: u64,
+    next_projectile: u64,
+    next_impact: u64,
 }
 impl Simulation {
     pub fn new(session_id: String, seed: u64, pack: Vec<Scenario>) -> Result<Self> {
@@ -63,6 +68,8 @@ impl Simulation {
             collision: border_net::map::collision().solids,
             next_notice_ms: 45_000 + seed % 30_000,
             epoch: 0,
+            next_projectile: 1,
+            next_impact: 1,
             world: WorldSnapshot {
                 protocol_version: PROTOCOL_VERSION,
                 session_id,
@@ -95,6 +102,8 @@ impl Simulation {
                 events_active: false,
                 lane_swap: None,
                 notices: vec![],
+                projectiles: vec![],
+                impacts: vec![],
             },
         })
     }
@@ -145,6 +154,7 @@ impl Simulation {
             position: border_net::map::SPAWNS[(id as usize - 1) % 2],
             yaw: std::f32::consts::PI,
             equipment: vec![
+                "pistol".into(),
                 "flashlight".into(),
                 "radio".into(),
                 "document_clipboard".into(),
@@ -152,6 +162,7 @@ impl Simulation {
             hold_ms: 0,
             assisting: None,
             next_command_sequence: 1,
+            weapon: border_net::combat::WeaponState::default(),
         });
         self.peers.insert(
             id,
@@ -253,7 +264,15 @@ impl Simulation {
             .position(|v| v.vehicle_id == id)
             .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
         let v = &self.world.vehicles[i];
-        ensure!(v.stage == VehicleStage::Stopped, "vehicle not stopped");
+        ensure!(
+            v.stage == VehicleStage::Stopped
+                && v.physics.npc.health > 0
+                && !matches!(
+                    v.physics.npc.mode,
+                    border_net::combat::NpcMode::Exiting | border_net::combat::NpcMode::Entering
+                ),
+            "traveler unavailable"
+        );
         ensure!(
             self.world
                 .lanes
@@ -297,10 +316,35 @@ impl Simulation {
             self.world
                 .peers
                 .iter()
-                .any(|p| p.peer_id == peer && p.health > 0),
+                .any(|p| p.peer_id == peer && p.health > 0)
+                || matches!(&e.command, ClientCommand::ResetShift),
             "peer incapacitated"
         );
         match &e.command {
+            ClientCommand::SetWeaponDrawn { drawn } => {
+                ensure!(
+                    !drawn || self.world.phase != ShiftPhase::Lobby,
+                    "weapons stay holstered before ready-up"
+                );
+                self.world
+                    .peers
+                    .iter_mut()
+                    .find(|p| p.peer_id == peer)
+                    .unwrap()
+                    .weapon
+                    .drawn = *drawn;
+            }
+            ClientCommand::Fire { direction } => self.fire(peer, *direction)?,
+            ClientCommand::Reload => self.reload(peer)?,
+            ClientCommand::ToggleDoor { vehicle_id, side } => {
+                self.toggle_door(peer, *vehicle_id, *side)?
+            }
+            ClientCommand::ToggleWindow { vehicle_id, pane } => {
+                self.toggle_window(peer, *vehicle_id, *pane)?
+            }
+            ClientCommand::OrderExit { vehicle_id } => self.order_exit(peer, *vehicle_id)?,
+            ClientCommand::OrderEnter { vehicle_id } => self.order_enter(peer, *vehicle_id)?,
+            ClientCommand::TowVehicle { vehicle_id } => self.tow_vehicle(peer, *vehicle_id)?,
             ClientCommand::SetReady { ready } => {
                 ensure!(!ready, "hold E at the office door to register ready");
                 self.world
@@ -505,6 +549,7 @@ impl Simulation {
                     outcome: None,
                     secondary_inspected: false,
                     inspected_points: vec![],
+                    physics: border_net::combat::VehiclePhysics::default(),
                 });
                 self.cases.insert(
                     vehicle_id,
@@ -579,7 +624,15 @@ impl Simulation {
             .iter()
             .find(|v| v.vehicle_id == vehicle)
             .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
-        ensure!(v.stage == VehicleStage::Stopped, "vehicle not stopped");
+        ensure!(
+            v.stage == VehicleStage::Stopped
+                && v.physics.npc.health > 0
+                && !matches!(
+                    v.physics.npc.mode,
+                    border_net::combat::NpcMode::Exiting | border_net::combat::NpcMode::Entering
+                ),
+            "traveler unavailable"
+        );
         let c = &self.cases[&vehicle];
         ensure!(c.history.len() < 128, "conversation limit reached");
         Ok(ActorContext {
@@ -598,7 +651,15 @@ impl Simulation {
             .iter()
             .find(|v| v.vehicle_id == delivery.vehicle_id)
             .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
-        ensure!(v.stage == VehicleStage::Stopped, "vehicle not stopped");
+        ensure!(
+            v.stage == VehicleStage::Stopped
+                && v.physics.npc.health > 0
+                && !matches!(
+                    v.physics.npc.mode,
+                    border_net::combat::NpcMode::Exiting | border_net::combat::NpcMode::Entering
+                ),
+            "traveler unavailable"
+        );
         ensure!(
             !delivery.officer_utterance.trim().is_empty()
                 && delivery.officer_utterance.len() <= 2000,

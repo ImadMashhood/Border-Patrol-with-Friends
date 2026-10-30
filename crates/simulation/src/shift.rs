@@ -137,6 +137,43 @@ impl Simulation {
                                         )
                                 })
                             })
+                            && !self.world.vehicles.iter().any(|v| {
+                                let n = &v.physics.npc;
+                                if matches!(
+                                    n.mode,
+                                    border_net::combat::NpcMode::Outside
+                                        | border_net::combat::NpcMode::Exiting
+                                        | border_net::combat::NpcMode::Entering
+                                ) && (next[0] - n.position[0]).hypot(next[2] - n.position[2])
+                                    < 0.42
+                                {
+                                    return true;
+                                }
+                                [
+                                    border_net::combat::Side::Driver,
+                                    border_net::combat::Side::Passenger,
+                                ]
+                                .into_iter()
+                                .any(|side| {
+                                    let angle = v.physics.door_angles
+                                        [border_net::combat::side_index(side)]
+                                        * if side == border_net::combat::Side::Driver {
+                                            -1.
+                                        } else {
+                                            1.
+                                        };
+                                    if angle.abs() < 0.05 {
+                                        return false;
+                                    }
+                                    let point = border_net::combat::local(v, next);
+                                    let pivot = border_net::combat::door_pivot(&v.kind, side);
+                                    let local = border_net::combat::rotate(
+                                        border_net::combat::sub(point, pivot),
+                                        -angle,
+                                    );
+                                    local[0].abs() < 0.27 && local[2] > -0.22 && local[2] < 1.37
+                                })
+                            })
                             && (self.world.door_open
                                 || !map::blocked(next[0], next[2], &closed_door))
                         {
@@ -184,6 +221,7 @@ impl Simulation {
         if self.world.queues_active {
             self.advance_vehicles(dt);
         }
+        self.tick_combat(dt);
         if elapsed > 0 {
             self.emit(
                 "world_tick",
@@ -242,6 +280,7 @@ impl Simulation {
                                 VehicleStage::Queued
                                     | VehicleStage::Stopped
                                     | VehicleStage::Resolved
+                                    | VehicleStage::Disabled
                             ) || (matches!(
                                 a.stage,
                                 VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
@@ -396,7 +435,13 @@ impl Simulation {
             .find(|p| p.peer_id == peer && p.connected && p.health > 0)
             .ok_or_else(|| anyhow::anyhow!("officer unavailable"))?;
         let v = &self.world.vehicles[i];
-        let target = vehicle::spec(&v.kind).world_point(v.position, v.yaw, point);
+        let target = if point == vehicle::VehiclePoint::Driver
+            && v.physics.npc.mode == border_net::combat::NpcMode::Outside
+        {
+            border_net::combat::add(v.physics.npc.position, [0., 1.5, 0.])
+        } else {
+            vehicle::spec(&v.kind).world_point(v.position, v.yaw, point)
+        };
         ensure!(
             (p.position[0] - target[0]).hypot(p.position[2] - target[2])
                 <= vehicle::INTERACTION_RANGE,
@@ -417,6 +462,9 @@ impl Simulation {
         );
         let i = self.owns_vehicle(peer, id)?;
         self.require_point(peer, i, point)?;
+        if point == vehicle::VehiclePoint::Passenger {
+            self.world.vehicles[i].physics.door_open[1] = true;
+        }
         if !self.world.vehicles[i].inspected_points.contains(&point) {
             self.world.vehicles[i].inspected_points.push(point);
             if point == vehicle::VehiclePoint::Cargo {
@@ -541,6 +589,10 @@ impl Simulation {
             return Ok(());
         }
         ensure!(v.stage == VehicleStage::Resolved, "case unresolved");
+        ensure!(
+            v.physics.npc.mode == border_net::combat::NpcMode::Seated && v.physics.npc.health > 0,
+            "driver must be alive and seated to depart"
+        );
         self.cases.get_mut(&id).unwrap().departure_order = self.world.latest_event_sequence + 1;
         v.stage = if v.outcome.as_ref().unwrap().decision == Decision::Admit {
             VehicleStage::DepartingAdmit
@@ -573,6 +625,8 @@ impl Simulation {
         self.world.queues_active = false;
         self.world.events_active = false;
         self.world.vehicles.clear();
+        self.world.projectiles.clear();
+        self.world.impacts.clear();
         self.world.ledger.clear();
         self.world.notices.clear();
         self.world.lane_swap = None;
@@ -588,6 +642,7 @@ impl Simulation {
         {
             p.position = map::SPAWNS[i % 2];
             p.health = 100;
+            p.weapon = border_net::combat::WeaponState::default();
             p.ready = false;
             p.hold_ms = 0;
             p.assisting = None;
@@ -730,7 +785,7 @@ mod tests {
         for (i, p) in s.world.peers.iter().enumerate() {
             assert_eq!(p.position, map::SPAWNS[i]);
             assert_eq!(p.health, 100);
-            assert_eq!(p.equipment.len(), 3);
+            assert_eq!(p.equipment.len(), 4);
         }
         assert!(s.world.vehicles.is_empty());
     }

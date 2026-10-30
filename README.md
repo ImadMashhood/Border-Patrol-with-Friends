@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). Full multiplayer acceptance/hardening remains Part 15.
+**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. Full multiplayer acceptance/hardening remains Part 15.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -216,6 +216,8 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Exit gate:** A player can discover a fair evidence path, commit one valid disposition and send the vehicle down the correct exit route.
 
 ## Part 11 — Add starting equipment, health and one resistance encounter
+
+**Implemented ahead of this milestone:** A [projectile pistol, articulated doors/windows, destructible glazing and physical NPC exit/death states](docs/COMBAT.md) are available now. The complete taser/handcuff, resistance, spectator and force-accounting requirements below remain open.
 
 **Depends on:** Part 10.
 

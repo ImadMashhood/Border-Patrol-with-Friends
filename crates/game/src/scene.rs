@@ -1689,7 +1689,13 @@ fn spawn_fleet(
         } else {
             Quat::IDENTITY
         };
-        let local = Transform::from_translation(pos).with_rotation(rotation);
+        let local = Transform::from_translation(pos)
+            .with_rotation(rotation)
+            .with_scale(if color == paint && size.z > 4. {
+                Vec3::new(1., 0.55, 1.)
+            } else {
+                Vec3::ONE
+            });
         let material = materials.add(StandardMaterial {
             base_color: color,
             metallic: if color == paint { 0.42 } else { 0. },
@@ -1707,31 +1713,11 @@ fn spawn_fleet(
         template.push((mesh.clone(), material.clone(), local, color == paint));
     };
 
-    part(Vec3::new(2.05, 0.58, 4.45), Vec3::new(0., 0.65, 0.), paint);
+    part(Vec3::new(2.05, 0.58, 4.45), Vec3::new(0., 0.5, 0.), paint);
     part(Vec3::new(1.74, 0.12, 1.88), Vec3::new(0., 1.65, 0.1), paint);
-    part(
-        Vec3::new(1.77, 0.65, 0.07),
-        Vec3::new(0., 1.28, -0.98),
-        glass,
-    );
-    part(
-        Vec3::new(1.77, 0.62, 0.07),
-        Vec3::new(0., 1.27, 1.16),
-        glass,
-    );
-    part(
-        Vec3::new(0.06, 0.62, 1.95),
-        Vec3::new(0.92, 1.27, 0.1),
-        glass,
-    );
     for z in [-0.96, 0.25, 1.15] {
         part(Vec3::new(0.1, 0.7, 0.1), Vec3::new(-0.91, 1.28, z), paint);
     }
-    part(
-        Vec3::new(0.06, 0.55, 0.78),
-        Vec3::new(-0.92, 1.24, 0.73),
-        glass,
-    );
     part(
         Vec3::new(0.06, 0.06, 0.27),
         Vec3::new(-1.05, 0.85, -0.22),
@@ -1749,31 +1735,6 @@ fn spawn_fleet(
         part(Vec3::new(0.4, 0.2, 0.06), Vec3::new(x, 0.76, 2.25), red);
     }
     part(Vec3::new(0.6, 0.18, 0.06), Vec3::new(0., 0.52, 2.32), cream);
-    part(
-        Vec3::new(0.45, 0.55, 0.35),
-        Vec3::new(-0.48, 1.02, -0.18),
-        Color::srgb(0.71, 0.46, 0.24),
-    );
-    part(
-        Vec3::new(0.28, 0.32, 0.28),
-        Vec3::new(-0.48, 1.47, -0.25),
-        Color::srgb(0.72, 0.54, 0.4),
-    );
-    part(
-        Vec3::new(0.3, 0.10, 0.3),
-        Vec3::new(-0.48, 1.66, -0.25),
-        Color::srgb(0.19, 0.16, 0.12),
-    );
-    part(
-        Vec3::new(0.08, 0.07, 0.06),
-        Vec3::new(-0.65, 1.5, -0.31),
-        dark,
-    );
-    part(
-        Vec3::new(0.18, 0.12, 0.4),
-        Vec3::new(-0.72, 1.08, -0.55),
-        Color::srgb(0.71, 0.46, 0.24),
-    );
     part(Vec3::new(0.9, 0.16, 0.04), Vec3::new(0., 0.74, -2.29), dark);
     for x in [-1.06, 1.06] {
         part(Vec3::new(0.23, 0.15, 0.28), Vec3::new(x, 1.2, -0.75), dark);

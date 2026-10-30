@@ -54,12 +54,6 @@ pub fn truck(
         perceptual_roughness: 0.85,
         ..default()
     });
-    let glass = materials.add(StandardMaterial {
-        base_color: Color::srgb(0.08, 0.19, 0.24),
-        metallic: 0.15,
-        perceptual_roughness: 0.12,
-        ..default()
-    });
     let liner = materials.add(StandardMaterial {
         base_color: Color::srgb(0.18, 0.20, 0.20),
         perceptual_roughness: 0.8,
@@ -79,8 +73,8 @@ pub fn truck(
     };
     // Long chassis, raised cab, separate hood and a real open pickup bed.
     block(
-        Vec3::new(2.24, 0.55, 6.5),
-        Vec3::new(0., 0.80, 0.),
+        Vec3::new(2.24, 0.30, 6.5),
+        Vec3::new(0., 0.65, 0.),
         paint.clone(),
     );
     block(
@@ -88,22 +82,7 @@ pub fn truck(
         Vec3::new(0., 2.18, -1.05),
         paint.clone(),
     );
-    block(
-        Vec3::new(1.91, 0.82, 0.08),
-        Vec3::new(0., 1.7, -2.1),
-        glass.clone(),
-    );
-    block(
-        Vec3::new(1.91, 0.70, 0.08),
-        Vec3::new(0., 1.7, 0.03),
-        glass.clone(),
-    );
     for x in [-1.04, 1.04] {
-        block(
-            Vec3::new(0.08, 0.77, if x > 0. { 1.8 } else { 0.55 }),
-            Vec3::new(x, 1.69, if x > 0. { -1.1 } else { -0.3 }),
-            glass.clone(),
-        );
         for z in [-2.08, -0.98, 0.02] {
             block(
                 Vec3::new(0.10, 1.08, 0.10),
@@ -201,16 +180,6 @@ pub fn truck(
         Vec3::new(0., 1.25, -0.55),
         rubber.clone(),
     );
-    block(
-        Vec3::new(0.43, 0.52, 0.35),
-        Vec3::new(-0.55, 1.4, -1.2),
-        liner.clone(),
-    );
-    block(
-        Vec3::new(0.30, 0.34, 0.30),
-        Vec3::new(-0.55, 1.88, -1.3),
-        materials.add(Color::srgb(0.70, 0.51, 0.36)),
-    );
     for x in [-1.12_f32, 1.12] {
         for z in [-2.26, 2.18] {
             for (radius, width, offset, mat) in [
@@ -241,12 +210,6 @@ pub fn truck(
             Vec3::new(0., 1.13, -2.12),
             Vec3::new(2.08, 0.10, 1.05),
             Vec3::new(0., 0., -0.52),
-        ),
-        (
-            VehiclePoint::Passenger,
-            Vec3::new(1.10, 1.2, -2.0),
-            Vec3::new(0.08, 0.56, 1.9),
-            Vec3::new(0., 0., 0.95),
         ),
     ] {
         panel(
@@ -319,12 +282,6 @@ pub fn sedan_panels(
             Vec3::new(0., 0.96, -1.05),
             Vec3::new(1.9, 0.07, 1.1),
             Vec3::new(0., 0., -0.55),
-        ),
-        (
-            VehiclePoint::Passenger,
-            Vec3::new(1.04, 0.75, -0.95),
-            Vec3::new(0.06, 0.4, 1.1),
-            Vec3::new(0., 0., 0.55),
         ),
     ] {
         panel(
@@ -411,8 +368,21 @@ pub fn interaction(
         .flat_map(|v| VehiclePoint::ALL.into_iter().map(move |point| (v, point)))
         .filter_map(|(v, point)| {
             let spec = vehicle::spec(&v.kind);
-            let stand = Vec3::from_array(spec.world_point(v.position, v.yaw, point));
-            let target = Vec3::from_array(spec.aim_point(v.position, v.yaw, point));
+            if point == VehiclePoint::Driver && v.physics.npc.health == 0 {
+                return None;
+            }
+            let outside = point == VehiclePoint::Driver
+                && v.physics.npc.mode == border_net::combat::NpcMode::Outside;
+            let stand = if outside {
+                Vec3::from_array(v.physics.npc.position)
+            } else {
+                Vec3::from_array(spec.world_point(v.position, v.yaw, point))
+            };
+            let target = if outside {
+                stand + Vec3::Y * 1.5
+            } else {
+                Vec3::from_array(spec.aim_point(v.position, v.yaw, point))
+            };
             let distance = Vec2::new(origin.x - stand.x, origin.z - stand.z).length();
             (distance <= vehicle::INTERACTION_RANGE
                 && (target - origin).normalize_or_zero().dot(direction) > 0.55)

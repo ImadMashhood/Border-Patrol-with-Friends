@@ -162,6 +162,11 @@ pub fn draw(
                     });
             });
     }
+    weapon::hud(
+        ctx,
+        &shift,
+        player.single().map(|p| p.translation).unwrap_or_default(),
+    );
     shift::draw(ctx, &mut shift);
     if g.map_open {
         site_map(
@@ -191,7 +196,7 @@ pub fn draw(
             ui.horizontal(|ui|{ui.label(egui::RichText::new(g.emotion.clone()).color(GOLD));if ui.small_button("Audio & controls").clicked(){g.settings_open = !g.settings_open;}});
             if g.settings_open {
                 tag(ui, if std::env::var("BORDER_SPEECH_URL").is_ok() {"GPU SPEECH: WHISPER TURBO / KOKORO"} else {"LIGHTWEIGHT SPEECH PROFILE"});
-                ui.checkbox(&mut g.muted,"Mute traveler voice");
+                ui.checkbox(&mut g.muted,"Mute dialogue and effects");
                 ui.horizontal(|ui|{tag(ui,"CAPTURE DEVICE");ui.text_edit_singleline(&mut g.mic_device);});
                 ui.checkbox(&mut g.mic_enabled, "Microphone on — automatic listening");
                 ui.add(egui::Slider::new(&mut g.mic_threshold, 0.003..=0.10).text("Noise threshold"));

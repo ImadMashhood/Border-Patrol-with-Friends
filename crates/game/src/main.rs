@@ -4,7 +4,9 @@ mod shift;
 mod surfaces;
 mod traffic;
 mod ui;
+mod vehicle_physics;
 mod vehicles;
+mod weapon;
 use bevy::{
     input::mouse::AccumulatedMouseMotion,
     prelude::*,
@@ -140,6 +142,8 @@ struct SmokeTest {
     capture: bool,
     interview: bool,
     lifecycle: bool,
+    combat: bool,
+    last_combat_fire: f32,
     step: u8,
     robot_step: usize,
     ready_capture: bool,
@@ -179,9 +183,10 @@ fn main() {
         tx,
         rx: Arc::new(Mutex::new(rx)),
     };
+    let combat_smoke = std::env::args().any(|a| a == "--smoke-combat");
     let lifecycle = std::env::args().any(|a| a == "--smoke-lifecycle");
     let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
-    let robot = interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
+    let robot = combat_smoke || interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
     let smoke = robot || std::env::args().any(|a| a == "--smoke-test");
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.57, 0.72, 0.82)))
@@ -189,6 +194,8 @@ fn main() {
         .insert_resource(net)
         .insert_resource(shift_state)
         .init_resource::<traffic::Traffic>()
+        .init_resource::<weapon::WeaponUi>()
+        .init_resource::<vehicle_physics::Effects>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Border Patrol with Friends • San Ignacio".into(),
@@ -209,6 +216,7 @@ fn main() {
                 shift::sync,
                 vehicles::animate,
                 controls,
+                weapon::controls,
                 receive,
                 traffic::progress,
                 traffic::dust,
@@ -217,6 +225,16 @@ fn main() {
                 .chain(),
         )
         .add_systems(Update, scene::atmosphere)
+        .add_systems(
+            Update,
+            (
+                vehicle_physics::sync,
+                vehicle_physics::effects,
+                weapon::render,
+            )
+                .chain()
+                .after(shift::sync),
+        )
         .add_systems(EguiPrimaryContextPass, (ui::landmarks, ui::draw).chain());
     if smoke {
         // Rendering smoke checks never record the room or play spoken audio.
@@ -228,6 +246,8 @@ fn main() {
             capture: false,
             interview: interview_smoke,
             lifecycle,
+            combat: combat_smoke,
+            last_combat_fire: 0.,
             step: 0,
             robot_step: 0,
             ready_capture: false,
@@ -236,7 +256,9 @@ fn main() {
         })
         .add_systems(Update, smoke_test.after(voice));
     }
-    app.run();
+    if !app.run().is_success() {
+        std::process::exit(1);
+    }
 }
 #[allow(clippy::too_many_arguments)] // Bevy system inputs are independently borrowed resources.
 fn controls(
@@ -275,9 +297,60 @@ fn controls(
                             .lanes
                             .iter()
                             .any(|l| l.lane_id == v.lane_id && l.owner == Some(me.peer_id))
-                            && v.stage == border_net::VehicleStage::Stopped
+                            && matches!(
+                                v.stage,
+                                border_net::VehicleStage::Stopped
+                                    | border_net::VehicleStage::Disabled
+                            )
                     })
                     .map(|v| {
+                        if smoke.combat {
+                            if shift.peer_id == 1
+                                && smoke.step >= 7
+                                && let Some(frame) = border_net::combat::pane_frame(
+                                    v,
+                                    border_net::combat::Pane::Windshield,
+                                )
+                            {
+                                let target = if smoke.step >= 9 {
+                                    border_net::combat::add(
+                                        frame.center,
+                                        border_net::combat::mul(frame.u, 0.4),
+                                    )
+                                } else {
+                                    frame.center
+                                };
+                                return Vec3::from_array(target);
+                            }
+                            return Vec3::from_array(if smoke.step <= 2 {
+                                border_net::combat::pane_frame(
+                                    v,
+                                    border_net::combat::Pane::DriverFront,
+                                )
+                                .map(|f| f.center)
+                                .unwrap_or_else(|| {
+                                    border_net::vehicle::spec(&v.kind).aim_point(
+                                        v.position,
+                                        v.yaw,
+                                        border_net::vehicle::VehiclePoint::Driver,
+                                    )
+                                })
+                            } else {
+                                border_net::combat::add(
+                                    v.physics.npc.position,
+                                    [
+                                        0.,
+                                        if v.physics.npc.mode == border_net::combat::NpcMode::Seated
+                                        {
+                                            1.2
+                                        } else {
+                                            1.62
+                                        },
+                                        0.,
+                                    ],
+                                )
+                            });
+                        }
                         Vec3::from_array(border_net::vehicle::spec(&v.kind).aim_point(
                             v.position,
                             v.yaw,
@@ -598,17 +671,27 @@ fn voice(mut g: ResMut<Patrol>, net: Res<Network>, shift: Res<shift::Shift>) {
                 Some(v.vehicle_id) == g.vehicle_id
                     && v.stage == border_net::VehicleStage::Stopped
                     && shift.me().is_some_and(|p| {
-                        let target = border_net::vehicle::spec(&v.kind).world_point(
+                        let window = border_net::vehicle::spec(&v.kind).world_point(
                             v.position,
                             v.yaw,
                             border_net::vehicle::VehiclePoint::Driver,
                         );
+                        let target = if v.physics.npc.mode == border_net::combat::NpcMode::Outside {
+                            v.physics.npc.position
+                        } else {
+                            window
+                        };
                         (p.position[0] - target[0]).hypot(p.position[2] - target[2])
                             <= border_net::vehicle::INTERACTION_RANGE
                     })
             })
         });
-    if !g.overlay || !in_range || g.phase != Phase::Interview || g.case.is_none() || !g.mic_enabled
+    if shift.connected && shift.me().is_none_or(|p| p.health == 0)
+        || !g.overlay
+        || !in_range
+        || g.phase != Phase::Interview
+        || g.case.is_none()
+        || !g.mic_enabled
     {
         g.mic = None;
         g.mic_active = false;
@@ -692,7 +775,7 @@ fn smoke_test(
                         .local_point(border_net::vehicle::VehiclePoint::Cargo)[2]
                 })
                 .unwrap_or(4.);
-            let route = [
+            let mut route = vec![
                 [-12., -2.],
                 [-4., -2.],
                 [-4., -4.2],
@@ -701,7 +784,13 @@ fn smoke_test(
                 [x, cargo_z],
                 [(lane - 1) as f32 * 7., cargo_z],
             ];
-            let allowed = if smoke.lifecycle && smoke.step >= 4 {
+            if smoke.combat {
+                route.truncate(5);
+                route.extend([[-3.3, -1.2], [-3.3, -4.2], [0., -4.2]]);
+            }
+            let allowed = if smoke.combat && shift.peer_id == 1 && smoke.step >= 7 {
+                8
+            } else if smoke.lifecycle && smoke.step >= 4 {
                 7
             } else {
                 5
@@ -733,6 +822,113 @@ fn smoke_test(
         *shift.controls.lock().unwrap() = controls;
     }
 
+    if smoke.combat
+        && smoke.robot_step >= 5
+        && let Some(world) = &shift.world
+        && let Some(v) = world.vehicles.iter().find(|v| {
+            world
+                .lanes
+                .iter()
+                .any(|l| l.lane_id == v.lane_id && l.owner == Some(shift.peer_id))
+        })
+    {
+        use border_net::{
+            ClientCommand as Cmd,
+            combat::{NpcMode, Pane},
+        };
+        let id = v.vehicle_id;
+        let shoot = || {
+            let t = camera.single().unwrap();
+            shift.send(Cmd::Fire {
+                direction: t.forward().to_array(),
+            });
+        };
+        let capture = |commands: &mut Commands, name: &str| {
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                    "output/combat-{name}-peer-{}.png",
+                    shift.peer_id
+                )));
+        };
+        match smoke.step {
+            0 => {
+                shift.send(Cmd::SetWeaponDrawn { drawn: true });
+                shift.send(Cmd::ToggleWindow {
+                    vehicle_id: id,
+                    pane: Pane::DriverFront,
+                });
+                smoke.step = 1;
+            }
+            1 if smoke.elapsed > 16.
+                && v.physics.glass[Pane::DriverFront.index()].lowered < 0.03
+                && shift.me().is_some_and(|p| p.weapon.drawn) =>
+            {
+                shoot();
+                smoke.step = 2;
+            }
+            2 if v.physics.glass[Pane::DriverFront.index()].shattered => {
+                capture(&mut commands, "glass");
+                smoke.step = 3;
+            }
+            3 if smoke.elapsed > 20. => {
+                if shift.peer_id == 1 {
+                    shoot();
+                } else {
+                    shift.send(Cmd::OrderExit { vehicle_id: id });
+                }
+                smoke.step = 4;
+            }
+            4 if shift.peer_id == 1
+                && v.physics.npc.health > 0
+                && smoke.elapsed > 21.
+                && smoke.elapsed - smoke.last_combat_fire > 0.4
+                && shift.me().is_some_and(|p| {
+                    p.weapon
+                        .last_fired_ms
+                        .is_none_or(|t| world.server_time_ms.saturating_sub(t) > 350)
+                }) =>
+            {
+                shoot();
+                smoke.last_combat_fire = smoke.elapsed;
+            }
+            4 if shift.peer_id == 1 && v.physics.npc.health == 0 => {
+                capture(&mut commands, "seated-death");
+                smoke.step = 7;
+            }
+            4 if shift.peer_id != 1 && v.physics.npc.mode == NpcMode::Outside => {
+                capture(&mut commands, "outside");
+                smoke.step = 5;
+            }
+            5 if smoke.elapsed > 26. => {
+                shoot();
+                smoke.step = 6;
+            }
+            6 if v.physics.npc.health == 0 => {
+                capture(&mut commands, "outside-death");
+                smoke.step = 7;
+            }
+            7 if shift.peer_id == 1 && smoke.robot_step >= 8 => {
+                shoot();
+                smoke.step = 8;
+            }
+            8 if shift.peer_id == 1
+                && !v.physics.glass[Pane::Windshield.index()].impacts.is_empty() =>
+            {
+                capture(&mut commands, "windshield-cracks");
+                smoke.step = 9;
+            }
+            9 if shift.peer_id == 1 && smoke.elapsed > 31. => {
+                shoot();
+                smoke.step = 10;
+            }
+            10 if shift.peer_id == 1 && v.physics.glass[Pane::Windshield.index()].shattered => {
+                capture(&mut commands, "windshield-shattered");
+                smoke.step = 11;
+            }
+            _ => {}
+        }
+    }
     if smoke.lifecycle
         && smoke.step == 4
         && smoke.robot_step >= 7
@@ -853,7 +1049,7 @@ fn smoke_test(
             ));
     }
     if smoke.elapsed
-        > if smoke.interview {
+        > if smoke.interview || smoke.combat {
             35.
         } else if smoke.robot {
             20.
@@ -871,6 +1067,14 @@ fn smoke_test(
         }
         if smoke.robot && !smoke.live_capture {
             error!("Ready door smoke did not complete");
+            exit.write(bevy::app::AppExit::error());
+            return;
+        }
+        if smoke.combat && smoke.step < if shift.peer_id == 1 { 11 } else { 7 } {
+            error!(
+                "Combat smoke incomplete at step {}: {}",
+                smoke.step, shift.error
+            );
             exit.write(bevy::app::AppExit::error());
             return;
         }
