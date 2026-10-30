@@ -23,7 +23,7 @@ This update extends the two-lane prototype with a host-simulated pistol, working
 | E / hold E | Talk or use the outlined object / grip a body until released |
 | Escape / Tab | Close a panel / release or recapture mouse look |
 
-The first click used to capture the mouse does not fire. UI clicks do not fire. A pistol is included in every officer's starting equipment. Weapons stay holstered in the pre-shift lobby. Normal play shows a small reticle; Tab opens the optional clipboard. Sound effects honor the dialogue/effects mute option; recording and all audio are disabled by automated graphical checks.
+The first click used to capture the mouse does not fire. UI clicks do not fire. A pistol is included in every officer's starting equipment. Weapons stay holstered in the pre-shift lobby. Normal play shows a small reticle and compact weapon/ammo HUD. Hold Tab for the equipment wheel, then select Tablet for case details. Sound effects honor the dialogue/effects mute option; recording and all audio are disabled by automated graphical checks.
 
 ## Pistol and impacts
 

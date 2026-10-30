@@ -86,3 +86,5 @@ Other review viewpoints are `yard`, `desert`, `north-road`, `cinematic`, `office
 [Projectile combat and destructible glazing](COMBAT.md) extend the sedan/pickup models with moving front doors/windows and separate physical drivers.
 
 [Six vehicle bodies and updated physics](PHYSICS.md) add detailed fittings, layered glazing, rigid fragments and articulated occupants.
+
+The [HUD/face-audio update](HUD.md) moves the misplaced service-road cactus, bushes, barrels and cones onto the roadside and increases procedural road clearance. Use `target/debug/border-game --scene-view=service-road --smoke-test` for its dedicated visual check.

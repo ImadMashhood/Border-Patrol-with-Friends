@@ -1030,7 +1030,7 @@ pub fn setup(
         }
         b.block(
             Vec3::new(0.8, 1.6, 0.5),
-            Vec3::new(-18., 0.8, -14.),
+            Vec3::new(-18., 0.8, -12.95),
             GREEN,
             true,
         );
@@ -1276,7 +1276,7 @@ pub fn setup(
             (-20., 5., 2.1),
             (-6., 18., 2.5),
             (20., 22., 3.2),
-            (-23., -16., 1.9),
+            (-29., -22., 1.9),
             (22., -24., 2.6),
             (-15., 27., 2.4),
         ] {
@@ -1551,8 +1551,8 @@ pub fn setup(
             (-5., 11.),
             (11., 12.),
             (12., 15.),
-            (-3., -16.),
-            (10., -16.),
+            (-3., -19.5),
+            (12., -19.5),
         ] {
             b.block(
                 Vec3::new(0.55, 0.06, 0.55),
@@ -1567,8 +1567,8 @@ pub fn setup(
                 GOLD,
             );
         }
-        for z in [-14., -15.] {
-            b.column(0.34, 0.9, Vec3::new(-23., 0.45, z), GREEN);
+        for z in [-20., -21.] {
+            b.column(0.34, 0.9, Vec3::new(-27., 0.45, z), GREEN);
         }
         b.column(1.1, 2.1, Vec3::new(-23., 1.05, -21.), CREAM);
         b.column(1.15, 0.12, Vec3::new(-23., 2.16, -21.), GREEN);
@@ -1609,6 +1609,7 @@ pub fn setup(
         "yard" => (Vec3::new(-4., 2.8, -15.), Vec3::new(-15., 1.1, -24.)),
         "desert" => (Vec3::new(18., 2., 26.), Vec3::new(-25., 2., 41.)),
         "landscape" => (Vec3::new(26., 6., 95.), Vec3::new(40., 18., 190.)),
+        "service-road" => (Vec3::new(-5., 2.1, -16.), Vec3::new(-40., 1., -16.)),
         "north-road" => (Vec3::new(18., 6., -30.), Vec3::new(-35., 10., -155.)),
         "rocks" => (Vec3::new(18., 1.8, 30.), Vec3::new(25., 0., 36.)),
         _ => (Vec3::new(-4.5, 1.7, -1.5), Vec3::new(0., 1.23, 2.)),
@@ -2027,6 +2028,20 @@ fn car_body() -> Mesh {
 mod tests {
     use super::*;
     use std::collections::{HashSet, VecDeque};
+    #[test]
+    fn service_road_keeps_a_clear_driving_corridor() {
+        for solid in border_net::map::collision().solids {
+            if solid.center[0] + solid.half[0] > -31.
+                && solid.center[0] - solid.half[0] < -5.
+                && solid.center[1] + solid.half[1] > 0.15
+            {
+                assert!(
+                    (solid.center[2] + 16.).abs() >= solid.half[2] + 2.,
+                    "solid obstructs service road: {solid:?}"
+                );
+            }
+        }
+    }
     #[test]
     fn static_collision_matches_the_host_map() {
         let mut app = App::new();

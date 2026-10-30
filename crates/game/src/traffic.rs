@@ -82,7 +82,7 @@ pub fn near_road(point: Vec2, margin: f32) -> bool {
         let d = p[1] - p[0];
         let t = ((center - p[0]).dot(d) / d.length_squared()).clamp(0., 1.);
         center.distance(p[0] + d * t) < margin
-    }) || (point.x < 2. && point.x > -450. && (point.y + 16.).abs() < margin * 0.35)
+    }) || (point.x < 2. && point.x > -450. && (point.y + 16.).abs() < margin)
 }
 fn person_blocks(position: Vec3, target: Vec3, person: Vec3) -> bool {
     let direction = (target - position).normalize_or_zero();

@@ -700,7 +700,7 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                     shift.send(ClientCommand::RequestPorter { lane_id: v.lane_id });
                 }
             }
-            ui.small("Tab releases the mouse for roster controls.");
+            ui.small("Hold Tab for equipment; select Tablet for records and controls.");
             if world.phase == ShiftPhase::Grace
                 && world.host_peer_id == Some(me.peer_id)
                 && ui.button("End shift / return to office").clicked()

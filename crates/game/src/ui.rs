@@ -1,7 +1,7 @@
 use super::*;
 use bevy_egui::{EguiContexts, egui};
 const INK: egui::Color32 = egui::Color32::from_rgb(225, 231, 218);
-const GOLD: egui::Color32 = egui::Color32::from_rgb(238, 191, 104);
+pub const GOLD: egui::Color32 = egui::Color32::from_rgb(238, 191, 104);
 const MUTED: egui::Color32 = egui::Color32::from_rgb(142, 165, 160);
 fn tag(ui: &mut egui::Ui, text: &str) {
     ui.label(egui::RichText::new(text).monospace().size(11.).color(MUTED));
@@ -18,29 +18,41 @@ fn primary(ui: &mut egui::Ui, label: &str) -> bool {
     )
     .clicked()
 }
+#[allow(clippy::too_many_arguments)]
 pub fn draw(
     mut contexts: EguiContexts,
     mut g: ResMut<Patrol>,
     net: Res<Network>,
-    player: Query<&Transform, With<Player>>,
+    player: Query<(&Transform, &Camera, &GlobalTransform), With<Player>>,
+    time: Res<Time>,
+    focus: Res<interactions::Focus>,
+    mut hud: ResMut<hud::Hud>,
+    mut equipment: ResMut<equipment::Equipment>,
     vehicles: Query<&traffic::Vehicle>,
     mut traffic_state: ResMut<traffic::Traffic>,
     mut shift: ResMut<shift::Shift>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
-    if !g.overlay
-        && !g.map_open
-        && !g.settings_open
-        && shift
-            .world
-            .as_ref()
-            .is_some_and(|w| w.phase != border_net::ShiftPhase::Lobby)
+    if shift
+        .world
+        .as_ref()
+        .is_some_and(|w| w.phase != border_net::ShiftPhase::Lobby || equipment.wheel || g.overlay)
     {
-        if g.looking {
-            let center = ctx.viewport_rect().center();
-            ctx.layer_painter(egui::LayerId::background())
-                .circle_stroke(center, 2.5, egui::Stroke::new(1., egui::Color32::WHITE));
-        }
+        let projection = player
+            .single()
+            .ok()
+            .map(|(_, camera, transform)| (camera, transform));
+        hud::draw(
+            ctx,
+            &mut hud,
+            &mut equipment,
+            &mut g,
+            &net,
+            &mut shift,
+            &focus,
+            time.elapsed_secs(),
+            projection,
+        );
         return Ok(());
     }
     let mut visuals = egui::Visuals::dark();
@@ -93,7 +105,7 @@ pub fn draw(
             });
         });
     egui::TopBottomPanel::bottom("footer").frame(egui::Frame::new().fill(egui::Color32::from_rgb(17,30,29)).inner_margin(egui::Margin::symmetric(25,12))).show(ctx,|ui| {
-        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE   SHIFT  JOG   M  MAP     MOUSE  LOOK     E  INTERACT     TAB  LOOK / TYPE     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
+        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE   SHIFT  JOG   M  MAP     MOUSE  LOOK     E  INTERACT     HOLD TAB  EQUIPMENT     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
             if g.phase == Phase::Interview {
                 tag(ui, if !g.mic_enabled {"MIC OFF"} else if g.mic_failed {"MIC UNAVAILABLE"} else if g.pending || g.speaking || g.speech_pending {"MIC PAUSED"} else {"MIC LISTENING"});
             }});});
@@ -180,13 +192,19 @@ pub fn draw(
     weapon::hud(
         ctx,
         &shift,
-        player.single().map(|p| p.translation).unwrap_or_default(),
+        player
+            .single()
+            .map(|(p, _, _)| p.translation)
+            .unwrap_or_default(),
     );
     shift::draw(ctx, &mut shift);
     if g.map_open {
         site_map(
             ctx,
-            player.single().map(|p| p.translation).unwrap_or_default(),
+            player
+                .single()
+                .map(|(p, _, _)| p.translation)
+                .unwrap_or_default(),
         );
     }
     if !shift.connected
@@ -452,7 +470,7 @@ pub fn landmarks(
     Ok(())
 }
 
-fn site_map(ctx: &egui::Context, position: Vec3) {
+pub fn site_map(ctx: &egui::Context, position: Vec3) {
     egui::Window::new("SAN IGNACIO / SITE MAP")
         .anchor(egui::Align2::RIGHT_BOTTOM, [-25., -80.])
         .resizable(false)

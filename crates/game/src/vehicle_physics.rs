@@ -29,7 +29,7 @@ pub struct GlassVisual {
 }
 #[derive(Component)]
 pub struct BodyPart {
-    bone: usize,
+    pub bone: usize,
 }
 #[derive(Component)]
 pub struct Debris {

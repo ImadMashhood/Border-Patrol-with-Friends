@@ -11,7 +11,9 @@ use std::{
     time::{Duration, Instant},
 };
 mod open_mic;
+mod spatial;
 pub use open_mic::{OpenMicrophone, VoiceEvent};
+pub use spatial::{SpatialVoice, speak_spatial_cancellable};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 fn temp(stem: &str, ext: &str) -> PathBuf {
@@ -170,6 +172,21 @@ impl Drop for SpeechPlayback {
         self.cancel.store(true, Ordering::Relaxed);
     }
 }
+fn voice_file(text: &str, path: &Path, scenario_id: &str) -> Result<()> {
+    let cached = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../assets/audio")
+        .join(if alternate_voice(scenario_id) {
+            "excuse-me-alternate.wav"
+        } else {
+            "excuse-me.wav"
+        });
+    if text.trim().eq_ignore_ascii_case("Excuse me?") && cached.exists() {
+        std::fs::copy(cached, path)?;
+    } else {
+        synthesize_to_file(text, path, alternate_voice(scenario_id))?;
+    }
+    Ok(())
+}
 pub fn speak(text: &str, scenario_id: &str) -> Result<()> {
     speak_cancellable(text, scenario_id, &AtomicBool::new(false))
 }
@@ -181,18 +198,7 @@ pub fn speak_cancellable(text: &str, scenario_id: &str, cancel: &AtomicBool) -> 
     }
     let path = temp("speech", "wav");
     let result = (|| {
-        let cached = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/audio")
-            .join(if alternate_voice(scenario_id) {
-                "excuse-me-alternate.wav"
-            } else {
-                "excuse-me.wav"
-            });
-        if text.trim().eq_ignore_ascii_case("Excuse me?") && cached.exists() {
-            std::fs::copy(cached, &path)?;
-        } else {
-            synthesize_to_file(text, &path, alternate_voice(scenario_id))?;
-        }
+        voice_file(text, &path, scenario_id)?;
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }

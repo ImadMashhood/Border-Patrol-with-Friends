@@ -48,6 +48,7 @@ pub fn render(
     smoke: Option<Res<SmokeTest>>,
     time: Res<Time>,
     mut ui: ResMut<WeaponUi>,
+    equipment: Res<equipment::Equipment>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -221,6 +222,8 @@ pub fn render(
 
     for (mut t, mut visible) in &mut guns {
         *visible = if me.weapon.drawn
+            && equipment.selected != equipment::Item::Tablet
+            && !patrol.overlay
             && me.health > 0
             && !smoke
                 .as_ref()
@@ -317,6 +320,7 @@ pub fn controls(
     mut ui: ResMut<WeaponUi>,
     shift: Res<shift::Shift>,
     g: Res<Patrol>,
+    equipment: Res<equipment::Equipment>,
     camera: Query<&Transform, With<Player>>,
     mut contexts: EguiContexts,
     smoke: Option<Res<SmokeTest>>,
@@ -326,6 +330,8 @@ pub fn controls(
     }
     ui.was_looking = g.looking;
     if smoke.is_some()
+        || equipment.wheel
+        || equipment.selected == equipment::Item::Tablet
         || g.overlay
         || g.settings_open
         || g.map_open
@@ -336,11 +342,6 @@ pub fn controls(
     let Ok(camera) = camera.single() else {
         return;
     };
-    if keys.just_pressed(KeyCode::KeyB) {
-        shift.send(ClientCommand::SetWeaponDrawn {
-            drawn: !shift.me().unwrap().weapon.drawn,
-        });
-    }
     if keys.just_pressed(KeyCode::KeyR) {
         shift.send(ClientCommand::Reload);
     }

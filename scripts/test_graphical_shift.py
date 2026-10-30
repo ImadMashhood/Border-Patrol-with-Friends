@@ -17,7 +17,8 @@ def free_port():
         return sock.getsockname()[1]
 
 def main():
-    casual = '--casual' in __import__('sys').argv
+    interface = '--ui' in __import__('sys').argv
+    casual = interface or '--casual' in __import__('sys').argv
     lifecycle = casual or '--lifecycle' in __import__('sys').argv
     physics = '--physics' in __import__('sys').argv
     combat = physics or '--combat' in __import__('sys').argv
@@ -50,8 +51,8 @@ def main():
                 time.sleep(.05)
         else:
             raise RuntimeError('host services failed to start')
-        a = start('border-game', ['--name=Officer-A', '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
-        b = start('border-game', ['--name=Officer-B', '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
+        a = start('border-game', ['--name=Officer-A', '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
+        b = start('border-game', ['--name=Officer-B', '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
         deadline = time.monotonic() + 75
         while time.monotonic() < deadline and (a.poll() is None or b.poll() is None):
             time.sleep(.1)
@@ -92,6 +93,18 @@ def main():
                 assert len({v['kind'] for v in worlds[0]['vehicles']})==6
                 print('PASS: real Rapier cabin ragdoll, extraction through open door, rigid glass shards, six vehicle kinds and right-button aiming capture')
             print('PASS: two graphical clients; raised windows shot out; seated and exited NPC projectile deaths; replicated gun/ammunition and door states')
+        if interface:
+            for i,world in enumerate(worlds,1):
+                m=json.loads((output/f'ui-metrics-peer-{i}.json').read_text())
+                assert all(m[k] for k in ['hud','hint','captions','wheel','tablet','decision_confirmed']),m
+                for name in ['hud','wheel','tablet','transcript','decision']:assert (output/f'ui-{name}-peer-{i}.png').exists()
+                car=next(v for v in world['vehicles'] if v['vehicle_id']==i)
+                assert car['outcome']['decision']==('admit' if i==1 else 'deny')
+                import math
+                source=m['voice_source'];npc=car['physics']['npc'];yaw=npc['yaw']
+                expected=[npc['position'][0]-.16*math.sin(yaw),npc['position'][1]+1.55,npc['position'][2]-.16*math.cos(yaw)]
+                assert math.dist(source,expected)<.12,(source,expected)
+            print('PASS: compact HUD, projected E hints, fading captions, equipment wheel, tablet records and host-confirmed approve/deny')
         if casual:
             for i in (1,2):
                 m=json.loads((output/f'casual-metrics-peer-{i}.json').read_text())

@@ -3,6 +3,7 @@ use serde::{Serialize, de::DeserializeOwned};
 #[derive(Resource)]
 pub struct Network {
     pub base: String,
+    pub spatial: Arc<Mutex<border_speech::SpatialVoice>>,
     pub token: String,
     pub tx: mpsc::Sender<(u64, NetEvent)>,
     pub rx: Arc<Mutex<mpsc::Receiver<(u64, NetEvent)>>>,
@@ -131,13 +132,45 @@ impl Network {
         let handle = border_speech::SpeechPlayback::default();
         let cancel = handle.token();
         let tx = self.tx.clone();
+        let spatial = self.spatial.clone();
         std::thread::spawn(move || {
             let fallback = text == "Excuse me?";
-            let error = border_speech::speak_cancellable(&text, &scenario_id, &cancel)
-                .err()
-                .map(|e| e.to_string());
+            let error =
+                border_speech::speak_spatial_cancellable(&text, &scenario_id, &cancel, &spatial)
+                    .err()
+                    .map(|e| e.to_string());
             let _ = tx.send((g, NetEvent::SpeechFinished { error, fallback }));
         });
         handle
+    }
+}
+
+/// Follow the displayed head bone after transform propagation, including vehicle/exit motion.
+pub fn spatial_voice(
+    net: Res<Network>,
+    g: Res<Patrol>,
+    camera: Query<&GlobalTransform, With<Player>>,
+    heads: Query<(&vehicle_physics::BodyPart, &ChildOf, &GlobalTransform)>,
+    people: Query<&vehicle_physics::Detail>,
+) {
+    let mut voice = net.spatial.lock().unwrap();
+    voice.active = false;
+    let Ok(listener) = camera.single() else {
+        return;
+    };
+    voice.listener = listener.translation().to_array();
+    voice.right = listener.right().to_array();
+    if let Some(id) = g.vehicle_id {
+        for (part, parent, face) in &heads {
+            if part.bone == 2
+                && people.get(parent.parent()).is_ok_and(|p| {
+                    p.vehicle == id && matches!(p.kind, vehicle_physics::DetailKind::Npc)
+                })
+            {
+                voice.source = (face.translation() + face.forward() * 0.16).to_array();
+                voice.active = true;
+                break;
+            }
+        }
     }
 }

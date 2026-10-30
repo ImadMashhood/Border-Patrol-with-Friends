@@ -1,0 +1,48 @@
+{
+  "rust_passed": 88,
+  "rust_ignored": 1,
+  "checks": [
+    "workspace Rust tests",
+    "Clippy -D warnings",
+    "format and whitespace checks",
+    "two real graphical clients: HUD, E labels, fading captions, wheel, tablet records, approve/deny",
+    "face source position checked against NPC head on both clients",
+    "real ffplay positional stream with SDL dummy audio",
+    "rendered service-road inspection",
+    "shared collision map consistency and clear driving corridor"
+  ],
+  "ui_clients": [
+    {
+      "captions": true,
+      "decision_confirmed": true,
+      "hint": true,
+      "hud": true,
+      "tablet": true,
+      "voice_source": [
+        -0.47999998927116394,
+        1.4000000953674316,
+        -0.4099999964237213
+      ],
+      "wheel": true
+    },
+    {
+      "captions": true,
+      "decision_confirmed": true,
+      "hint": true,
+      "hud": true,
+      "tablet": true,
+      "voice_source": [
+        6.519999980926514,
+        1.7500001192092896,
+        -1.3600000143051147
+      ],
+      "wheel": true
+    }
+  ],
+  "limitations": [
+    "Graphical checks use offline AI with microphone/playback disabled",
+    "Audio process check uses silent SDL dummy output; headphone listening remains manual",
+    "Stereo pan/distance only; no HRTF or wall occlusion",
+    "Windows desktop and RTX 2060 frame-rate certification unverified"
+  ]
+}

@@ -24,6 +24,7 @@ pub struct Target {
 #[derive(Resource, Default)]
 pub struct Focus {
     pub target: Option<Target>,
+    pub point: Option<Vec3>,
     material: Option<Handle<StandardMaterial>>,
     last_grab: f32,
 }
@@ -51,6 +52,7 @@ pub fn select(
     mut focus: ResMut<Focus>,
 ) {
     focus.target = None;
+    focus.point = None;
     if g.overlay || g.map_open || !g.looking {
         return;
     }
@@ -270,6 +272,7 @@ pub fn select(
         });
         if !obstructed {
             focus.target = Some(*target);
+            focus.point = Some(origin + dir * *distance);
         }
     }
 }

@@ -1,3 +1,5 @@
+mod equipment;
+mod hud;
 mod interactions;
 mod network;
 mod porter;
@@ -147,6 +149,8 @@ struct Solid {
 }
 #[derive(Resource)]
 struct SmokeTest {
+    interface: bool,
+    ui_step: u8,
     casual: bool,
     saw_outline: bool,
     walked_in_conversation: bool,
@@ -196,6 +200,7 @@ fn main() {
     let seed = shift_state.world.as_ref().map(|w| w.seed).unwrap_or(seed);
     let (tx, rx) = mpsc::channel();
     let net = Network {
+        spatial: Default::default(),
         base,
         token,
         tx,
@@ -203,7 +208,8 @@ fn main() {
     };
     let physics_smoke = std::env::args().any(|a| a == "--smoke-physics");
     let combat_smoke = physics_smoke || std::env::args().any(|a| a == "--smoke-combat");
-    let casual = std::env::args().any(|a| a == "--smoke-casual");
+    let interface = std::env::args().any(|a| a == "--smoke-ui");
+    let casual = interface || std::env::args().any(|a| a == "--smoke-casual");
     let lifecycle = casual || std::env::args().any(|a| a == "--smoke-lifecycle");
     let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
     let robot = combat_smoke || interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
@@ -215,6 +221,8 @@ fn main() {
         .insert_resource(shift_state)
         .init_resource::<traffic::Traffic>()
         .init_resource::<weapon::WeaponUi>()
+        .init_resource::<equipment::Equipment>()
+        .init_resource::<hud::Hud>()
         .init_resource::<interactions::Focus>()
         .init_resource::<vehicle_physics::Effects>()
         .init_resource::<vehicle_physics::ShardAssets>()
@@ -237,6 +245,7 @@ fn main() {
             (
                 shift::sync,
                 vehicles::animate,
+                equipment::input,
                 controls,
                 interactions::select,
                 interactions::input,
@@ -245,10 +254,15 @@ fn main() {
                 traffic::progress,
                 traffic::dust,
                 voice,
+                hud::update,
             )
                 .chain(),
         )
         .add_systems(Update, scene::atmosphere)
+        .add_systems(
+            PostUpdate,
+            network::spatial_voice.after(bevy::transform::TransformSystems::Propagate),
+        )
         .add_systems(
             Update,
             (
@@ -257,6 +271,7 @@ fn main() {
                 vehicle_physics::physical_shards,
                 weapon::render,
                 porter::render,
+                equipment::render,
                 interactions::outlines,
             )
                 .chain()
@@ -272,6 +287,8 @@ fn main() {
             patrol.looking = true;
         }
         app.insert_resource(SmokeTest {
+            interface,
+            ui_step: 0,
             casual,
             saw_outline: false,
             walked_in_conversation: false,
@@ -309,7 +326,7 @@ fn controls(
     motion: Res<AccumulatedMouseMotion>,
     time: Res<Time>,
     mut g: ResMut<Patrol>,
-    _net: Res<Network>,
+    equipment: Res<equipment::Equipment>,
     mut player: Query<(&mut Transform, &mut Player)>,
     solids: Query<(&Transform, &Solid), Without<Player>>,
     mut cursor: Single<&mut CursorOptions>,
@@ -436,12 +453,13 @@ fn controls(
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {
+        let resume = g.overlay;
         g.overlay = false;
         shift.inspection = None;
-        g.looking = false;
+        g.looking = resume;
         g.settings_open = false;
     }
-    if !g.overlay {
+    if !g.overlay && !equipment.wheel {
         if keys.just_pressed(KeyCode::Digit1) {
             shift.send(border_net::ClientCommand::ClaimLane { lane_id: 1 });
         }
@@ -489,14 +507,10 @@ fn controls(
     if keys.just_pressed(KeyCode::KeyM) && !g.overlay && !g.settings_open {
         g.map_open = !g.map_open;
     }
-    if keys.just_pressed(KeyCode::Tab) {
-        g.overlay = !g.overlay;
-        g.looking = !g.overlay;
-        g.request_focus = g.overlay;
-    }
     if (mouse.just_pressed(MouseButton::Left)
         || mouse.just_pressed(MouseButton::Right) && shift.me().is_some_and(|p| p.weapon.drawn))
         && !g.overlay
+        && !equipment.wheel
         && !gui.ctx_mut().is_ok_and(|ctx| ctx.is_pointer_over_area())
     {
         g.looking = true;
@@ -847,6 +861,8 @@ fn smoke_test(
     net: Res<Network>,
     mut shift: ResMut<shift::Shift>,
     focus: Res<interactions::Focus>,
+    mut equipment: ResMut<equipment::Equipment>,
+    hud: Res<hud::Hud>,
 ) {
     smoke.saw_outline |= focus.target.is_some();
     if smoke.casual && g.case.is_some() && !g.overlay && smoke.robot_step >= 6 {
@@ -932,6 +948,9 @@ fn smoke_test(
                 [x, cargo_z],
                 [(lane - 1) as f32 * 7., cargo_z],
             ];
+            if smoke.interface {
+                route.extend([[x, cargo_z], [x, -1.2]]);
+            }
             if smoke.combat {
                 route.truncate(5);
                 route.extend([
@@ -951,7 +970,9 @@ fn smoke_test(
                 controls.yaw = camera.single().unwrap().rotation.to_euler(EulerRot::YXZ).0;
                 controls.pitch = camera.single().unwrap().rotation.to_euler(EulerRot::YXZ).1;
             }
-            let allowed = if smoke.physics && shift.peer_id == 1 && smoke.step >= 12 {
+            let allowed = if smoke.interface && smoke.elapsed > 36. {
+                9
+            } else if smoke.physics && shift.peer_id == 1 && smoke.step >= 12 {
                 13
             } else if smoke.physics && shift.peer_id == 1 && smoke.step >= 11 {
                 11
@@ -1296,8 +1317,88 @@ fn smoke_test(
                 },
             ));
     }
+    if smoke.interface {
+        let now = smoke.elapsed;
+        let shot = match smoke.ui_step {
+            0 if !g.history.is_empty() && hud.visible_captions(time.elapsed_secs()) => {
+                smoke.ui_step = 1;
+                Some("hud")
+            }
+            1 if now > 32. => {
+                equipment.wheel = true;
+                equipment.hover = equipment::Item::Tablet;
+                g.looking = false;
+                smoke.ui_step = 2;
+                None
+            }
+            2 if now > 32.7 => {
+                smoke.ui_step = 3;
+                Some("wheel")
+            }
+            3 if now > 33. => {
+                equipment.equip(equipment::Item::Tablet, &mut g, &shift);
+                equipment.page = 0;
+                smoke.ui_step = 4;
+                None
+            }
+            4 if now > 34. => {
+                smoke.ui_step = 5;
+                Some("tablet")
+            }
+            5 if now > 35. => {
+                equipment.page = 1;
+                smoke.ui_step = 6;
+                None
+            }
+            6 if now > 35.7 => {
+                smoke.ui_step = 7;
+                Some("transcript")
+            }
+            7 if now > 40. && smoke.robot_step >= 9 => {
+                let id = shift.peer_id;
+                let disposition = if id == 1 {
+                    border_net::Disposition::Admit
+                } else {
+                    border_net::Disposition::Deny
+                };
+                assert!(
+                    hud::submit_decision(
+                        &mut equipment,
+                        &shift,
+                        id,
+                        disposition,
+                        time.elapsed_secs()
+                    ),
+                    "tablet decision controller rejected nearby assigned driver"
+                );
+                smoke.ui_step = 8;
+                None
+            }
+            8 if now > 41.
+                && shift.world.as_ref().is_some_and(|w| {
+                    w.vehicles
+                        .iter()
+                        .any(|v| v.vehicle_id == shift.peer_id && v.outcome.is_some())
+                }) =>
+            {
+                smoke.ui_step = 9;
+                Some("decision")
+            }
+            _ => None,
+        };
+        if let Some(name) = shot {
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                    "output/ui-{name}-peer-{}.png",
+                    shift.peer_id
+                )));
+        }
+    }
     if smoke.elapsed
-        > if smoke.physics {
+        > if smoke.interface {
+            43.
+        } else if smoke.physics {
             50.
         } else if smoke.interview || smoke.combat {
             35.
@@ -1314,6 +1415,19 @@ fn smoke_test(
                 serde_json::to_string_pretty(world).unwrap(),
             )
             .ok();
+        }
+        if smoke.interface {
+            assert!(
+                smoke.ui_step == 9
+                    && hud.drew_hud
+                    && hud.drew_hint
+                    && hud.drew_captions
+                    && hud.drew_wheel
+                    && hud.drew_tablet
+            );
+            std::fs::write(format!("output/ui-metrics-peer-{}.json",shift.peer_id),serde_json::json!({"hud":hud.drew_hud,"hint":hud.drew_hint,"captions":hud.drew_captions,"wheel":hud.drew_wheel,"tablet":hud.drew_tablet,"decision_confirmed":smoke.ui_step==9,"voice_source":net.spatial.lock().unwrap().source}).to_string()).unwrap();
+            g.overlay = false;
+            g.looking = true;
         }
         if smoke.casual {
             std::fs::write(format!("output/casual-metrics-peer-{}.json",shift.peer_id),serde_json::json!({"outline":smoke.saw_outline,"walked_in_conversation":smoke.walked_in_conversation,"overlay":g.overlay,"looking":g.looking}).to_string()).unwrap();
@@ -1417,6 +1531,7 @@ mod tests {
         ))
         .unwrap();
         let network = Network {
+            spatial: Default::default(),
             base: format!("http://{address}"),
             token: "test-token".into(),
             tx,
@@ -1477,6 +1592,7 @@ mod tests {
         ))
         .unwrap();
         let network = Network {
+            spatial: Default::default(),
             base: String::new(),
             token: String::new(),
             tx,
