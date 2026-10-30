@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "playful",
     "compliance_bounds": "Happy to humor the officer or repeat an absurd denial as a joke if it gets him to the gig. Can say the requested words without immediately retracting them. Draws the line at cruelty, real harm, and fabricated criminal admissions.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 85,
+      "boldness": 60,
+      "integrity": 45,
+      "aggression": 20,
+      "sociability": 90,
+      "greed": 35,
+      "pride": 65
+    }
   },
   "truth": {
     "purpose": "Play an unpaid gig with friends at the Lantern venue.",

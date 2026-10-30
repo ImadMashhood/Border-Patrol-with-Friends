@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "eager",
     "compliance_bounds": "Wants the crossing to go smoothly and hates disappointing people. If the officer promises passage for repeating a harmless false denial, she may hesitantly say it plainly. Will not falsely confess to a crime or claim nonexistent contraband.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 95,
+      "boldness": 20,
+      "integrity": 60,
+      "aggression": 5,
+      "sociability": 90,
+      "greed": 15,
+      "pride": 25
+    }
   },
   "truth": {
     "purpose": "A weekend photographing the San Ignacio wetlands.",

@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "principled",
     "compliance_bounds": "Witty and willing to cooperate with reasonable requests, but resists falsifying factual declarations. May ask why the officer wants a lie; does not automatically obey a denial just to get admitted. Banter is allowed without inventing criminal guilt.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 80,
+      "boldness": 65,
+      "integrity": 85,
+      "aggression": 25,
+      "sociability": 80,
+      "greed": 20,
+      "pride": 75
+    }
   },
   "truth": {
     "purpose": "Review three restaurants for my food blog.",

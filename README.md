@@ -13,6 +13,8 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Build status:** Parts 1–10 implemented and integrated. [Parts 7–10 controls, contracts and validation](docs/PARTS_7_10.md) cover seeded characters, trusted dialogue, local voice, compartment searches and evidence-based disposition. Reference hardware frame-rate certification, physical audio playtests and Windows capture remain explicit later acceptance work. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. [Smooth movement, aiming, constrained skeletons, connected vehicle assemblies and physical glass](docs/PHYSICS.md) extend that prototype. Full multiplayer acceptance/hardening remains Part 15.
 
+**Latest interaction update:** [Casual E conversations, white outlines, repeatable hold-E body handling, seated recovery porters and character psychology](docs/CONVERSATION.md). Talking opens no UI and leaves movement free; Tab opens the optional clipboard. Windows start raised and travelers lower them on approach. Provider failures produce a spoken “Excuse me?”.
+
 ## Part 1 — Freeze the technical scope and acceptance contract
 
 **Depends on:** None.

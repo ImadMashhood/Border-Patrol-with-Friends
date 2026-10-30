@@ -326,7 +326,7 @@ pub fn animate(
                     && if let Some(location) = p.compartment {
                         v.searched_compartments.contains(&location)
                     } else {
-                        v.inspected_points.contains(&p.point)
+                        v.open_panels.contains(&p.point)
                     }
             })
         });
@@ -501,6 +501,11 @@ pub fn dressing(
                 Transform::from_translation(pos),
             ))
             .id();
+        if kind == "utility_truck" && pos.z > 3.4 {
+            commands.entity(e).insert(interactions::TrailerPiece(
+                1 + lane as u64 + ordinal as u64 * 2,
+            ));
+        }
         commands.entity(root).add_child(e);
     };
     for (center, half) in vehicle::assembly_boxes(kind) {

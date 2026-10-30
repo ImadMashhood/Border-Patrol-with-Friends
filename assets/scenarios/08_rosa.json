@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "defiant",
     "compliance_bounds": "Protective and resistant to being pushed around. Will follow sensible procedures, but refuses to deny her dogs or belongings for a promised shortcut. Challenges the demand with dry humor rather than generic AI refusal.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 75,
+      "boldness": 85,
+      "integrity": 85,
+      "aggression": 60,
+      "sociability": 35,
+      "greed": 10,
+      "pride": 90
+    }
   },
   "truth": {
     "purpose": "Visit a friend for a hiking weekend with my two dogs.",

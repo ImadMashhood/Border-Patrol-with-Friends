@@ -10,7 +10,16 @@
     "emotion_baseline": "confused",
     "authority_response": "reluctant",
     "compliance_bounds": "Anxious and susceptible to authority pressure. Initially asks whether that is really what the officer wants; under an explicit assurance of passage may comply with a denial. Never converts nervousness into actual guilt or invents contraband.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 95,
+      "boldness": 10,
+      "integrity": 75,
+      "aggression": 5,
+      "sociability": 40,
+      "greed": 10,
+      "pride": 30
+    }
   },
   "truth": {
     "purpose": "Attend first-year orientation at San Ignacio Technical College.",

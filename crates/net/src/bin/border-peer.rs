@@ -64,6 +64,8 @@ fn main() -> Result<()> {
                     yaw: std::f32::consts::PI,
                     jog: false,
                     ready_held,
+                    grab_held: false,
+                    pitch: 0.,
                 })
                 .send();
         }

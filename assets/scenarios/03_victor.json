@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "opportunistic",
     "compliance_bounds": "Readily adopts wording that gets him admitted, including denying belongings when told that is the price of passage. Charming compliance can contradict his prior claims; cargo and documents remain real. Refuses to volunteer a new criminal confession without evidence.",
-    "bribery_capable": true
+    "bribery_capable": true,
+    "psychology": {
+      "survival": 90,
+      "boldness": 65,
+      "integrity": 20,
+      "aggression": 30,
+      "sociability": 80,
+      "greed": 90,
+      "pride": 70
+    }
   },
   "truth": {
     "purpose": "Deliver three crates of undeclared antiques for sale at Hale Gallery.",

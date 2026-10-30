@@ -1,4 +1,6 @@
+mod interactions;
 mod network;
+mod porter;
 mod prediction;
 mod scene;
 mod shift;
@@ -38,6 +40,7 @@ struct Patrol {
     seed: u64,
     phase: Phase,
     case: Option<PublicCase>,
+    conversation_confirmed: bool,
     history: Vec<Turn>,
     evidence: Vec<Evidence>,
     input: String,
@@ -77,6 +80,7 @@ impl Patrol {
             seed,
             phase: Phase::Approach,
             case: None,
+            conversation_confirmed: false,
             history: vec![],
             evidence: vec![],
             input: String::new(),
@@ -110,6 +114,7 @@ impl Patrol {
     }
     fn reset_case(&mut self) {
         self.case = None;
+        self.conversation_confirmed = false;
         self.history.clear();
         self.evidence.clear();
         self.input.clear();
@@ -142,6 +147,11 @@ struct Solid {
 }
 #[derive(Resource)]
 struct SmokeTest {
+    casual: bool,
+    saw_outline: bool,
+    walked_in_conversation: bool,
+    grip_repeated: bool,
+    porter_seen: bool,
     elapsed: f32,
     capture: bool,
     interview: bool,
@@ -193,7 +203,8 @@ fn main() {
     };
     let physics_smoke = std::env::args().any(|a| a == "--smoke-physics");
     let combat_smoke = physics_smoke || std::env::args().any(|a| a == "--smoke-combat");
-    let lifecycle = std::env::args().any(|a| a == "--smoke-lifecycle");
+    let casual = std::env::args().any(|a| a == "--smoke-casual");
+    let lifecycle = casual || std::env::args().any(|a| a == "--smoke-lifecycle");
     let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
     let robot = combat_smoke || interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
     let smoke = robot || std::env::args().any(|a| a == "--smoke-test");
@@ -204,6 +215,7 @@ fn main() {
         .insert_resource(shift_state)
         .init_resource::<traffic::Traffic>()
         .init_resource::<weapon::WeaponUi>()
+        .init_resource::<interactions::Focus>()
         .init_resource::<vehicle_physics::Effects>()
         .init_resource::<vehicle_physics::ShardAssets>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -226,6 +238,8 @@ fn main() {
                 shift::sync,
                 vehicles::animate,
                 controls,
+                interactions::select,
+                interactions::input,
                 weapon::controls,
                 receive,
                 traffic::progress,
@@ -242,6 +256,8 @@ fn main() {
                 vehicle_physics::effects,
                 vehicle_physics::physical_shards,
                 weapon::render,
+                porter::render,
+                interactions::outlines,
             )
                 .chain()
                 .after(voice),
@@ -252,7 +268,15 @@ fn main() {
         let mut patrol = app.world_mut().resource_mut::<Patrol>();
         patrol.mic_enabled = false;
         patrol.muted = true;
+        if casual {
+            patrol.looking = true;
+        }
         app.insert_resource(SmokeTest {
+            casual,
+            saw_outline: false,
+            walked_in_conversation: false,
+            grip_repeated: false,
+            porter_seen: false,
             elapsed: 0.,
             capture: false,
             interview: interview_smoke,
@@ -285,7 +309,7 @@ fn controls(
     motion: Res<AccumulatedMouseMotion>,
     time: Res<Time>,
     mut g: ResMut<Patrol>,
-    net: Res<Network>,
+    _net: Res<Network>,
     mut player: Query<(&mut Transform, &mut Player)>,
     solids: Query<(&Transform, &Solid), Without<Player>>,
     mut cursor: Single<&mut CursorOptions>,
@@ -322,6 +346,12 @@ fn controls(
                             )
                     })
                     .map(|v| {
+                        if smoke.physics
+                            && smoke.step >= 16
+                            && let Some(worker) = world.porters.iter().find(|p| p.lane_id == 1)
+                        {
+                            return Vec3::from_array(worker.position) + Vec3::Y * 1.2;
+                        }
                         if smoke.combat {
                             if smoke.physics
                                 && smoke.step >= 11
@@ -376,6 +406,9 @@ fn controls(
                                 )
                             });
                         }
+                        if smoke.casual && smoke.step < 4 {
+                            return Vec3::from_array(v.physics.npc.position) + Vec3::Y * 1.55;
+                        }
                         Vec3::from_array(border_net::vehicle::spec(&v.kind).aim_point(
                             v.position,
                             v.yaw,
@@ -393,9 +426,13 @@ fn controls(
             p.yaw = yaw;
             p.pitch = pitch;
         }
-        g.looking = false;
-        cursor.visible = true;
-        cursor.grab_mode = CursorGrabMode::None;
+        g.looking = smoke.casual;
+        cursor.visible = !smoke.casual;
+        cursor.grab_mode = if smoke.casual {
+            CursorGrabMode::Locked
+        } else {
+            CursorGrabMode::None
+        };
         return;
     }
     if keys.just_pressed(KeyCode::Escape) {
@@ -453,7 +490,9 @@ fn controls(
         g.map_open = !g.map_open;
     }
     if keys.just_pressed(KeyCode::Tab) {
-        g.looking = !g.looking;
+        g.overlay = !g.overlay;
+        g.looking = !g.overlay;
+        g.request_focus = g.overlay;
     }
     if (mouse.just_pressed(MouseButton::Left)
         || mouse.just_pressed(MouseButton::Right) && shift.me().is_some_and(|p| p.weapon.drawn))
@@ -507,6 +546,8 @@ fn controls(
                 yaw: p.yaw,
                 jog: keys.pressed(KeyCode::ShiftLeft),
                 ready: holding,
+                grab_held: keys.pressed(KeyCode::KeyE),
+                pitch: p.pitch,
             };
             if time.elapsed_secs() - shift.prediction.received_at < 0.25
                 && shift.me().is_some_and(|p| p.health > 0)
@@ -550,35 +591,6 @@ fn controls(
         });
         shift.interaction = hit;
         g.aiming = hit.is_some();
-        if keys.just_pressed(KeyCode::KeyE)
-            && !g.pending
-            && !g.overlay
-            && let Some((id, point)) = hit
-        {
-            g.looking = false;
-            if point == border_net::vehicle::VehiclePoint::Driver {
-                shift.inspection = None;
-                if g.vehicle_id != Some(id) {
-                    g.reset_case();
-                }
-                g.overlay = true;
-                g.request_focus = true;
-                if g.case.is_none() {
-                    g.pending = true;
-                    g.error.clear();
-                    g.vehicle_id = Some(id);
-                    net.start(g.generation, id.to_string());
-                } else {
-                    g.phase = Phase::Interview;
-                }
-            } else {
-                shift.inspection = Some((id, point));
-                shift.send(border_net::ClientCommand::InspectVehiclePoint {
-                    vehicle_id: id,
-                    point,
-                });
-            }
-        }
     } else {
         // Scene previews never open provider sessions.
         let _ = cars;
@@ -617,7 +629,15 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
         match event {
             NetEvent::Started(case) => {
                 g.subtitle = case.opening_line.clone();
-                if !g.muted {
+                let resumed = shift
+                    .as_ref()
+                    .and_then(|s| s.world.as_ref())
+                    .is_some_and(|w| {
+                        w.vehicles
+                            .iter()
+                            .any(|v| Some(v.vehicle_id) == g.vehicle_id && !v.history.is_empty())
+                    });
+                if !g.muted && !resumed {
                     g.speaking = true;
                     g.playback = Some(net.speak(
                         g.generation,
@@ -629,7 +649,9 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.case = Some(case);
                 g.phase = Phase::Interview;
                 g.pending = false;
-                g.request_focus = true;
+                g.request_focus = false;
+                g.overlay = false;
+                g.looking = true;
             }
             NetEvent::Reply(q, r) => {
                 g.subtitle = r.dialogue.clone();
@@ -639,6 +661,7 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                         officer: q,
                         traveler: r.dialogue.clone(),
                         emotion: r.emotion.clone(),
+                        physical: Default::default(),
                     });
                 }
                 g.pending = false;
@@ -672,14 +695,38 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.subtitle.clear();
             }
             NetEvent::TurnFailed { message, question } => {
-                g.error = message;
+                let _ = message;
                 g.input = question;
                 g.pending = false;
                 g.speech_pending = false;
-                g.request_focus = true;
+                if let Some(scenario) = g.case.as_ref().map(|c| c.scenario_id.clone()) {
+                    if !g.muted {
+                        g.speaking = true;
+                        g.playback = Some(net.speak(g.generation, "Excuse me?".into(), scenario));
+                    }
+                    g.subtitle = "Excuse me?".into();
+                }
             }
             NetEvent::Error(e) => {
-                g.error = e;
+                if !g.overlay && g.vehicle_id.is_some() && g.case.is_none() {
+                    let available = shift
+                        .as_ref()
+                        .and_then(|s| s.world.as_ref().map(|w| (s.peer_id, w)))
+                        .is_none_or(|(peer, w)| {
+                            w.vehicles.iter().any(|v| {
+                                Some(v.vehicle_id) == g.vehicle_id
+                                    && v.physics.npc.health > 0
+                                    && v.conversation_owner.is_none_or(|owner| owner == peer)
+                            })
+                        });
+                    if available && !g.muted {
+                        g.speaking = true;
+                        g.playback =
+                            Some(net.speak(g.generation, "Excuse me?".into(), String::new()));
+                    }
+                } else {
+                    g.error = e;
+                }
                 g.pending = false;
                 g.speech_pending = false;
             }
@@ -709,6 +756,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                     }
                 }
                 border_speech::VoiceEvent::Error(e) => {
+                    if g.phase == Phase::Interview && !g.muted && !g.speaking {
+                        g.speaking = true;
+                        g.playback =
+                            Some(net.speak(g.generation, "Excuse me?".into(), String::new()));
+                    }
                     g.mic_error = e;
                     g.mic_failed = true;
                     g.mic = None;
@@ -716,10 +768,15 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                     g.speech_pending = false;
                 }
             },
-            NetEvent::SpeechFinished(error) => {
+            NetEvent::SpeechFinished { error, fallback } => {
                 g.speaking = false;
                 if let Some(e) = error {
                     g.error = e;
+                    if !fallback && !g.muted && g.phase == Phase::Interview {
+                        g.speaking = true;
+                        g.playback =
+                            Some(net.speak(g.generation, "Excuse me?".into(), String::new()));
+                    }
                 }
             }
         }
@@ -731,24 +788,27 @@ fn voice(mut g: ResMut<Patrol>, net: Res<Network>, shift: Res<shift::Shift>) {
             w.vehicles.iter().any(|v| {
                 Some(v.vehicle_id) == g.vehicle_id
                     && v.stage == border_net::VehicleStage::Stopped
+                    && v.conversation_owner == Some(shift.peer_id)
                     && shift.me().is_some_and(|p| {
                         let window = border_net::vehicle::spec(&v.kind).world_point(
                             v.position,
                             v.yaw,
                             border_net::vehicle::VehiclePoint::Driver,
                         );
-                        let target = if v.physics.npc.mode == border_net::combat::NpcMode::Outside {
+                        let target = if matches!(
+                            v.physics.npc.mode,
+                            border_net::combat::NpcMode::Outside
+                                | border_net::combat::NpcMode::Fleeing
+                        ) {
                             v.physics.npc.position
                         } else {
                             window
                         };
-                        (p.position[0] - target[0]).hypot(p.position[2] - target[2])
-                            <= border_net::vehicle::INTERACTION_RANGE
+                        (p.position[0] - target[0]).hypot(p.position[2] - target[2]) <= 8.0
                     })
             })
         });
     if shift.connected && shift.me().is_none_or(|p| p.health == 0)
-        || !g.overlay
         || !in_range
         || g.phase != Phase::Interview
         || g.case.is_none()
@@ -786,7 +846,12 @@ fn smoke_test(
     mut g: ResMut<Patrol>,
     net: Res<Network>,
     mut shift: ResMut<shift::Shift>,
+    focus: Res<interactions::Focus>,
 ) {
+    smoke.saw_outline |= focus.target.is_some();
+    if smoke.casual && g.case.is_some() && !g.overlay && smoke.robot_step >= 6 {
+        smoke.walked_in_conversation = true;
+    }
     smoke.elapsed += time.delta_secs();
     if let Some(world) = &shift.world {
         smoke.max_shards = smoke.max_shards.max(world.shards.len());
@@ -877,8 +942,18 @@ fn smoke_test(
                     [-3.3, -0.25],
                     [-1.6, -0.25],
                 ]);
+                if smoke.physics {
+                    route.extend([[-3.2, -0.25], [-4.5, 1.0]]);
+                }
             }
-            let allowed = if smoke.physics && shift.peer_id == 1 && smoke.step >= 11 {
+            if smoke.physics && shift.peer_id == 1 && matches!(smoke.step, 12 | 15) {
+                controls.grab_held = true;
+                controls.yaw = camera.single().unwrap().rotation.to_euler(EulerRot::YXZ).0;
+                controls.pitch = camera.single().unwrap().rotation.to_euler(EulerRot::YXZ).1;
+            }
+            let allowed = if smoke.physics && shift.peer_id == 1 && smoke.step >= 12 {
+                13
+            } else if smoke.physics && shift.peer_id == 1 && smoke.step >= 11 {
                 11
             } else if smoke.combat && shift.peer_id == 1 && smoke.step >= 7 {
                 8
@@ -944,7 +1019,10 @@ fn smoke_test(
                 )));
         };
         match smoke.step {
-            0 if v.stage == border_net::VehicleStage::Stopped => {
+            0 if v.stage == border_net::VehicleStage::Stopped
+                && smoke.elapsed > 15.
+                && v.physics.glass[Pane::DriverFront.index()].target_down =>
+            {
                 shift.send(Cmd::SetWeaponDrawn { drawn: true });
                 shift.send(Cmd::ToggleWindow {
                     vehicle_id: id,
@@ -1019,12 +1097,42 @@ fn smoke_test(
                 smoke.step = 11;
             }
             11 if smoke.physics && shift.peer_id == 1 && smoke.robot_step >= 11 => {
-                shift.send(Cmd::PullBody { vehicle_id: id });
+                shift.send(Cmd::GrabBody {
+                    vehicle_id: id,
+                    bone: 1,
+                });
                 smoke.step = 12;
             }
             12 if smoke.physics && v.physics.npc.extracted && smoke.elapsed > 42. => {
                 capture(&mut commands, "extracted-ragdoll");
+                shift.send(Cmd::ReleaseBody);
                 smoke.step = 13;
+            }
+            13 if smoke.physics && smoke.elapsed > 43. && v.physics.npc.body_holder.is_none() => {
+                shift.send(Cmd::GrabBody {
+                    vehicle_id: id,
+                    bone: 1,
+                });
+                smoke.step = 15;
+            }
+            15 if smoke.physics
+                && smoke.elapsed > 45.
+                && v.physics.npc.body_holder == Some(shift.peer_id) =>
+            {
+                smoke.grip_repeated = true;
+                shift.send(Cmd::ReleaseBody);
+                shift.send(Cmd::RequestPorter { lane_id: v.lane_id });
+                smoke.step = 16;
+            }
+            16 if smoke.physics
+                && smoke.elapsed > 46.
+                && world.porters.iter().any(|p| {
+                    p.lane_id == v.lane_id && p.phase != border_net::PorterPhase::Seated
+                }) =>
+            {
+                smoke.porter_seen = true;
+                capture(&mut commands, "porter-running");
+                smoke.step = 17;
             }
             _ => {}
         }
@@ -1082,8 +1190,22 @@ fn smoke_test(
                 shift.peer_id
             )));
     }
+    if smoke.casual && smoke.step == 0 && g.case.is_some() && !g.pending {
+        assert!(
+            g.looking && !g.overlay,
+            "casual dialogue must not capture movement or open UI"
+        );
+        commands
+            .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+            .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                "output/casual-peer-{}.png",
+                shift.peer_id
+            )));
+        smoke.step = 1;
+    }
     if smoke.interview {
-        if smoke.step == 0
+        if !smoke.casual
+            && smoke.step == 0
             && smoke.robot_step >= 5
             && let Some(world) = &shift.world
             && let Some(vehicle) = world
@@ -1193,8 +1315,11 @@ fn smoke_test(
             )
             .ok();
         }
+        if smoke.casual {
+            std::fs::write(format!("output/casual-metrics-peer-{}.json",shift.peer_id),serde_json::json!({"outline":smoke.saw_outline,"walked_in_conversation":smoke.walked_in_conversation,"overlay":g.overlay,"looking":g.looking}).to_string()).unwrap();
+        }
         if smoke.physics {
-            std::fs::write(format!("output/physics-metrics-peer-{}.json",shift.peer_id),serde_json::to_string_pretty(&serde_json::json!({"max_shards":smoke.max_shards,"ads_capture":smoke.ads_capture})).unwrap()).unwrap();
+            std::fs::write(format!("output/physics-metrics-peer-{}.json",shift.peer_id),serde_json::to_string_pretty(&serde_json::json!({"max_shards":smoke.max_shards,"ads_capture":smoke.ads_capture,"grip_repeated":smoke.grip_repeated,"porter_seen":smoke.porter_seen})).unwrap()).unwrap();
         }
         if smoke.robot && !smoke.live_capture {
             error!("Ready door smoke did not complete");

@@ -17,7 +17,8 @@ def free_port():
         return sock.getsockname()[1]
 
 def main():
-    lifecycle = '--lifecycle' in __import__('sys').argv
+    casual = '--casual' in __import__('sys').argv
+    lifecycle = casual or '--lifecycle' in __import__('sys').argv
     physics = '--physics' in __import__('sys').argv
     combat = physics or '--combat' in __import__('sys').argv
     subprocess.run(['cargo', 'build', '--locked', '-p', 'border-game', '-p', 'border-caller-server'], cwd=ROOT, check=True)
@@ -49,8 +50,8 @@ def main():
                 time.sleep(.05)
         else:
             raise RuntimeError('host services failed to start')
-        a = start('border-game', ['--name=Officer-A', '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
-        b = start('border-game', ['--name=Officer-B', '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
+        a = start('border-game', ['--name=Officer-A', '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
+        b = start('border-game', ['--name=Officer-B', '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
         deadline = time.monotonic() + 75
         while time.monotonic() < deadline and (a.poll() is None or b.poll() is None):
             time.sleep(.1)
@@ -70,7 +71,8 @@ def main():
             for i,world in enumerate(worlds,1):
                 head=next(v for v in world['vehicles'] if v['vehicle_id']==i)
                 assert head['physics']['glass'][2]['shattered']
-                assert head['physics']['npc']['health']==0 and head['stage']=='disabled'
+                assert head['physics']['npc']['health']==0
+                assert head['stage'] in (('recovering', 'detained') if physics and i==1 else ('disabled',))
                 assert head['physics']['npc']['died_seated']==(i==1 and not physics)
                 assert (output/f'combat-glass-peer-{i}.png').exists()
             assert (output/'combat-outside-peer-2.png').exists()
@@ -84,10 +86,18 @@ def main():
             if physics:
                 assert worlds[0]['vehicles'][0]['physics']['npc']['extracted']
                 assert (output/'combat-extracted-ragdoll-peer-1.png').exists()
-                assert json.loads((output/'physics-metrics-peer-1.json').read_text())['max_shards']>=24
+                metrics=json.loads((output/'physics-metrics-peer-1.json').read_text())
+                assert metrics['max_shards']>=24
+                assert metrics['grip_repeated'] and metrics['porter_seen'], metrics
                 assert len({v['kind'] for v in worlds[0]['vehicles']})==6
                 print('PASS: real Rapier cabin ragdoll, extraction through open door, rigid glass shards, six vehicle kinds and right-button aiming capture')
             print('PASS: two graphical clients; raised windows shot out; seated and exited NPC projectile deaths; replicated gun/ammunition and door states')
+        if casual:
+            for i in (1,2):
+                m=json.loads((output/f'casual-metrics-peer-{i}.json').read_text())
+                assert m['outline'] and m['walked_in_conversation'] and not m['overlay'] and m['looking'], m
+                assert (output/f'casual-peer-{i}.png').exists()
+            print('PASS: E-targeted casual dialogue, white outlines, free movement around the car and no automatic conversation UI')
         if lifecycle:
             for i,world in enumerate(worlds,1):
                 head = next(v for v in world['vehicles'] if v['vehicle_id']==i)

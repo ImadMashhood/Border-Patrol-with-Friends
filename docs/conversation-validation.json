@@ -1,0 +1,30 @@
+{
+  "rust_passed": 85,
+  "rust_ignored": 1,
+  "checks": [
+    "workspace tests",
+    "clippy -D warnings",
+    "cargo fmt",
+    "git diff --check",
+    "two-peer HTTP with gateway outage",
+    "two-client casual conversation and search",
+    "two-client physics with repeated grips and porter"
+  ],
+  "live_model": "google/gemini-2.5-flash-lite",
+  "live_valid": 12,
+  "live_total": 12,
+  "live_repairs": 1,
+  "live_median_s": 0.56,
+  "physics_metrics": {
+    "ads_capture": true,
+    "grip_repeated": true,
+    "max_shards": 72,
+    "porter_seen": true
+  },
+  "limitations": [
+    "Automated graphical checks disable audio and microphone",
+    "Live model sample is qualitative and small",
+    "Provider quotas still apply",
+    "Reference RTX 2060 frame-rate and Windows desktop acceptance unverified"
+  ]
+}

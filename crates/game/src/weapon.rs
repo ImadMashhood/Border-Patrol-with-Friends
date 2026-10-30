@@ -384,11 +384,14 @@ pub fn controls(
                 shift.send(ClientCommand::OrderExit { vehicle_id: id });
             }
         }
-        if keys.just_pressed(KeyCode::KeyY) {
-            shift.send(ClientCommand::PullBody { vehicle_id: id });
-        }
-        if keys.just_pressed(KeyCode::KeyT) {
-            shift.send(ClientCommand::TowVehicle { vehicle_id: id });
+
+        if keys.just_pressed(KeyCode::KeyT)
+            && let Some(v) = shift
+                .world
+                .as_ref()
+                .and_then(|w| w.vehicles.iter().find(|v| v.vehicle_id == id))
+        {
+            shift.send(ClientCommand::RequestPorter { lane_id: v.lane_id });
         }
     }
 }

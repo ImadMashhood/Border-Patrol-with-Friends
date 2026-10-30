@@ -8,6 +8,8 @@ pub struct Controls {
     pub yaw: f32,
     pub jog: bool,
     pub ready: bool,
+    pub grab_held: bool,
+    pub pitch: f32,
 }
 #[derive(Resource)]
 pub struct Shift {
@@ -157,6 +159,8 @@ impl Shift {
                         yaw: state.yaw,
                         jog: state.jog,
                         ready_held: state.ready,
+                        grab_held: state.grab_held,
+                        pitch: state.pitch,
                     })
                     .send();
                 match result {
@@ -479,6 +483,9 @@ pub fn sync(
     g.score = world.ledger.iter().filter(|e| e.correct).count();
     if let Some(id) = g.vehicle_id {
         if let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id) {
+            if v.conversation_owner == Some(shift.peer_id) {
+                g.conversation_confirmed = true;
+            }
             if matches!(
                 v.stage,
                 VehicleStage::DepartingAdmit
@@ -497,6 +504,13 @@ pub fn sync(
                 g.mic = None;
                 g.speaking = false;
                 g.phase = Phase::Reveal;
+            } else if g.case.is_some()
+                && g.conversation_confirmed
+                && v.conversation_owner != Some(shift.peer_id)
+            {
+                g.reset_case();
+                g.vehicle_id = None;
+                g.looking = true;
             } else if g.case.is_some() {
                 {
                     g.secondary = v.secondary_inspected;
@@ -681,13 +695,9 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                 && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
                 && v.physics.npc.health == 0
             {
-                if v.physics.npc.body_pull_active {
-                    ui.label("Pulling body clear of the seat…");
-                } else if v.physics.npc.died_seated
-                    && !v.physics.npc.extracted
-                    && ui.button("Pull body out [Y]").clicked()
-                {
-                    shift.send(ClientCommand::PullBody { vehicle_id: id });
+                ui.label("Hold E while aiming at the body to carry it. Release E to let go.");
+                if ui.button("Call recovery porter [T]").clicked() {
+                    shift.send(ClientCommand::RequestPorter { lane_id: v.lane_id });
                 }
             }
             ui.small("Tab releases the mouse for roster controls.");

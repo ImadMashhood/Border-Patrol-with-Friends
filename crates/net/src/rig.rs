@@ -112,3 +112,21 @@ pub fn skeleton(seated: bool) -> Rig {
     }
     Rig { bones, links }
 }
+
+/// Walking/running pose keeps each distal bone anchored to its parent's endpoint.
+pub fn walking(phase: f32) -> Rig {
+    let mut rig = skeleton(false);
+    let swing = phase.sin() * 0.55;
+    for (side, thigh, shin, upper, fore) in [(-1., 7, 8, 3, 4), (1., 9, 10, 5, 6)] {
+        let angle = swing * side;
+        let hip = [side * 0.11, 0.84, 0.];
+        rig.bones[thigh] = segment(hip, 0.36, angle, 0.10, 8.);
+        let knee = add(hip, down(0.36, angle));
+        rig.bones[shin] = segment(knee, 0.36, angle - angle.max(0.) * 0.8, 0.085, 4.1);
+        let shoulder = [side * 0.235, 1.31, 0.];
+        let arm = -angle;
+        rig.bones[upper] = segment(shoulder, 0.30, arm, 0.075, 2.2);
+        rig.bones[fore] = segment(add(shoulder, down(0.30, arm)), 0.28, arm + 0.3, 0.065, 1.7);
+    }
+    rig
+}

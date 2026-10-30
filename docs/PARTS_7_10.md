@@ -31,7 +31,7 @@ Frustration, confidence, suspicion and cooperation evolve by replaying accepted 
 
 Normalized duplicate dialogue is rejected across the last four replies, with an exception for an explicitly requested echo. Semantic similarity is measured during evaluation rather than automatically rejecting a legitimate repeated factual answer. The offline actor remains visibly labeled **offline rehearsal**; it is not presented as an LLM.
 
-Provider credentials stay in the caller service. No model reply can modify evidence, money, guilt, a disposition or vehicle movement. Free-form spoken claims remain untrusted: schema validation is not a semantic proof of every sentence. An unavailable or malformed response produces a service error, never invented traveler speech. A rate limit preserves the interview and restores the failed question in the input box for a deliberate retry.
+Provider credentials stay in the caller service. No model reply can modify evidence, money, guilt, a disposition or vehicle movement. Free-form spoken claims remain untrusted: schema validation is not a semantic proof of every sentence. An unavailable or malformed response produces the neutral spoken fallback “Excuse me?”, tagged as a delivery failure with no evidence or gameplay action. HTTP 429 starts a bounded provider cooldown. The conversation remains available for the next spoken question.
 
 ## Local voice and client isolation
 
@@ -79,3 +79,5 @@ python3 scripts/benchmark_intent.py --variant current --models google/gemini-2.5
 ```
 
 ![Shared physical cargo and container search in the graphical client](physical-container-search.webp)
+
+See [current casual interactions and psychology](CONVERSATION.md) for exclusive initiating officers, optional UI, windows, body grips, porters and the latest validation.

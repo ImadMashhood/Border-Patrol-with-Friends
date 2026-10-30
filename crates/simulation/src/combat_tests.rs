@@ -16,6 +16,12 @@ fn active() -> Simulation {
     s.start_shift().unwrap();
     run(&mut s, 15.);
     s.world.peers[0].weapon.drawn = true;
+    // Combat fixtures explicitly use an open driver window; normal arrivals are closed.
+    for v in &mut s.world.vehicles {
+        v.physics.glass[Pane::DriverFront.index()].lowered = 1.;
+        v.physics.glass[Pane::DriverFront.index()].target_down = true;
+        v.physics.manual_window_until = s.world.server_time_ms + 60_000;
+    }
     s
 }
 fn run(s: &mut Simulation, seconds: f32) {

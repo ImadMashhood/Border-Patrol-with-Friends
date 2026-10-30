@@ -10,7 +10,16 @@
     "emotion_baseline": "irritated",
     "authority_response": "pragmatic",
     "compliance_bounds": "Impatient about delays. Will often say exactly what the officer demands if promised passage, including false denials of goods; may grumble while complying. Do not make him automatically principled about verbal honesty.",
-    "bribery_capable": true
+    "bribery_capable": true,
+    "psychology": {
+      "survival": 90,
+      "boldness": 72,
+      "integrity": 30,
+      "aggression": 78,
+      "sociability": 20,
+      "greed": 70,
+      "pride": 75
+    }
   },
   "truth": {
     "purpose": "Carry sealed boxes of undeclared electronics to a resale depot.",

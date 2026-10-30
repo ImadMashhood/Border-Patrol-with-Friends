@@ -28,6 +28,21 @@ pub fn draw(
     mut shift: ResMut<shift::Shift>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
+    if !g.overlay
+        && !g.map_open
+        && !g.settings_open
+        && shift
+            .world
+            .as_ref()
+            .is_some_and(|w| w.phase != border_net::ShiftPhase::Lobby)
+    {
+        if g.looking {
+            let center = ctx.viewport_rect().center();
+            ctx.layer_painter(egui::LayerId::background())
+                .circle_stroke(center, 2.5, egui::Stroke::new(1., egui::Color32::WHITE));
+        }
+        return Ok(());
+    }
     let mut visuals = egui::Visuals::dark();
     visuals.panel_fill = egui::Color32::from_rgb(17, 30, 29);
     visuals.window_fill = egui::Color32::from_rgb(17, 30, 29);

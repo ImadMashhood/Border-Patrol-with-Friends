@@ -64,6 +64,7 @@ pub enum NpcMode {
     Entering,
     Outside,
     Dead,
+    Fleeing,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NpcState {
@@ -77,6 +78,7 @@ pub struct NpcState {
     pub extracted: bool,
     pub body_pull_active: bool,
     pub death_impulse: V3,
+    pub body_holder: Option<u64>,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VehiclePhysics {
@@ -86,6 +88,7 @@ pub struct VehiclePhysics {
     pub npc: NpcState,
     pub disabled_at: Option<u64>,
     pub tow_until: Option<u64>,
+    pub manual_window_until: u64,
 }
 impl Default for VehiclePhysics {
     fn default() -> Self {
@@ -94,8 +97,8 @@ impl Default for VehiclePhysics {
                 .into_iter()
                 .map(|pane| GlassState {
                     pane,
-                    lowered: if pane == Pane::DriverFront { 1. } else { 0. },
-                    target_down: pane == Pane::DriverFront,
+                    lowered: 0.,
+                    target_down: false,
                     shattered: false,
                     impacts: vec![],
                 })
@@ -113,9 +116,11 @@ impl Default for VehiclePhysics {
                 extracted: false,
                 body_pull_active: false,
                 death_impulse: [0.; 3],
+                body_holder: None,
             },
             disabled_at: None,
             tow_until: None,
+            manual_window_until: 0,
         }
     }
 }

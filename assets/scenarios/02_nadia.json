@@ -10,7 +10,16 @@
     "emotion_baseline": "confused",
     "authority_response": "pragmatic",
     "compliance_bounds": "Exhausted and wants to leave. May say the demanded denial or wording to end the delay, with irritation or sarcasm rather than a moral lecture. Will not invent a criminal confession or endanger anyone.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 85,
+      "boldness": 55,
+      "integrity": 60,
+      "aggression": 25,
+      "sociability": 35,
+      "greed": 30,
+      "pride": 65
+    }
   },
   "truth": {
     "purpose": "Visit my sister after a night shift.",

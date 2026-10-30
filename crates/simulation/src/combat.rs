@@ -131,6 +131,7 @@ impl Simulation {
             .side()
             .ok_or_else(|| anyhow::anyhow!("windshields do not roll down"))?;
         let i = self.physical_vehicle(peer, id, side)?;
+        self.world.vehicles[i].physics.manual_window_until = self.world.server_time_ms + 5000;
         let state = &mut self.world.vehicles[i].physics.glass[pane.index()];
         ensure!(!state.shattered, "window glass has been destroyed");
         state.target_down = !state.target_down;
@@ -255,6 +256,12 @@ impl Simulation {
                     v.physics.npc.position = seated_position(v);
                     v.physics.npc.yaw = v.yaw;
                 }
+                NpcMode::Fleeing => {
+                    v.physics.npc.position = add(
+                        v.physics.npc.position,
+                        rotate([0., 0., -dt * 3.5], v.physics.npc.yaw),
+                    );
+                }
                 NpcMode::Exiting | NpcMode::Entering => {
                     let entering = v.physics.npc.mode == NpcMode::Entering;
                     if v.physics.door_angles[0] > 0.8 {
@@ -279,7 +286,11 @@ impl Simulation {
                         v.physics.npc.mode = NpcMode::Seated;
                         v.physics.door_open[0] = false;
                     } else if !entering && t >= 1. {
-                        v.physics.npc.mode = NpcMode::Outside;
+                        v.physics.npc.mode = if self.cases[&v.vehicle_id].flee_requested {
+                            NpcMode::Fleeing
+                        } else {
+                            NpcMode::Outside
+                        };
                     }
                 }
                 _ => {}
@@ -342,6 +353,8 @@ impl Simulation {
                                 )
                             }
                             Hit::Npc(i, head) => {
+                                self.world.money -= 250;
+                                self.world.notices.push(border_net::ShiftNotice {id:self.world.latest_event_sequence+1,at_ms:now,kind:"assault_complaint".into(),message:format!("Officer {} shot an unarmed traveler. Misconduct penalty 250.",shot.shooter)});
                                 let v = &mut self.world.vehicles[i];
                                 let damage = if head { 110. } else { 55. } * shot.energy;
                                 v.physics.npc.health =
@@ -350,6 +363,7 @@ impl Simulation {
                                     v.physics.npc.death_impulse = mul(direction, shot.energy * 2.);
                                     v.physics.npc.died_seated =
                                         v.physics.npc.mode == NpcMode::Seated;
+                                    v.physics.npc.extracted = !v.physics.npc.died_seated;
                                     v.physics.npc.mode = NpcMode::Dead;
                                     v.physics.disabled_at = Some(now);
                                     v.stage = VehicleStage::Disabled;

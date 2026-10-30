@@ -252,10 +252,12 @@ async fn turn_case(
     Json(r): Json<border_caller::TurnRequest>,
 ) -> Api<border_caller::ActorReply> {
     let vehicle: u64 = r.session_id.parse().map_err(error)?;
-    let (url, token, session) = {
+    let question = r.utterance.clone();
+    let (url, token, session, speaker, epoch, turn) = {
         let mut h = s.lock().unwrap();
         let id = peer(&h, &headers).map_err(error)?;
-        h.sim.authorize_case(id, vehicle).map_err(error)?;
+        h.sim.authorize_conversation(id, vehicle).map_err(error)?;
+
         ensure_api(
             !h.pending.contains(&vehicle),
             "another officer is awaiting this traveler's reply",
@@ -264,18 +266,25 @@ async fn turn_case(
             r.utterance.chars().count() <= 500 && !r.utterance.trim().is_empty(),
             "question must be 1–500 characters",
         )?;
+        h.sim
+            .register_utterance(id, vehicle, &r.utterance)
+            .map_err(error)?;
+        let context = h.sim.actor_context(vehicle).map_err(error)?;
         h.pending.insert(vehicle);
         (
             h.gateway_url.clone(),
             h.gateway_auth.clone(),
             h.sim.snapshot().session_id,
+            id,
+            context.conversation_epoch,
+            context.expected_turn,
         )
     };
     let _pending = PendingReply {
         state: s.clone(),
         vehicle,
     };
-    async {
+    let result=async {
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
             .build()
@@ -305,7 +314,17 @@ async fn turn_case(
             .map(Json)
             .map_err(|_| error("invalid AI gateway response"))
     }
-    .await
+    .await;
+    match result {
+        Ok(reply) => Ok(reply),
+        Err(_) => {
+            let mut h = s.lock().unwrap();
+            h.sim
+                .delivery_failure(speaker, vehicle, epoch, turn, &question)
+                .map(Json)
+                .map_err(error)
+        }
+    }
 }
 async fn actor_context(
     State(s): State<Shared>,

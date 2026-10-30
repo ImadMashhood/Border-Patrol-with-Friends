@@ -13,9 +13,15 @@ pub enum NetEvent {
     Evidence(Vec<Evidence>),
     Decision(Reveal),
     Error(String),
-    TurnFailed { message: String, question: String },
+    TurnFailed {
+        message: String,
+        question: String,
+    },
     Microphone(border_speech::VoiceEvent),
-    SpeechFinished(Option<String>),
+    SpeechFinished {
+        error: Option<String>,
+        fallback: bool,
+    },
 }
 impl Network {
     fn request<T: Serialize + Send + 'static, R: DeserializeOwned + Send + 'static>(
@@ -126,10 +132,11 @@ impl Network {
         let cancel = handle.token();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
+            let fallback = text == "Excuse me?";
             let error = border_speech::speak_cancellable(&text, &scenario_id, &cancel)
                 .err()
                 .map(|e| e.to_string());
-            let _ = tx.send((g, NetEvent::SpeechFinished(error)));
+            let _ = tx.send((g, NetEvent::SpeechFinished { error, fallback }));
         });
         handle
     }

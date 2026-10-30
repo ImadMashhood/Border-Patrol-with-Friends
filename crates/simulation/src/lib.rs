@@ -8,6 +8,9 @@ use std::collections::{HashMap, VecDeque};
 mod combat;
 #[cfg(test)]
 mod combat_tests;
+mod interactions;
+#[cfg(test)]
+mod interactions_tests;
 #[cfg(test)]
 mod lifecycle_tests;
 mod physics;
@@ -20,6 +23,10 @@ struct Case {
     secondary: bool,
     waypoint: usize,
     departure_order: u64,
+    conversation_epoch: u64,
+    grab_started_ms: u64,
+    misconduct_turn: Option<(usize, String)>,
+    flee_requested: bool,
 }
 struct Peer {
     input: Option<InputFrame>,
@@ -33,6 +40,7 @@ struct Peer {
 /// Secret server-to-server context. Never return this from a peer route.
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ActorContext {
+    pub conversation_epoch: u64,
     pub scenario: Scenario,
     pub history: Vec<Turn>,
     pub expected_turn: u64,
@@ -108,6 +116,16 @@ impl Simulation {
                 projectiles: vec![],
                 impacts: vec![],
                 shards: vec![],
+                porters: (1..=2)
+                    .map(|lane_id| PorterView {
+                        lane_id,
+                        position: porter_chair(lane_id),
+                        yaw: 0.,
+                        phase: PorterPhase::Seated,
+                        vehicle_id: None,
+                        progress: 0.,
+                    })
+                    .collect(),
             },
         })
     }
@@ -157,6 +175,7 @@ impl Simulation {
             health: 100,
             position: border_net::map::SPAWNS[(id as usize - 1) % 2],
             yaw: std::f32::consts::PI,
+            pitch: 0.,
             equipment: vec![
                 "pistol".into(),
                 "flashlight".into(),
@@ -325,6 +344,27 @@ impl Simulation {
             "peer incapacitated"
         );
         match &e.command {
+            ClientCommand::TogglePanel { vehicle_id, point } => {
+                let i = self.inspection_access(peer, *vehicle_id)?;
+                self.require_point(peer, i, *point)?;
+                if self.world.vehicles[i].open_panels.contains(point) {
+                    self.world.vehicles[i].open_panels.retain(|p| p != point);
+                } else {
+                    self.inspect_point(peer, *vehicle_id, *point)?;
+                }
+            }
+            ClientCommand::EndConversation { vehicle_id } => {
+                self.end_conversation(peer, *vehicle_id)?;
+            }
+            ClientCommand::GrabBody { vehicle_id, bone } => {
+                self.grab_body(peer, *vehicle_id, *bone)?;
+            }
+            ClientCommand::ReleaseBody => {
+                self.release_bodies(peer);
+            }
+            ClientCommand::RequestPorter { lane_id } => {
+                self.request_porter(peer, *lane_id)?;
+            }
             ClientCommand::SetWeaponDrawn { drawn } => {
                 ensure!(
                     !drawn || self.world.phase != ShiftPhase::Lobby,
@@ -553,6 +593,7 @@ impl Simulation {
                     position_mm: 0,
                     traveler_name: scenario.character.name.clone(),
                     opening_line: scenario.opening_line.clone(),
+                    conversation_owner: None,
                     observed_evidence: vec![],
                     position: [0.; 3],
                     yaw: 0.,
@@ -564,6 +605,7 @@ impl Simulation {
                     secondary_requested: false,
                     searched_compartments: vec![],
                     inspected_points: vec![],
+                    open_panels: vec![],
                     physics: border_net::combat::VehiclePhysics::default(),
                 });
                 self.cases.insert(
@@ -575,6 +617,10 @@ impl Simulation {
                         epoch: self.epoch,
                         waypoint: 0,
                         departure_order: 0,
+                        conversation_epoch: 0,
+                        grab_started_ms: 0,
+                        misconduct_turn: None,
+                        flee_requested: false,
                     },
                 );
             }
@@ -640,23 +686,21 @@ impl Simulation {
             .find(|v| v.vehicle_id == vehicle)
             .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
         ensure!(
-            v.stage == VehicleStage::Stopped
-                && v.physics.npc.health > 0
-                && !matches!(
-                    v.physics.npc.mode,
-                    border_net::combat::NpcMode::Exiting | border_net::combat::NpcMode::Entering
-                ),
+            v.stage == VehicleStage::Stopped && v.physics.npc.health > 0,
             "traveler unavailable"
         );
         let c = &self.cases[&vehicle];
         ensure!(c.history.len() < 128, "conversation limit reached");
+        let mut scenario = c.scenario.with_observations(
+            &v.observed_evidence
+                .iter()
+                .map(|e| e.id.clone())
+                .collect::<Vec<_>>(),
+        );
+        scenario.encounter = self.physical_context(v);
         Ok(ActorContext {
-            scenario: c.scenario.with_observations(
-                &v.observed_evidence
-                    .iter()
-                    .map(|e| e.id.clone())
-                    .collect::<Vec<_>>(),
-            ),
+            conversation_epoch: c.conversation_epoch,
+            scenario,
             history: c.history.clone(),
             expected_turn: c.history.len() as u64,
             secondary: c.secondary,
@@ -672,12 +716,7 @@ impl Simulation {
             .find(|v| v.vehicle_id == delivery.vehicle_id)
             .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
         ensure!(
-            v.stage == VehicleStage::Stopped
-                && v.physics.npc.health > 0
-                && !matches!(
-                    v.physics.npc.mode,
-                    border_net::combat::NpcMode::Exiting | border_net::combat::NpcMode::Entering
-                ),
+            v.stage == VehicleStage::Stopped && v.physics.npc.health > 0,
             "traveler unavailable"
         );
         ensure!(
@@ -685,7 +724,12 @@ impl Simulation {
                 && delivery.officer_utterance.len() <= 2000,
             "invalid utterance"
         );
+        let physical = self.physical_context(v);
         let c = self.cases.get_mut(&delivery.vehicle_id).unwrap();
+        ensure!(
+            delivery.conversation_epoch == c.conversation_epoch,
+            "conversation ownership changed"
+        );
         ensure!(
             delivery.case_epoch == c.epoch,
             "reply belongs to an earlier shift"
@@ -715,6 +759,7 @@ impl Simulation {
             officer: delivery.officer_utterance.clone(),
             traveler: reply.dialogue.clone(),
             emotion: reply.emotion.clone(),
+            physical,
         });
         self.world
             .vehicles
@@ -975,7 +1020,7 @@ mod tests {
     #[test]
     fn actor_output_is_revalidated_before_broadcast() {
         let mut s = active();
-        let d=ActorDelivery{case_epoch:0,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"award_money","fact_ids":[],"end_conversation":false}"#.into()};
+        let d=ActorDelivery{conversation_epoch:0,case_epoch:0,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"award_money","fact_ids":[],"end_conversation":false}"#.into()};
         assert!(s.actor(d.clone()).is_err());
         assert!(s.cases[&1].history.is_empty());
         let mut d = d;
@@ -1015,7 +1060,7 @@ mod tests {
                 .unwrap();
         }
         assert_ne!(old.case_epoch, s.actor_context(1).unwrap().case_epoch);
-        let delivery=ActorDelivery{case_epoch:old.case_epoch,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"none","fact_ids":[],"end_conversation":false}"#.into()};
+        let delivery=ActorDelivery{conversation_epoch:0,case_epoch:old.case_epoch,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"none","fact_ids":[],"end_conversation":false}"#.into()};
         assert!(s.actor(delivery).is_err());
         assert!(s.cases[&1].history.is_empty());
     }

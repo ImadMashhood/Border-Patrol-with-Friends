@@ -143,6 +143,14 @@ def main():
         reply = request('/turn', {'session_id': '1', 'utterance': 'What is your name?'}, peers[1]['peer_token'])
         assert reply['action'] == 'none'
         assert len(snapshot(0)['vehicles'][0]['history']) == len(snapshot(1)['vehicles'][0]['history']) == 1
+        request('/turn', {'session_id': '1', 'utterance': 'Can I interrupt?'}, peers[0]['peer_token'], expected=400)
+        # A dead gateway must produce neutral remembered speech, with no new facts.
+        children[0].terminate()
+        children[0].wait(timeout=5)
+        fallback = request('/turn', {'session_id': '1', 'utterance': 'Could you repeat that?'}, peers[1]['peer_token'])
+        assert fallback['dialogue'] == 'Excuse me?' and fallback['fact_ids'] == []
+        assert snapshot()['vehicles'][0]['history'][-1]['officer'] == 'Could you repeat that?'
+        children[0] = subprocess.Popen([str(ROOT / 'target/debug' / ('border-caller-server' + EXT))], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         request('/inspect', {'session_id': '1'}, peers[1]['peer_token'], expected=400)
         command(1, {'type':'request_secondary','vehicle_id':1})
         command(1, {'type':'inspect_evidence','vehicle_id':1,'evidence_id':'cargo_inspection'}, expected=400)
@@ -196,7 +204,7 @@ def main():
         command(0, {'type': 'reset_shift'})
         state = snapshot()
         assert state['phase'] == 'lobby' and not state['door_open'] and not state['vehicles']
-        print('PASS: two peers; authoritative 2-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; sedan/truck physical cargo inspection and both departure routes; event hooks; safe restart')
+        print('PASS: two peers; authoritative 2-second hold; host override; exact ten-minute clock; two lanes; consented swaps; exclusive assisted interview; gateway outage fallback; sedan/truck physical cargo inspection and both departure routes; event hooks; safe restart')
     finally:
         for child in reversed(children):
             child.terminate()

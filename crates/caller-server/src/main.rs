@@ -101,6 +101,8 @@ struct OpenRouter {
     max_attempts: u64,
     input_rate: f64,
     output_rate: f64,
+    gate: Mutex<Instant>,
+    cooldown: std::sync::Mutex<Option<Instant>>,
 }
 impl Provider for OpenRouter {
     fn mode(&self) -> &'static str {
@@ -114,9 +116,31 @@ impl Provider for OpenRouter {
         q: &'a str,
     ) -> ProviderFuture<'a> {
         Box::pin(async move {
+            if self
+                .cooldown
+                .lock()
+                .unwrap()
+                .is_some_and(|until| until > Instant::now())
+            {
+                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+            }
+            let mut last = self.gate.lock().await;
+            let spacing = Duration::from_millis(1200);
+            if self
+                .cooldown
+                .lock()
+                .unwrap()
+                .is_some_and(|until| until > Instant::now())
+            {
+                return Err(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+            }
             let started = Instant::now();
             let mut messages = conversation_messages(s, secondary, h, q);
             for attempt in 0..2 {
+                if last.elapsed() < spacing {
+                    tokio::time::sleep(spacing - last.elapsed()).await;
+                }
+                *last = Instant::now();
                 anyhow::ensure!(
                     self.attempts.fetch_add(1, Ordering::Relaxed) < self.max_attempts,
                     "Process provider request budget exhausted"
@@ -126,10 +150,22 @@ impl Provider for OpenRouter {
                     .post("https://openrouter.ai/api/v1/chat/completions")
                     .bearer_auth(&self.key)
                     .json(&json!({"model":self.model,"messages":messages,
-                    "max_tokens":1024,"temperature":0.5,"response_format":response_format(s,secondary),"provider":{"require_parameters":true}}))
+                    "max_tokens":384,"temperature":0.85,"response_format":response_format(s,secondary),"provider":{"require_parameters":true,"allow_fallbacks":true}}))
                     .send()
                     .await?;
                 // Never return provider bodies/credentials to the client or logs.
+                if response.status() == StatusCode::TOO_MANY_REQUESTS {
+                    let seconds = response
+                        .headers()
+                        .get("retry-after")
+                        .and_then(|h| h.to_str().ok())
+                        .and_then(|h| h.parse::<u64>().ok())
+                        .unwrap_or(30)
+                        .clamp(5, 120);
+                    *self.cooldown.lock().unwrap() =
+                        Some(Instant::now() + Duration::from_secs(seconds));
+                    eprintln!("provider rate limit; cooldown_seconds={seconds}");
+                }
                 if !response.status().is_success() {
                     return Err(ProviderHttp(response.status()).into());
                 }
@@ -271,6 +307,7 @@ async fn host_turn(
         .bearer_auth(&token)
         .json(&border_net::ActorDelivery {
             case_epoch: context.case_epoch,
+            conversation_epoch: context.conversation_epoch,
             expected_turn: context.expected_turn,
             protocol_version: req.protocol_version,
             session_id: req.session_id,
@@ -388,6 +425,7 @@ async fn turn(
         officer: req.utterance,
         traveler: reply.dialogue.clone(),
         emotion: reply.emotion.clone(),
+        physical: Default::default(),
     });
     Ok(Json(reply))
 }
@@ -452,8 +490,10 @@ async fn main() -> anyhow::Result<()> {
             key,
             model,
             attempts: AtomicU64::new(0),
+            gate: Mutex::new(Instant::now() - Duration::from_secs(2)),
+            cooldown: std::sync::Mutex::new(None),
             max_attempts: std::env::var("BORDER_MAX_PROVIDER_REQUESTS")
-                .unwrap_or_else(|_| "120".into())
+                .unwrap_or_else(|_| "500".into())
                 .parse()?,
             input_rate: std::env::var("MODEL_INPUT_USD_PER_MILLION")
                 .unwrap_or_else(|_| "0".into())

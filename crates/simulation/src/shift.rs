@@ -10,7 +10,9 @@ impl Simulation {
                 .movement
                 .iter()
                 .all(|v| v.is_finite() && v.abs() <= 1.)
-                && input.yaw.is_finite(),
+                && input.yaw.is_finite()
+                && input.pitch.is_finite()
+                && input.pitch.abs() <= 1.5,
             "invalid movement"
         );
         let p = self.peers.get_mut(&id).unwrap();
@@ -91,6 +93,7 @@ impl Simulation {
             if let Some(input) = &state.input {
                 if fresh && view.health > 0 {
                     view.yaw = input.yaw;
+                    view.pitch = input.pitch;
                     view.position = border_net::movement::step(
                         view.position,
                         input.movement,
@@ -142,7 +145,9 @@ impl Simulation {
         if self.world.queues_active {
             self.advance_vehicles(dt);
         }
+        self.tick_interactions(dt);
         self.tick_combat(dt);
+        self.tick_porters(dt);
         self.physics.advance(&mut self.world, dt);
         if elapsed > 0 {
             self.emit(
@@ -205,7 +210,9 @@ impl Simulation {
                                     | VehicleStage::Disabled
                             ) || (matches!(
                                 a.stage,
-                                VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                                VehicleStage::DepartingAdmit
+                                    | VehicleStage::DepartingDeny
+                                    | VehicleStage::Recovering
                             ) && (a.position[0] - v.position[0]).abs() < 3.
                                 && a.position[2] > -10.))
                     });
@@ -336,7 +343,9 @@ impl Simulation {
                 v.lane_id == lane.lane_id
                     && matches!(
                         v.stage,
-                        VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny
+                        VehicleStage::DepartingAdmit
+                            | VehicleStage::DepartingDeny
+                            | VehicleStage::Recovering
                     )
                     && v.position[2] + vehicle::spec(&v.kind).half_length
                         > vehicle::EXIT_GATE_Z - 1.
@@ -349,7 +358,12 @@ impl Simulation {
         self.require_point(peer, i, vehicle::VehiclePoint::Driver)?;
         Ok(i)
     }
-    fn require_point(&self, peer: u64, i: usize, point: vehicle::VehiclePoint) -> Result<()> {
+    pub(super) fn require_point(
+        &self,
+        peer: u64,
+        i: usize,
+        point: vehicle::VehiclePoint,
+    ) -> Result<()> {
         let p = self
             .world
             .peers
@@ -358,8 +372,10 @@ impl Simulation {
             .ok_or_else(|| anyhow::anyhow!("officer unavailable"))?;
         let v = &self.world.vehicles[i];
         let target = if point == vehicle::VehiclePoint::Driver
-            && v.physics.npc.mode == border_net::combat::NpcMode::Outside
-        {
+            && matches!(
+                v.physics.npc.mode,
+                border_net::combat::NpcMode::Outside | border_net::combat::NpcMode::Fleeing
+            ) {
             border_net::combat::add(v.physics.npc.position, [0., 1.5, 0.])
         } else {
             vehicle::spec(&v.kind).world_point(v.position, v.yaw, point)
@@ -372,6 +388,36 @@ impl Simulation {
         );
         Ok(())
     }
+    pub(super) fn inspection_access(&self, peer: u64, id: u64) -> Result<usize> {
+        ensure!(self.world.phase != ShiftPhase::Lobby, "shift inactive");
+        let i = self
+            .world
+            .vehicles
+            .iter()
+            .position(|v| v.vehicle_id == id)
+            .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?;
+        let v = &self.world.vehicles[i];
+        ensure!(
+            matches!(
+                v.stage,
+                VehicleStage::Stopped | VehicleStage::Resolved | VehicleStage::Disabled
+            ),
+            "vehicle must be stationary"
+        );
+        ensure!(
+            self.world
+                .lanes
+                .iter()
+                .any(|l| l.lane_id == v.lane_id && l.owner == Some(peer))
+                || self
+                    .world
+                    .peers
+                    .iter()
+                    .any(|p| p.peer_id == peer && p.assisting == Some(v.lane_id)),
+            "claim or assist this lane first"
+        );
+        Ok(i)
+    }
     pub fn inspect_point(
         &mut self,
         peer: u64,
@@ -382,13 +428,16 @@ impl Simulation {
             point != vehicle::VehiclePoint::Driver,
             "use the driver window to talk"
         );
-        let i = self.owns_vehicle(peer, id)?;
+        let i = self.inspection_access(peer, id)?;
         ensure!(
             point != vehicle::VehiclePoint::Trailer
                 || self.world.vehicles[i].kind == "utility_truck",
             "vehicle has no trailer"
         );
         self.require_point(peer, i, point)?;
+        if !self.world.vehicles[i].open_panels.contains(&point) {
+            self.world.vehicles[i].open_panels.push(point);
+        }
         if point == vehicle::VehiclePoint::Passenger {
             self.world.vehicles[i].physics.door_open[1] = true;
         }
@@ -417,7 +466,7 @@ impl Simulation {
         location: border_scenarios::EvidenceLocation,
     ) -> Result<()> {
         use border_scenarios::EvidenceLocation as L;
-        let i = self.owns_vehicle(peer, id)?;
+        let i = self.inspection_access(peer, id)?;
         let point = match location {
             L::Documents => vehicle::VehiclePoint::Driver,
             L::Glovebox => vehicle::VehiclePoint::Passenger,
@@ -432,15 +481,12 @@ impl Simulation {
         ensure!(
             location != L::Container
                 || self.world.vehicles[i]
-                    .inspected_points
+                    .open_panels
                     .contains(&vehicle::VehiclePoint::Cargo),
             "open the trunk or tailgate before searching the container"
         );
         ensure!(
-            location != L::Glovebox
-                || self.world.vehicles[i]
-                    .inspected_points
-                    .contains(&vehicle::VehiclePoint::Passenger),
+            location != L::Glovebox || self.world.vehicles[i].physics.door_open[1],
             "open the passenger door before searching the glove compartment"
         );
         if self.world.vehicles[i]
@@ -494,6 +540,18 @@ impl Simulation {
     }
     pub fn public_case(&mut self, peer: u64, id: u64, mode: &str) -> Result<PublicCase> {
         let i = self.authorize_case(peer, id)?;
+        ensure!(
+            self.world.vehicles[i]
+                .conversation_owner
+                .is_none_or(|owner| owner == peer),
+            "traveler is speaking with another officer"
+        );
+        if self.world.vehicles[i].conversation_owner.is_none() {
+            self.cases.get_mut(&id).unwrap().conversation_epoch += 1;
+        }
+        self.world.vehicles[i].conversation_owner = Some(peer);
+        self.world.vehicles[i].physics.glass[border_net::combat::Pane::DriverFront.index()]
+            .target_down = true;
         self.search_compartment(peer, id, border_scenarios::EvidenceLocation::Documents)?;
         let c = &self.cases[&id];
         let ids = self.world.vehicles[i]
@@ -697,6 +755,12 @@ impl Simulation {
         self.world.queues_active = false;
         self.world.events_active = false;
         self.world.vehicles.clear();
+        for p in &mut self.world.porters {
+            p.position = porter_chair(p.lane_id);
+            p.phase = PorterPhase::Seated;
+            p.vehicle_id = None;
+            p.progress = 0.;
+        }
         self.world.projectiles.clear();
         self.world.impacts.clear();
         self.world.shards.clear();
@@ -767,6 +831,8 @@ mod tests {
                 yaw: std::f32::consts::PI,
                 jog: false,
                 ready_held: held,
+                grab_held: false,
+                pitch: 0.,
             },
             now,
         )

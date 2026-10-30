@@ -17,6 +17,39 @@ pub struct Character {
     pub variation: PersonalityVariation,
     #[serde(default)]
     pub bribery_capable: bool,
+    #[serde(default)]
+    pub psychology: PsychologyTraits,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PsychologyTraits {
+    pub survival: u8,
+    pub boldness: u8,
+    pub integrity: u8,
+    pub aggression: u8,
+    pub sociability: u8,
+    pub greed: u8,
+    pub pride: u8,
+}
+impl Default for PsychologyTraits {
+    fn default() -> Self {
+        Self {
+            survival: 80,
+            boldness: 40,
+            integrity: 60,
+            aggression: 20,
+            sociability: 50,
+            greed: 30,
+            pride: 50,
+        }
+    }
+}
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct PhysicalContext {
+    pub officer_peer: Option<u64>,
+    pub weapon_drawn: bool,
+    pub weapon_aimed: bool,
+    pub injured: bool,
+    pub violence_nearby: bool,
 }
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -83,6 +116,8 @@ pub struct ResolutionRules {
 pub struct Scenario {
     #[serde(default)]
     pub observation_scope: bool,
+    #[serde(default)]
+    pub encounter: PhysicalContext,
     #[serde(default)]
     pub metadata: Option<CaseMetadata>,
     #[serde(default)]
@@ -182,6 +217,21 @@ impl Scenario {
     }
     pub fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "Unsupported scenario schema");
+        let p = &self.character.psychology;
+        ensure!(
+            [
+                p.survival,
+                p.boldness,
+                p.integrity,
+                p.aggression,
+                p.sociability,
+                p.greed,
+                p.pride
+            ]
+            .iter()
+            .all(|x| *x <= 100),
+            "Psychology traits must be 0–100"
+        );
         for value in [
             &self.scenario_id,
             &self.character.name,
@@ -240,6 +290,9 @@ impl Scenario {
                     | "defensive"
                     | "angry"
                     | "disengaged"
+                    | "afraid"
+                    | "panicked"
+                    | "desperate"
             ),
             "Invalid emotion"
         );

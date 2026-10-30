@@ -12,6 +12,8 @@ struct Doll {
     belt: Option<ImpulseJointHandle>,
     grab: Option<(RigidBodyHandle, ImpulseJointHandle)>,
     pulling: bool,
+    holder: Option<(u64, usize)>,
+    grip: V3,
 }
 struct Fragment {
     handle: RigidBodyHandle,
@@ -117,6 +119,51 @@ impl PhysicalWorld {
         spring.data.set_motor_max_force(JointAxis::LinX, 2500.);
         let joint = self.joints.insert(anchor, chest, spring, true);
         doll.grab = Some((anchor, joint));
+        true
+    }
+    pub fn release_grab(&mut self, id: u64) {
+        if let Some(d) = self.dolls.get_mut(&id) {
+            d.pulling = false;
+            d.holder = None;
+            if let Some((h, j)) = d.grab.take() {
+                self.joints.remove(j, true);
+                self.remove_body(h);
+            }
+        }
+    }
+    pub fn start_grab(&mut self, id: u64, peer: u64, bone: u8) -> bool {
+        let Some(d) = self.dolls.get_mut(&id) else {
+            return false;
+        };
+        if d.grab.is_some() || bone as usize >= d.parts.len() {
+            return false;
+        }
+        d.pulling = false;
+        if !self.start_pull(id) {
+            return false;
+        }
+        let (anchor, old) = self.dolls[&id].grab.unwrap();
+        self.joints.remove(old, true);
+        let h = self.dolls[&id].parts[bone as usize];
+        let grip = if bone == 1 {
+            [-0.18, 0.10, 0.]
+        } else {
+            [0.; 3]
+        };
+        let mut position = *self.bodies[h].position();
+        position.translation.vector = self.bodies[h]
+            .position()
+            .transform_point(&Point::from(vec(grip)))
+            .coords;
+        self.bodies[anchor].set_position(position, true);
+        let mut spring = SpringJoint::new(0.01, 7000., 250.);
+        spring.set_local_anchor2(Point::from(vec(grip)));
+        spring.data.set_motor_max_force(JointAxis::LinX, 2500.);
+        let j = self.joints.insert(anchor, h, spring, true);
+        let d = self.dolls.get_mut(&id).unwrap();
+        d.grab = Some((anchor, j));
+        d.holder = Some((peer, bone as usize));
+        d.grip = grip;
         true
     }
     pub fn ray_dolls(&self, origin: V3, direction: V3, max: f32) -> Option<(f32, u64, u8)> {
@@ -260,6 +307,8 @@ impl PhysicalWorld {
                 belt,
                 grab: None,
                 pulling: false,
+                holder: None,
+                grip: [0.; 3],
             },
         );
     }
@@ -598,10 +647,10 @@ impl PhysicalWorld {
             .keys()
             .copied()
             .filter(|id| {
-                !world
-                    .vehicles
-                    .iter()
-                    .any(|v| v.vehicle_id == *id && v.stage != VehicleStage::Exited)
+                !world.vehicles.iter().any(|v| {
+                    v.vehicle_id == *id
+                        && (v.stage != VehicleStage::Exited || v.physics.npc.extracted)
+                })
             })
             .collect();
         for id in removed {
@@ -619,6 +668,37 @@ impl PhysicalWorld {
             if let Some((anchor, _)) = doll.grab
                 && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
             {
+                if let Some((peer, bone)) = doll.holder {
+                    if let Some(p) = world.peers.iter().find(|p| p.peer_id == peer) {
+                        let mut target = c::add(
+                            p.position,
+                            c::rotate(
+                                [0., p.pitch.sin() * 1.35 - 0.55, -p.pitch.cos() * 1.35],
+                                p.yaw,
+                            ),
+                        );
+                        target[1] = target[1].clamp(0.2, 2.7);
+                        // Extract through the door before allowing a lift above the roof.
+                        if v.physics.npc.died_seated && !v.physics.npc.extracted {
+                            target[1] = target[1].min(1.25);
+                        }
+                        let current = *self.bodies[anchor].translation();
+                        let delta = vec(target) - current;
+                        let gap = (current
+                            - self.bodies[doll.parts[bone]]
+                                .position()
+                                .transform_point(&Point::from(vec(doll.grip)))
+                                .coords)
+                            .norm();
+                        let speed = if gap < 0.85 { dt * 2.8 } else { 0. };
+                        self.bodies[anchor].set_next_kinematic_translation(
+                            current
+                                + delta.try_normalize(0.001).unwrap_or_else(Vector::zeros)
+                                    * speed.min(delta.norm()),
+                        );
+                    }
+                    continue;
+                }
                 let pelvis_local = c::local(
                     v,
                     [
@@ -705,6 +785,12 @@ impl PhysicalWorld {
         }
         for v in &mut world.vehicles {
             if let Some(d) = self.dolls.get(&v.vehicle_id) {
+                let p = self.bodies[d.parts[0]].translation();
+                let local = c::local(v, [p.x, p.y, p.z]);
+                if local[0].abs() > border_net::vehicle::spec(&v.kind).half_width + 0.2 {
+                    v.physics.npc.extracted = true;
+                    v.physics.npc.died_seated = false;
+                }
                 v.physics.npc.ragdoll = d
                     .parts
                     .iter()

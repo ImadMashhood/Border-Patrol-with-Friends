@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 6;
+pub const PROTOCOL_VERSION: u16 = 7;
 pub const READY_HOLD_MS: u64 = 2000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod combat;
@@ -51,6 +51,21 @@ pub struct CommandEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientCommand {
+    TogglePanel {
+        vehicle_id: u64,
+        point: vehicle::VehiclePoint,
+    },
+    EndConversation {
+        vehicle_id: u64,
+    },
+    GrabBody {
+        vehicle_id: u64,
+        bone: u8,
+    },
+    ReleaseBody,
+    RequestPorter {
+        lane_id: u8,
+    },
     SetWeaponDrawn {
         drawn: bool,
     },
@@ -163,6 +178,7 @@ pub enum VehicleStage {
     DepartingAdmit,
     DepartingDeny,
     Detained,
+    Recovering,
     Disabled,
     Exited,
 }
@@ -175,6 +191,8 @@ pub struct PeerView {
     pub health: u8,
     pub position: [f32; 3],
     pub yaw: f32,
+    #[serde(default)]
+    pub pitch: f32,
     pub equipment: Vec<String>,
     pub hold_ms: u64,
     pub assisting: Option<u8>,
@@ -207,6 +225,7 @@ pub struct VehicleView {
     pub position_mm: u32,
     pub traveler_name: String,
     pub opening_line: String,
+    pub conversation_owner: Option<u64>,
     pub observed_evidence: Vec<EvidenceView>,
     pub position: [f32; 3],
     pub yaw: f32,
@@ -218,6 +237,7 @@ pub struct VehicleView {
     pub secondary_requested: bool,
     pub searched_compartments: Vec<border_scenarios::EvidenceLocation>,
     pub inspected_points: Vec<vehicle::VehiclePoint>,
+    pub open_panels: Vec<vehicle::VehiclePoint>,
     pub physics: combat::VehiclePhysics,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -277,6 +297,7 @@ pub struct WorldSnapshot {
     pub projectiles: Vec<combat::Projectile>,
     pub impacts: Vec<combat::Impact>,
     pub shards: Vec<combat::ShardPose>,
+    pub porters: Vec<PorterView>,
 }
 /// Only the operator endpoint may deserialize these commands. Never put them in ClientCommand.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -301,6 +322,7 @@ pub struct HostEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActorDelivery {
+    pub conversation_epoch: u64,
     pub case_epoch: u64,
     pub expected_turn: u64,
     pub protocol_version: u16,
@@ -389,6 +411,10 @@ pub struct InputFrame {
     #[serde(default)]
     pub jog: bool,
     pub ready_held: bool,
+    #[serde(default)]
+    pub grab_held: bool,
+    #[serde(default)]
+    pub pitch: f32,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ShiftNotice {
@@ -396,4 +422,27 @@ pub struct ShiftNotice {
     pub at_ms: u64,
     pub kind: String,
     pub message: String,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum PorterPhase {
+    Seated,
+    Approaching,
+    RemovingBody,
+    Entering,
+    Driving,
+    Returning,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PorterView {
+    pub lane_id: u8,
+    pub position: [f32; 3],
+    pub yaw: f32,
+    pub phase: PorterPhase,
+    pub vehicle_id: Option<u64>,
+    pub progress: f32,
+}
+pub fn porter_chair(lane: u8) -> [f32; 3] {
+    [-3.5 + (lane - 1) as f32 * 7., 0., -5.5]
 }

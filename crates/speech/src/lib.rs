@@ -181,7 +181,18 @@ pub fn speak_cancellable(text: &str, scenario_id: &str, cancel: &AtomicBool) -> 
     }
     let path = temp("speech", "wav");
     let result = (|| {
-        synthesize_to_file(text, &path, alternate_voice(scenario_id))?;
+        let cached = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../assets/audio")
+            .join(if alternate_voice(scenario_id) {
+                "excuse-me-alternate.wav"
+            } else {
+                "excuse-me.wav"
+            });
+        if text.trim().eq_ignore_ascii_case("Excuse me?") && cached.exists() {
+            std::fs::copy(cached, &path)?;
+        } else {
+            synthesize_to_file(text, &path, alternate_voice(scenario_id))?;
+        }
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }

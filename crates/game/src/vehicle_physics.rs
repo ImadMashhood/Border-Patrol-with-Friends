@@ -193,7 +193,7 @@ fn door(
     );
     root
 }
-fn bone_mesh(meshes: &mut Assets<Mesh>, bone: usize) -> Handle<Mesh> {
+pub(super) fn bone_mesh(meshes: &mut Assets<Mesh>, bone: usize) -> Handle<Mesh> {
     let b = border_net::rig::skeleton(false).bones[bone];
     match bone {
         0..=2 => {
@@ -594,11 +594,11 @@ pub fn sync(
         }
     }
     for (e, d, mut t, mut visible, glass, mesh) in &mut details {
-        let Some(v) = world
-            .vehicles
-            .iter()
-            .find(|v| v.vehicle_id == d.vehicle && v.stage != VehicleStage::Exited)
-        else {
+        let Some(v) = world.vehicles.iter().find(|v| {
+            v.vehicle_id == d.vehicle
+                && (v.stage != VehicleStage::Exited
+                    || matches!(d.kind, DetailKind::Bone(_)) && v.physics.npc.extracted)
+        }) else {
             commands.entity(e).despawn();
             continue;
         };
@@ -722,7 +722,11 @@ pub fn sync(
         };
         let n = &v.physics.npc;
         let seated = n.mode == NpcMode::Seated || n.mode == NpcMode::Dead && n.died_seated;
-        let rig = border_net::rig::skeleton(seated);
+        let rig = if n.mode == NpcMode::Fleeing {
+            border_net::rig::walking(time.elapsed_secs() * 11.)
+        } else {
+            border_net::rig::skeleton(seated)
+        };
         let bone = rig.bones[part.bone];
         t.translation = Vec3::from_array(bone.center);
         t.rotation = Quat::from_rotation_x(bone.angle);

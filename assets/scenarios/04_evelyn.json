@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "principled",
     "compliance_bounds": "Sweet but firm about honesty. Will follow reasonable directions and be polite, but will not deny her real belongings merely to please the officer. Refusal should sound personal and puzzled, not like an assistant policy.",
-    "bribery_capable": false
+    "bribery_capable": false,
+    "psychology": {
+      "survival": 80,
+      "boldness": 50,
+      "integrity": 95,
+      "aggression": 5,
+      "sociability": 80,
+      "greed": 10,
+      "pride": 60
+    }
   },
   "truth": {
     "purpose": "Visit my grandchildren for their school play.",

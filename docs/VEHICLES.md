@@ -10,7 +10,7 @@ Normal play has exactly two independently staffed inspection lanes. Each receive
 ./play.sh --join --name=Officer-B
 ```
 
-Hold E at the office ready door for three seconds. Claim or assist a lane using the roster. Approach a stopped vehicle and look at one of its interaction points; the E prompt names the available action:
+Hold E at the office ready door for two seconds. Claim or assist a lane using the roster. Approach a stopped vehicle and point at an interactable object; its white outline marks the E target. [Current conversation/interaction controls](CONVERSATION.md) supersede the original automatic panels described below:
 
 - **Driver window:** opens the existing text/continuous-microphone conversation. Speech remains automatic during an open interview. Walking away or closing the interview pauses microphone capture; approaching the window and reopening the conversation resumes it.
 - **Passenger door:** opens the door panel and records cabin access. This does not declare the traveler innocent or reveal cargo evidence.

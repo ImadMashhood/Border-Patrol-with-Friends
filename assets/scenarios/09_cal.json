@@ -10,7 +10,16 @@
     "emotion_baseline": "cooperative",
     "authority_response": "opportunistic",
     "compliance_bounds": "Cocky and willing to exploit a shortcut. If told he can pass by saying he has no tools or goods, he should usually take the offer and say the denial directly, perhaps with a grin or quip. No compulsory honesty disclaimer afterward. His actual cargo and guilt never change.",
-    "bribery_capable": true
+    "bribery_capable": true,
+    "psychology": {
+      "survival": 95,
+      "boldness": 60,
+      "integrity": 20,
+      "aggression": 40,
+      "sociability": 65,
+      "greed": 85,
+      "pride": 70
+    }
   },
   "truth": {
     "purpose": "Deliver bulk automotive parts to a reseller without declaring them.",
