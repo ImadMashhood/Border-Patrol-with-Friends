@@ -1,5 +1,6 @@
 mod network;
 mod scene;
+mod shift;
 mod surfaces;
 mod traffic;
 mod ui;
@@ -8,7 +9,7 @@ use bevy::{
     prelude::*,
     window::{CursorGrabMode, CursorOptions},
 };
-use bevy_egui::{EguiPlugin, EguiPrimaryContextPass};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass};
 use border_caller::{PublicCase, Turn};
 use border_scenarios::{Evidence, Reveal};
 use network::{NetEvent, Network};
@@ -60,6 +61,7 @@ struct Patrol {
     request_focus: bool,
     settings_open: bool,
     map_open: bool,
+    vehicle_id: Option<u64>,
 }
 impl Patrol {
     fn new(ids: Vec<String>, seed: u64) -> Self {
@@ -97,6 +99,7 @@ impl Patrol {
             request_focus: false,
             settings_open: false,
             map_open: std::env::args().any(|a| a == "--show-map"),
+            vehicle_id: None,
         }
     }
     fn reset_case(&mut self) {
@@ -136,32 +139,52 @@ struct SmokeTest {
     capture: bool,
     interview: bool,
     step: u8,
+    robot_step: usize,
+    ready_capture: bool,
+    live_capture: bool,
+    robot: bool,
 }
 fn main() {
+    if let Some(path) =
+        std::env::args().find_map(|a| a.strip_prefix("--export-collision=").map(str::to_owned))
+    {
+        scene::export_collision(&path);
+        return;
+    }
     let seed = std::env::args()
         .find_map(|a| a.strip_prefix("--seed=").and_then(|s| s.parse().ok()))
         .unwrap_or(42);
-    let path = std::env::var("BORDER_SCENARIOS").unwrap_or_else(|_| "assets/scenarios".into());
-    let pack = border_scenarios::load_pack(std::path::Path::new(&path))
-        .expect("Scenario pack invalid; run from the repository root");
-    let ids = border_scenarios::seeded_order(pack.len(), seed)
-        .iter()
-        .map(|i| pack[*i].scenario_id.clone())
-        .collect();
+    let ids: Vec<String> = (0..10).map(|i| i.to_string()).collect();
+    let preview =
+        std::env::args().any(|a| a.starts_with("--scene-view=") || a == "--scene-preview");
+    let (shift_state, base, token) = if preview {
+        (shift::Shift::preview(), String::new(), String::new())
+    } else {
+        let url =
+            std::env::var("BORDER_HOST_URL").unwrap_or_else(|_| "http://127.0.0.1:8090".into());
+        let code = std::env::var("BORDER_HOST_JOIN_CODE")
+            .expect("Launch ./play.sh or set BORDER_HOST_JOIN_CODE for an existing host");
+        let name = std::env::args()
+            .find_map(|a| a.strip_prefix("--name=").map(str::to_owned))
+            .unwrap_or_else(|| format!("Officer {}", std::process::id()));
+        shift::Shift::connect(url, code, name).expect("Failed to join the shift host")
+    };
+    let seed = shift_state.world.as_ref().map(|w| w.seed).unwrap_or(seed);
     let (tx, rx) = mpsc::channel();
     let net = Network {
-        base: std::env::var("BORDER_SERVER_URL").unwrap_or_else(|_| "http://127.0.0.1:3847".into()),
-        token: std::env::var("BORDER_SESSION_TOKEN")
-            .unwrap_or_else(|_| "local-development-only".into()),
+        base,
+        token,
         tx,
         rx: Arc::new(Mutex::new(rx)),
     };
     let interview_smoke = std::env::args().any(|a| a == "--smoke-interview");
-    let smoke = interview_smoke || std::env::args().any(|a| a == "--smoke-test");
+    let robot = interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
+    let smoke = robot || std::env::args().any(|a| a == "--smoke-test");
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.57, 0.72, 0.82)))
         .insert_resource(Patrol::new(ids, seed))
         .insert_resource(net)
+        .insert_resource(shift_state)
         .init_resource::<traffic::Traffic>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
@@ -179,7 +202,15 @@ fn main() {
         .add_systems(Startup, scene::setup)
         .add_systems(
             Update,
-            (controls, receive, traffic::progress, traffic::dust, voice).chain(),
+            (
+                shift::sync,
+                controls,
+                receive,
+                traffic::progress,
+                traffic::dust,
+                voice,
+            )
+                .chain(),
         )
         .add_systems(Update, scene::atmosphere)
         .add_systems(EguiPrimaryContextPass, (ui::landmarks, ui::draw).chain());
@@ -193,8 +224,12 @@ fn main() {
             capture: false,
             interview: interview_smoke,
             step: 0,
+            robot_step: 0,
+            ready_capture: false,
+            live_capture: false,
+            robot,
         })
-        .add_systems(Update, smoke_test);
+        .add_systems(Update, smoke_test.after(voice));
     }
     app.run();
 }
@@ -211,8 +246,40 @@ fn controls(
     mut cursor: Single<&mut CursorOptions>,
     cars: Query<(&Transform, &traffic::Vehicle), Without<Player>>,
     smoke: Option<Res<SmokeTest>>,
+    shift: Res<shift::Shift>,
+    mut lights: Query<&mut Visibility, With<shift::Flashlight>>,
+    mut gui: EguiContexts,
 ) {
-    if smoke.is_some() {
+    if let Some(smoke) = smoke {
+        if shift.connected && !smoke.robot {
+            *shift.controls.lock().unwrap() = shift::Controls::default();
+        }
+        if shift.connected
+            && let Some(world) = &shift.world
+            && let Some(me) = shift.me()
+            && let Ok((mut t, mut p)) = player.single_mut()
+        {
+            let target = if world.phase == border_net::ShiftPhase::Lobby {
+                Vec3::new(-12., 1.7, -3.5)
+            } else {
+                world
+                    .vehicles
+                    .iter()
+                    .find(|v| {
+                        world
+                            .lanes
+                            .iter()
+                            .any(|l| l.lane_id == v.lane_id && l.owner == Some(me.peer_id))
+                            && v.stage == border_net::VehicleStage::Stopped
+                    })
+                    .map(|v| Vec3::from_array(v.position) + Vec3::Y * 1.25)
+                    .unwrap_or(Vec3::new(0., 1.25, 0.))
+            };
+            t.look_at(target, Vec3::Y);
+            let (yaw, pitch, _) = t.rotation.to_euler(EulerRot::YXZ);
+            p.yaw = yaw;
+            p.pitch = pitch;
+        }
         g.looking = false;
         cursor.visible = true;
         cursor.grab_mode = CursorGrabMode::None;
@@ -223,13 +290,61 @@ fn controls(
         g.looking = false;
         g.settings_open = false;
     }
+    if !g.overlay {
+        if keys.just_pressed(KeyCode::Digit1) {
+            shift.send(border_net::ClientCommand::ClaimLane { lane_id: 1 });
+        }
+        if keys.just_pressed(KeyCode::Digit2) {
+            shift.send(border_net::ClientCommand::ClaimLane { lane_id: 2 });
+        }
+        if keys.just_pressed(KeyCode::KeyG) {
+            let lane = if shift.me().is_some_and(|p| p.assisting.is_some()) {
+                None
+            } else {
+                shift
+                    .world
+                    .as_ref()
+                    .and_then(|w| {
+                        w.lanes
+                            .iter()
+                            .find(|l| l.owner.is_some() && l.owner != Some(shift.peer_id))
+                    })
+                    .map(|l| l.lane_id)
+            };
+            shift.send(border_net::ClientCommand::AssistLane { lane_id: lane });
+        }
+        if keys.just_pressed(KeyCode::KeyJ) {
+            if shift
+                .world
+                .as_ref()
+                .and_then(|w| w.lane_swap)
+                .is_some_and(|p| p[1] == shift.peer_id)
+            {
+                shift.send(border_net::ClientCommand::AcceptLaneSwap);
+            } else {
+                shift.send(border_net::ClientCommand::RequestLaneSwap);
+            }
+        }
+        if keys.just_pressed(KeyCode::KeyF) {
+            for mut visibility in &mut lights {
+                *visibility = if *visibility == Visibility::Hidden {
+                    Visibility::Visible
+                } else {
+                    Visibility::Hidden
+                };
+            }
+        }
+    }
     if keys.just_pressed(KeyCode::KeyM) && !g.overlay && !g.settings_open {
         g.map_open = !g.map_open;
     }
     if keys.just_pressed(KeyCode::Tab) {
         g.looking = !g.looking;
     }
-    if mouse.just_pressed(MouseButton::Left) && !g.overlay {
+    if mouse.just_pressed(MouseButton::Left)
+        && !g.overlay
+        && !gui.ctx_mut().is_ok_and(|ctx| ctx.is_pointer_over_area())
+    {
         g.looking = true;
     }
     cursor.visible = !g.looking;
@@ -259,32 +374,59 @@ fn controls(
             } else {
                 3.2
             };
-        for movement in [Vec3::new(delta.x, 0., 0.), Vec3::new(0., 0., delta.z)] {
-            let candidate = t.translation + movement;
-            let blocked = solids.iter().any(|(s, b)| {
-                (candidate.x - s.translation.x).abs() < b.half.x + 0.22
-                    && (candidate.z - s.translation.z).abs() < b.half.z + 0.22
-            });
-            if !blocked && scene::walkable(candidate) {
-                t.translation = candidate;
+        if shift.connected {
+            let holding = shift
+                .world
+                .as_ref()
+                .is_some_and(|w| w.phase == border_net::ShiftPhase::Lobby)
+                && keys.pressed(KeyCode::KeyE)
+                && border_net::map::door_distance(t.translation.to_array()) < 2.2;
+            *shift.controls.lock().unwrap() = shift::Controls {
+                movement: [(r * axis.x + f * axis.y).x, (r * axis.x + f * axis.y).z],
+                yaw: p.yaw,
+                jog: keys.pressed(KeyCode::ShiftLeft),
+                ready: holding,
+            };
+        } else {
+            for movement in [Vec3::new(delta.x, 0., 0.), Vec3::new(0., 0., delta.z)] {
+                let candidate = t.translation + movement;
+                let blocked = solids.iter().any(|(s, b)| {
+                    (candidate.x - s.translation.x).abs() < b.half.x + 0.22
+                        && (candidate.z - s.translation.z).abs() < b.half.z + 0.22
+                });
+                if !blocked && scene::walkable(candidate) {
+                    t.translation = candidate;
+                }
             }
         }
+    } else if shift.connected {
+        *shift.controls.lock().unwrap() = shift::Controls {
+            yaw: p.yaw,
+            ..default()
+        };
     }
     let direction = *t.forward();
+    let hit = cars
+        .iter()
+        .filter(|(_, v)| v.ordinal < 5 && shift.permits(v.lane + 1))
+        .find(|(car, v)| {
+            v.distance == 0.
+                && ray_box(
+                    t.translation,
+                    direction,
+                    car.translation + Vec3::new(-1.05, 0.2, -2.25),
+                    car.translation + Vec3::new(1.05, 1.85, 2.25),
+                )
+                .is_some_and(|d| d <= 3.)
+        });
     g.aiming = matches!(g.phase, Phase::Approach | Phase::Interview)
-        && cars
-            .iter()
-            .find(|(_, v)| v.lane == 0 && v.ordinal == g.position)
-            .is_some_and(|(car, v)| {
-                v.distance == 0.
-                    && ray_box(
-                        t.translation,
-                        direction,
-                        car.translation + Vec3::new(-1.05, 0.2, -2.25),
-                        car.translation + Vec3::new(1.05, 1.85, 2.25),
-                    )
-                    .is_some_and(|d| d <= 3.)
-            });
+        && hit.is_some()
+        && shift.world.as_ref().is_some_and(|w| {
+            matches!(
+                w.phase,
+                border_net::ShiftPhase::Active | border_net::ShiftPhase::Grace
+            )
+        });
     if keys.just_pressed(KeyCode::KeyE) && g.aiming && !g.pending && (!g.overlay || g.looking) {
         g.overlay = true;
         g.looking = false;
@@ -292,7 +434,11 @@ fn controls(
         if g.case.is_none() {
             g.pending = true;
             g.error.clear();
-            net.start(g.generation, g.ids[g.position].clone());
+            let id = hit
+                .map(|(_, v)| 1 + v.lane as u64 + v.ordinal as u64 * 2)
+                .unwrap();
+            g.vehicle_id = Some(id);
+            net.start(g.generation, id.to_string());
         } else {
             g.phase = Phase::Interview;
         }
@@ -318,7 +464,7 @@ fn ray_box(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     }
     Some(near)
 }
-fn receive(mut g: ResMut<Patrol>, net: Res<Network>) {
+fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Shift>>) {
     let events: Vec<_> = net.rx.lock().unwrap().try_iter().collect();
     for (generation, event) in events {
         if generation != g.generation {
@@ -344,11 +490,13 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>) {
             NetEvent::Reply(q, r) => {
                 g.subtitle = r.dialogue.clone();
                 g.emotion = format!("{:?}", r.emotion).to_lowercase();
-                g.history.push(Turn {
-                    officer: q,
-                    traveler: r.dialogue.clone(),
-                    emotion: r.emotion.clone(),
-                });
+                if !shift.as_ref().is_some_and(|s| s.connected) {
+                    g.history.push(Turn {
+                        officer: q,
+                        traveler: r.dialogue.clone(),
+                        emotion: r.emotion.clone(),
+                    });
+                }
                 g.pending = false;
                 g.request_focus = true;
                 if !g.muted {
@@ -454,20 +602,91 @@ fn smoke_test(
     mut exit: MessageWriter<bevy::app::AppExit>,
     mut g: ResMut<Patrol>,
     net: Res<Network>,
-    cars: Query<&traffic::Vehicle>,
+    shift: Res<shift::Shift>,
 ) {
     smoke.elapsed += time.delta_secs();
-    if smoke.interview {
-        if smoke.elapsed > 1.
-            && smoke.step == 0
-            && cars
+    if smoke.robot
+        && shift.connected
+        && let Some(world) = &shift.world
+        && let Some(me) = shift.me()
+    {
+        let mut controls = shift::Controls {
+            yaw: std::f32::consts::PI,
+            ..default()
+        };
+        if world.phase == border_net::ShiftPhase::Lobby {
+            let mut target = border_net::map::READY_TARGET;
+            target[0] += if shift.peer_id % 2 == 1 { -0.55 } else { 0.55 };
+            let dx = target[0] - me.position[0];
+            let dz = target[2] - me.position[2];
+            let length = dx.hypot(dz);
+            if length > 0.13 {
+                controls.movement = [
+                    dx / length * (length / 0.45).min(1.),
+                    dz / length * (length / 0.45).min(1.),
+                ];
+            } else {
+                controls.ready = true;
+            }
+            if me.hold_ms > 1000 && !smoke.ready_capture {
+                smoke.ready_capture = true;
+                commands
+                    .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                    .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                        "output/ready-peer-{}.png",
+                        shift.peer_id
+                    )));
+            }
+        } else {
+            let lane = world
+                .lanes
                 .iter()
-                .any(|v| v.lane == 0 && v.ordinal == g.position && v.distance == 0.)
+                .find(|l| l.owner == Some(me.peer_id))
+                .map(|l| l.lane_id)
+                .unwrap_or(1);
+            let x = if lane == 1 { -1.6 } else { 5.4 };
+            let route = [[-12., -2.], [-4., -2.], [-4., -8.], [x, -8.], [x, 0.]];
+            if smoke.robot_step < route.len() {
+                let target = route[smoke.robot_step];
+                let dx = target[0] - me.position[0];
+                let dz = target[1] - me.position[2];
+                let length = dx.hypot(dz);
+                if length < 0.18 {
+                    smoke.robot_step += 1;
+                } else {
+                    controls.movement = [
+                        dx / length * (length / 0.45).min(1.),
+                        dz / length * (length / 0.45).min(1.),
+                    ];
+                }
+            }
+            if smoke.elapsed > 12. && !smoke.live_capture {
+                smoke.live_capture = true;
+                commands
+                    .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                    .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                        "output/shift-peer-{}.png",
+                        shift.peer_id
+                    )));
+            }
+        }
+        *shift.controls.lock().unwrap() = controls;
+    }
+
+    if smoke.interview {
+        if smoke.step == 0
+            && smoke.robot_step >= 5
+            && let Some(world) = &shift.world
+            && let Some(vehicle) = world
+                .vehicles
+                .iter()
+                .find(|v| v.stage == border_net::VehicleStage::Stopped && shift.permits(v.lane_id))
         {
             smoke.step = 1;
             g.pending = true;
             g.overlay = true;
-            net.start(g.generation, g.ids[g.position].clone());
+            g.vehicle_id = Some(vehicle.vehicle_id);
+            net.start(g.generation, vehicle.vehicle_id.to_string());
         }
         if smoke.elapsed > 2.
             && smoke.step == 1
@@ -482,7 +701,7 @@ fn smoke_test(
             g.pending = true;
             smoke.step = 2;
         }
-        if smoke.elapsed > 13.
+        if smoke.elapsed > 17.
             && smoke.step == 2
             && !g.pending
             && let Some(case) = &g.case
@@ -491,7 +710,7 @@ fn smoke_test(
             g.pending = true;
             smoke.step = 3;
         }
-        if smoke.elapsed > 16. && smoke.step == 3 && !g.pending {
+        if smoke.elapsed > 21. && smoke.step == 3 && !g.pending {
             smoke.step = 4;
             commands
                 .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
@@ -500,7 +719,7 @@ fn smoke_test(
                 ));
         }
     }
-    if smoke.elapsed > if smoke.interview { 11. } else { 6. } && !smoke.capture {
+    if smoke.elapsed > if smoke.interview { 16. } else { 6. } && !smoke.capture {
         smoke.capture = true;
         std::fs::create_dir_all("output").ok();
         commands
@@ -517,7 +736,28 @@ fn smoke_test(
                 },
             ));
     }
-    if smoke.elapsed > if smoke.interview { 20. } else { 9. } {
+    if smoke.elapsed
+        > if smoke.interview {
+            35.
+        } else if smoke.robot {
+            20.
+        } else {
+            9.
+        }
+    {
+        if let Some(world) = &shift.world {
+            std::fs::create_dir_all("output").ok();
+            std::fs::write(
+                format!("output/shift-peer-{}.json", shift.peer_id),
+                serde_json::to_string_pretty(world).unwrap(),
+            )
+            .ok();
+        }
+        if smoke.robot && !smoke.live_capture {
+            error!("Ready door smoke did not complete");
+            exit.write(bevy::app::AppExit::error());
+            return;
+        }
         if smoke.interview && (smoke.step < 4 || !g.secondary || !g.error.is_empty()) {
             error!(
                 "Interview smoke failed: step={}, secondary={}, error={}",

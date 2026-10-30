@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Real host + two CLI peer processes; no GPU, model download or paid AI call."""
+"""Two authenticated peers, real HTTP services, deterministic host clock; no GPU or paid AI."""
 import json
+import math
 import os
 from pathlib import Path
-import queue
 import secrets
 import socket
 import subprocess
-import threading
 import time
 import urllib.request
 import urllib.error
@@ -15,13 +14,17 @@ import urllib.error
 ROOT = Path(__file__).resolve().parents[1]
 EXT = '.exe' if os.name == 'nt' else ''
 
-def main():
-    subprocess.run(['cargo', 'build', '--locked', '-p', 'border-caller-server', '--bin', 'border-host', '-p', 'border-net', '--bin', 'border-peer', '--bin', 'border-caller-server'], cwd=ROOT, check=True)
+def free_port():
     with socket.socket() as sock:
         sock.bind(('127.0.0.1', 0))
-        port = sock.getsockname()[1]
-    url = f'http://127.0.0.1:{port}'
-    env = dict(os.environ, BORDER_HOST_BIND=f'127.0.0.1:{port}', BORDER_HOST_JOIN_CODE=secrets.token_hex(8), BORDER_HOST_OPERATOR_TOKEN=secrets.token_hex(24), BORDER_HOST_GATEWAY_TOKEN=secrets.token_hex(24))
+        return sock.getsockname()[1]
+
+def main():
+    subprocess.run(['cargo', 'build', '--locked', '-p', 'border-caller-server', '--bins'], cwd=ROOT, check=True)
+    host_port, gateway_port = free_port(), free_port()
+    url = f'http://127.0.0.1:{host_port}'
+    env = dict(os.environ, BORDER_HOST_BIND=f'127.0.0.1:{host_port}', BORDER_HOST_URL=url, BORDER_GATEWAY_URL=f'http://127.0.0.1:{gateway_port}', BORDER_SERVER_ADDR=f'127.0.0.1:{gateway_port}', BORDER_HOST_JOIN_CODE=secrets.token_hex(8), BORDER_HOST_OPERATOR_TOKEN=secrets.token_hex(24), BORDER_HOST_GATEWAY_TOKEN=secrets.token_hex(24), BORDER_SESSION_TOKEN=secrets.token_hex(24), BORDER_HOST_MANUAL_CLOCK='1')
+    env.pop('OPENROUTER_API_KEY', None)
     children = []
     def request(path, payload=None, token=None, expected=200):
         headers = {'Content-Type': 'application/json'}
@@ -29,112 +32,145 @@ def main():
             headers['Authorization'] = f'Bearer {token}'
         req = urllib.request.Request(url + path, data=None if payload is None else json.dumps(payload).encode(), headers=headers)
         try:
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=35) as response:
                 status, body = response.status, json.load(response)
         except urllib.error.HTTPError as error:
             status, body = error.code, error.read().decode()
         assert status == expected, (path, status, body)
         return body
-    def peer(name):
-        child = subprocess.Popen([str(ROOT / 'target/debug' / ('border-peer' + EXT)), url, name], cwd=ROOT, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
-        children.append(child)
-        lines = queue.Queue()
-        def reader():
-            for line in child.stdout:
-                lines.put(json.loads(line))
-        threading.Thread(target=reader, daemon=True).start()
-        return child, lines, lines.get(timeout=10)
-    def send(p, command):
-        child, lines, _ = p
-        child.stdin.write((command if isinstance(command, str) else json.dumps(command)) + '\n')
-        child.stdin.flush()
-        return lines.get(timeout=10)
-    host = subprocess.Popen([str(ROOT / 'target/debug' / ('border-host' + EXT))], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-    children.append(host)
     try:
+        for binary in ('border-caller-server', 'border-host'):
+            children.append(subprocess.Popen([str(ROOT / 'target/debug' / (binary + EXT))], cwd=ROOT, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
         for _ in range(100):
             try:
-                request('/health')
+                health = request('/health')
                 break
-            except (OSError, urllib.error.URLError):
-                if host.poll() is not None:
-                    raise RuntimeError(host.stderr.read())
+            except OSError:
                 time.sleep(.05)
         else:
             raise RuntimeError('host startup timeout')
-        a, b = peer('Officer A'), peer('Officer B')
-        session = a[2]['session_id']
-        assert session == b[2]['session_id']
-        for p, lane in [(a, 1), (b, 2)]:
-            send(p, {'type': 'set_ready', 'ready': True})
-            send(p, {'type': 'claim_lane', 'lane_id': lane})
-        def operator(command):
-            return request('/operator', {'protocol_version': 1, 'session_id': session, 'command': command}, env['BORDER_HOST_OPERATOR_TOKEN'])
-        snapshot = operator({'type': 'start_shift'})
-        assert len([p for p in snapshot['peers'] if p['connected']]) == 2
-        request('/join', {'protocol_version': 99, 'join_code': env['BORDER_HOST_JOIN_CODE'], 'display_name': 'old'}, expected=400)
-        request('/snapshot', expected=400)
-        request('/operator', {'protocol_version': 1, 'session_id': session, 'command': {'type': 'apply_damage', 'peer_id': 1, 'amount': 100}}, env['BORDER_HOST_JOIN_CODE'], expected=400)
-        operator({'type': 'spawn_next_vehicle', 'lane_id': 1, 'kind': 'car'})
-        for _ in range(2):
-            snapshot = operator({'type': 'advance_world', 'delta_ms': 1000})
-        assert snapshot['vehicles'][0]['stage'] == 'stopped'
-        assert snapshot['vehicles'][0]['position_mm'] == 10000
-        raw = json.dumps(snapshot)
-        assert 'smuggling' not in raw and 'contradictions' not in raw and 'truth' not in raw
-        delivery = {'expected_turn': 0, 'protocol_version': 1, 'session_id': session, 'vehicle_id': 1, 'officer_utterance': 'Hello', 'raw_reply': json.dumps({'dialogue': 'Hello officer.', 'emotion': 'cooperative', 'action': 'none', 'fact_ids': [], 'end_conversation': False})}
-        request('/actor', delivery, env['BORDER_HOST_JOIN_CODE'], expected=400)
-        request('/actor-context', {'protocol_version': 1, 'session_id': session, 'vehicle_id': 1}, env['BORDER_HOST_JOIN_CODE'], expected=400)
-        request('/actor', delivery, env['BORDER_HOST_GATEWAY_TOKEN'])
-        request('/actor', delivery, env['BORDER_HOST_GATEWAY_TOKEN'], expected=400)  # stale provider retry
-        attack = dict(delivery, expected_turn=1, raw_reply=delivery['raw_reply'].replace('"none"', '"award_money"'))
-        request('/actor', attack, env['BORDER_HOST_GATEWAY_TOKEN'], expected=400)
-        # Exercise the real provider gateway bridge in deterministic offline mode.
-        with socket.socket() as sock:
-            sock.bind(('127.0.0.1', 0))
-            gateway_port = sock.getsockname()[1]
-        gateway_env = dict(env, BORDER_HOST_URL=url, BORDER_SESSION_TOKEN=secrets.token_hex(24), BORDER_SERVER_ADDR=f'127.0.0.1:{gateway_port}')
-        gateway_env.pop('OPENROUTER_API_KEY', None)
-        gateway = subprocess.Popen([str(ROOT / 'target/debug' / ('border-caller-server' + EXT))], cwd=ROOT, env=gateway_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
-        children.append(gateway)
-        for _ in range(100):
-            try:
-                with urllib.request.urlopen(f'http://127.0.0.1:{gateway_port}/health', timeout=1) as response:
-                    assert json.load(response)['mode'] == 'offline rehearsal'
-                break
-            except (OSError, urllib.error.URLError):
-                time.sleep(.05)
-        else:
-            raise RuntimeError('gateway startup timeout')
-        bridge_req = urllib.request.Request(f'http://127.0.0.1:{gateway_port}/host-turn', data=json.dumps({'protocol_version': 1, 'session_id': session, 'vehicle_id': 1, 'utterance': 'What is your name?'}).encode(), headers={'Content-Type': 'application/json', 'Authorization': f"Bearer {gateway_env['BORDER_SESSION_TOKEN']}"})
-        with urllib.request.urlopen(bridge_req, timeout=10) as response:
-            reply = json.load(response)
-            assert reply['action'] == 'none' and reply['dialogue']
-        receipt = send(a, {'type': 'decide', 'vehicle_id': 1, 'disposition': 'admit'})
-        assert receipt['sequence'] == 3
-        snapshot = operator({'type': 'create_incident', 'kind': 'fence_breach'})
-        assert len(snapshot['ledger']) == 1 and snapshot['money'] in (100, -400)
-        view_a, view_b = send(a, '/snapshot'), send(b, '/snapshot')
-        assert view_a == view_b == snapshot
-        # Both peers observe the same public ledger, vehicle and incident state.
-        replay_a = send(a, '/events')
-        assert replay_a['latest_sequence'] == snapshot['latest_event_sequence']
-        for p in (a, b):
-            p[0].stdin.close()
-            assert p[0].wait(timeout=10) == 0, p[0].stderr.read()
-        snapshot = operator({'type': 'resolve_incident', 'incident_id': 1})
-        assert all(not p['connected'] for p in snapshot['peers'])
-        assert all(lane['owner'] is None for lane in snapshot['lanes'])
-        print('PASS: two real peers, shared session, ready/lane authority, host motion, hidden-state boundary, trusted actor/gateway delivery, matching peer snapshots, settlement and disconnect cleanup')
+        version = health['protocol_version']
+        peers = [request('/join', {'protocol_version': version, 'join_code': env['BORDER_HOST_JOIN_CODE'], 'display_name': name}) for name in ('Officer A', 'Officer B')]
+        session = peers[0]['session_id']
+        frames = [0, 0]
+        sequences = [1, 1]
+        def inputs(i, move=(0., 0.), held=False, expected=200, **extra):
+            frames[i] += 1
+            return request('/input', dict(protocol_version=version, session_id=session, frame=frames[i], movement=list(move), yaw=math.pi, ready_held=held, **extra), peers[i]['peer_token'], expected)
+        def snapshot(i=0):
+            return request('/snapshot', token=peers[i]['peer_token'])
+        def command(i, body, expected=200):
+            result = request('/command', {'protocol_version': version, 'session_id': session, 'request_id': f'{i}-{sequences[i]}', 'sequence': sequences[i], 'expected_revision': None, 'command': body}, peers[i]['peer_token'], expected)
+            if expected == 200:
+                sequences[i] += 1
+            return result
+        def tick(ms=100):
+            return request('/operator', {'protocol_version': version, 'session_id': session, 'command': {'type': 'advance_world', 'delta_ms': ms}}, env['BORDER_HOST_OPERATOR_TOKEN'])
+        def move_to(i, target):
+            for _ in range(200):
+                p = snapshot(i)['peers'][i]['position']
+                dx, dz = target[0] - p[0], target[1] - p[2]
+                length = math.hypot(dx, dz)
+                if length < .12:
+                    inputs(i)
+                    return
+                scale = min(1., length / .4)
+                inputs(i, (dx / length * scale, dz / length * scale))
+                inputs(1-i)
+                tick()
+            raise AssertionError(('movement blocked', i, target, p))
+        assert len(peers[0]['snapshot']['lanes']) == 2
+        assert all(p['health'] == 100 and len(p['equipment']) == 3 for p in peers[1]['snapshot']['peers'])
+        request('/join', {'protocol_version': version, 'join_code': env['BORDER_HOST_JOIN_CODE'], 'display_name': 'Third'}, expected=400)
+        command(0, {'type': 'set_ready', 'ready': True}, expected=400)
+        inputs(0, held=True, elapsed_ms=3000, expected=422)
+        inputs(0, position=[-12, 1.7, -4.8], expected=422)
+        for _ in range(35):
+            inputs(0, held=True)
+            inputs(1)
+            state = tick()
+        assert state['phase'] == 'lobby' and not state['vehicles'] and state['remaining_ms'] == 600000
+        move_to(1, (-12., -4.8))
+        for _ in range(32):
+            inputs(0)
+            inputs(1, held=True)
+            state = tick()
+        assert state['phase'] == 'lobby' and state['peers'][1]['ready']
+        command(1, {'type': 'set_ready', 'ready': False})
+        inputs(1)
+        move_to(0, (-12., -4.8))
+        for _ in range(10):
+            inputs(0, held=True)
+            inputs(1)
+            state = tick()
+        inputs(0)
+        state = tick()
+        assert state['peers'][0]['hold_ms'] == 0
+        for _ in range(29):
+            inputs(0, held=True)
+            inputs(1)
+            state = tick()
+        assert state['phase'] == 'lobby', 'partial hold must not start a shift'
+        for _ in range(3):
+            inputs(0, held=True)
+            inputs(1)
+            state = tick()
+        assert state['phase'] == 'active' and state['door_open'] and state['events_active']
+        assert len(state['vehicles']) == 10 and state['peers'][0]['ready'] and not state['peers'][1]['ready']
+        start = state['shift_started_ms']
+        for i in (0, 1):
+            inputs(i)
+        command(0, {'type': 'request_lane_swap'})
+        assert snapshot()['lanes'][0]['owner'] == peers[0]['peer_id']
+        command(1, {'type': 'accept_lane_swap'})
+        assert snapshot()['lanes'][0]['owner'] == peers[1]['peer_id']
+        command(1, {'type': 'request_lane_swap'})
+        command(0, {'type': 'accept_lane_swap'})
+        command(1, {'type': 'assist_lane', 'lane_id': 1})
+        for waypoint in [(-12., -2.), (-4., -2.), (-4., -8.), (-1.6, -8.), (-1.6, 0.)]:
+            move_to(1, waypoint)
+        for _ in range(80):
+            inputs(0)
+            inputs(1)
+            state = tick()
+        assert state['vehicles'][0]['stage'] == 'stopped'
+        assert snapshot(0)['remaining_ms'] == snapshot(1)['remaining_ms']
+        assert state['remaining_ms'] == 600000 - (state['server_time_ms'] - start)
+        serialized = json.dumps(state)
+        assert '"truth"' not in serialized and '"smuggling"' not in serialized
+        request('/start', {'session_id': '1'}, peers[0]['peer_token'], expected=400)
+        request('/start', {'session_id': '1'}, peers[1]['peer_token'])
+        reply = request('/turn', {'session_id': '1', 'utterance': 'What is your name?'}, peers[1]['peer_token'])
+        assert reply['action'] == 'none'
+        assert len(snapshot(0)['vehicles'][0]['history']) == len(snapshot(1)['vehicles'][0]['history']) == 1
+        request('/inspect', {'session_id': '1'}, peers[1]['peer_token'])
+        request('/decide', {'session_id': '1', 'decision': 'admit'}, peers[1]['peer_token'])
+        request('/decide', {'session_id': '1', 'decision': 'admit'}, peers[1]['peer_token'])
+        assert len(snapshot()['ledger']) == 1
+        command(1, {'type': 'release_vehicle', 'vehicle_id': 1})
+        for _ in range(70):
+            inputs(0)
+            inputs(1)
+            state = tick(1000)
+        assert state['notices'], 'security hooks must activate after shift start'
+        while state['remaining_ms']:
+            inputs(0)
+            inputs(1)
+            state = tick(1000)
+        assert state['phase'] == 'grace' and not state['events_active']
+        command(1, {'type': 'reset_shift'}, expected=400)
+        command(0, {'type': 'reset_shift'})
+        state = snapshot()
+        assert state['phase'] == 'lobby' and not state['door_open'] and not state['vehicles']
+        print('PASS: two peers; authoritative 3-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; event hooks; safe restart')
     finally:
         for child in reversed(children):
-            if child.poll() is None:
-                child.terminate()
-                try:
-                    child.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    child.kill()
-                    child.wait()
+            child.terminate()
+            try:
+                child.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                child.kill()
+                child.wait()
 
 if __name__ == '__main__':
     main()

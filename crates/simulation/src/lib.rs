@@ -5,12 +5,20 @@ use border_net::*;
 use border_scenarios::{Scenario, seeded_order};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
+mod shift;
 
 struct Case {
+    epoch: u64,
     scenario: Scenario,
     history: Vec<Turn>,
+    secondary: bool,
+    waypoint: usize,
 }
 struct Peer {
+    input: Option<InputFrame>,
+    input_at: u64,
+    input_frame: u64,
+    hold_started: Option<u64>,
     last_seen: u64,
     next_sequence: u64,
     receipts: HashMap<String, (String, CommandReceipt)>,
@@ -21,6 +29,8 @@ pub struct ActorContext {
     pub scenario: Scenario,
     pub history: Vec<Turn>,
     pub expected_turn: u64,
+    pub secondary: bool,
+    pub case_epoch: u64,
 }
 pub struct Simulation {
     world: WorldSnapshot,
@@ -30,6 +40,9 @@ pub struct Simulation {
     cases: HashMap<u64, Case>,
     peers: HashMap<u64, Peer>,
     events: VecDeque<DomainEvent>,
+    collision: Vec<border_net::map::Aabb>,
+    next_notice_ms: u64,
+    epoch: u64,
 }
 impl Simulation {
     pub fn new(session_id: String, seed: u64, pack: Vec<Scenario>) -> Result<Self> {
@@ -44,6 +57,9 @@ impl Simulation {
             cases: HashMap::new(),
             peers: HashMap::new(),
             events: VecDeque::new(),
+            collision: border_net::map::collision().solids,
+            next_notice_ms: 45_000 + seed % 30_000,
+            epoch: 0,
             world: WorldSnapshot {
                 protocol_version: PROTOCOL_VERSION,
                 session_id,
@@ -67,6 +83,14 @@ impl Simulation {
                 purchases: vec![],
                 upgrades: vec![],
                 incidents: vec![],
+                host_peer_id: None,
+                server_time_ms: 0,
+                shift_started_ms: None,
+                door_open: false,
+                queues_active: false,
+                events_active: false,
+                lane_swap: None,
+                notices: vec![],
             },
         })
     }
@@ -114,15 +138,32 @@ impl Simulation {
             ready: false,
             connected: true,
             health: 100,
+            position: border_net::map::SPAWNS[(id as usize - 1) % 2],
+            yaw: std::f32::consts::PI,
+            equipment: vec![
+                "flashlight".into(),
+                "radio".into(),
+                "document_clipboard".into(),
+            ],
+            hold_ms: 0,
+            assisting: None,
+            next_command_sequence: 1,
         });
         self.peers.insert(
             id,
             Peer {
                 last_seen: now,
+                input: None,
+                input_at: now,
+                input_frame: 0,
+                hold_started: None,
                 next_sequence: 1,
                 receipts: HashMap::new(),
             },
         );
+        if self.world.host_peer_id.is_none() {
+            self.world.host_peer_id = Some(id);
+        }
         self.emit("peer_joined", json!({"peer_id":id}));
         Ok(id)
     }
@@ -150,6 +191,15 @@ impl Simulation {
                 if l.owner == Some(id) {
                     l.owner = None;
                 }
+            }
+            self.world.lane_swap = None;
+            if self.world.host_peer_id == Some(id) {
+                self.world.host_peer_id = self
+                    .world
+                    .peers
+                    .iter()
+                    .find(|p| p.connected)
+                    .map(|p| p.peer_id);
             }
             self.emit("peer_left", json!({"peer_id":id}));
         }
@@ -204,8 +254,13 @@ impl Simulation {
             self.world
                 .lanes
                 .iter()
-                .any(|l| l.lane_id == v.lane_id && l.owner == Some(peer)),
-            "lane not owned"
+                .any(|l| l.lane_id == v.lane_id && l.owner == Some(peer))
+                || self
+                    .world
+                    .peers
+                    .iter()
+                    .any(|p| p.peer_id == peer && p.assisting == Some(v.lane_id)),
+            "claim or assist this lane first"
         );
         Ok(i)
     }
@@ -243,26 +298,67 @@ impl Simulation {
         );
         match &e.command {
             ClientCommand::SetReady { ready } => {
+                ensure!(!ready, "hold E at the office door to register ready");
+                self.world
+                    .peers
+                    .iter_mut()
+                    .find(|p| p.peer_id == peer)
+                    .unwrap()
+                    .ready = false;
+                self.peers.get_mut(&peer).unwrap().hold_started = None;
+            }
+            ClientCommand::AssistLane { lane_id } => {
                 ensure!(
-                    self.world.phase == ShiftPhase::Lobby,
-                    "shift already started"
+                    lane_id.is_none_or(|id| self
+                        .world
+                        .lanes
+                        .iter()
+                        .any(|l| l.lane_id == id && l.owner.is_some())),
+                    "lane is not staffed"
                 );
                 self.world
                     .peers
                     .iter_mut()
                     .find(|p| p.peer_id == peer)
                     .unwrap()
-                    .ready = *ready;
+                    .assisting = *lane_id;
             }
-            ClientCommand::ClaimLane { lane_id } => {
+            ClientCommand::RequestLaneSwap => {
+                let other = self
+                    .world
+                    .peers
+                    .iter()
+                    .find(|p| p.connected && p.peer_id != peer)
+                    .ok_or_else(|| anyhow::anyhow!("no other officer"))?;
                 ensure!(
-                    !self
-                        .world
+                    self.world
                         .lanes
                         .iter()
-                        .any(|l| l.owner == Some(peer) && l.lane_id != *lane_id),
-                    "release current lane first"
+                        .filter(|l| l.owner.is_some())
+                        .count()
+                        == 2,
+                    "both lanes must be assigned"
                 );
+                self.world.lane_swap = Some([peer, other.peer_id]);
+            }
+            ClientCommand::AcceptLaneSwap => {
+                let offer = self
+                    .world
+                    .lane_swap
+                    .ok_or_else(|| anyhow::anyhow!("no swap offer"))?;
+                ensure!(offer[1] == peer, "swap belongs to another officer");
+                for lane in &mut self.world.lanes {
+                    if lane.owner == Some(offer[0]) {
+                        lane.owner = Some(offer[1]);
+                    } else if lane.owner == Some(offer[1]) {
+                        lane.owner = Some(offer[0]);
+                    }
+                }
+                self.world.lane_swap = None;
+            }
+            ClientCommand::ReleaseVehicle { vehicle_id } => self.release_case(peer, *vehicle_id)?,
+            ClientCommand::ResetShift => self.reset_shift(peer)?,
+            ClientCommand::ClaimLane { lane_id } => {
                 let l = self
                     .world
                     .lanes
@@ -271,6 +367,11 @@ impl Simulation {
                     .ok_or_else(|| anyhow::anyhow!("unknown lane"))?;
                 ensure!(l.owner.is_none() || l.owner == Some(peer), "lane occupied");
                 l.owner = Some(peer);
+                for other in &mut self.world.lanes {
+                    if other.lane_id != *lane_id && other.owner == Some(peer) {
+                        other.owner = None;
+                    }
+                }
             }
             ClientCommand::ReleaseLane { lane_id } => {
                 let l = self
@@ -286,7 +387,7 @@ impl Simulation {
                 vehicle_id,
                 evidence_id,
             } => {
-                let i = self.owns_vehicle(peer, *vehicle_id)?;
+                let i = self.authorize_case(peer, *vehicle_id)?;
                 let evidence = self.cases[vehicle_id]
                     .scenario
                     .evidence
@@ -301,6 +402,7 @@ impl Simulation {
                     self.world.vehicles[i].observed_evidence.push(EvidenceView {
                         id: evidence.id.clone(),
                         description: evidence.description.clone(),
+                        reveal_condition: evidence.reveal_condition.clone(),
                     });
                 }
             }
@@ -308,41 +410,7 @@ impl Simulation {
                 vehicle_id,
                 disposition,
             } => {
-                let i = self.owns_vehicle(peer, *vehicle_id)?;
-                let guilty = self.cases[vehicle_id].scenario.truth.smuggling;
-                let correct = (*disposition == Disposition::Admit) != guilty;
-                let amount = match (*disposition, correct) {
-                    (Disposition::Admit, true) => 100,
-                    (Disposition::Admit, false) => -400,
-                    (Disposition::Deny, true) => 200,
-                    (Disposition::Detain, true) => 250,
-                    _ => -150,
-                };
-                self.world.money += amount;
-                self.world.ledger.push(LedgerEntry {
-                    vehicle_id: *vehicle_id,
-                    disposition: *disposition,
-                    correct,
-                    amount,
-                    reason: if correct {
-                        "correct disposition"
-                    } else {
-                        "incorrect disposition"
-                    }
-                    .into(),
-                });
-                self.world.vehicles[i].stage = match disposition {
-                    Disposition::Admit => VehicleStage::DepartingAdmit,
-                    Disposition::Deny => VehicleStage::DepartingDeny,
-                    Disposition::Detain => VehicleStage::Detained,
-                };
-                let lane = self.world.vehicles[i].lane_id;
-                self.world
-                    .lanes
-                    .iter_mut()
-                    .find(|l| l.lane_id == lane)
-                    .unwrap()
-                    .barrier_open = *disposition == Disposition::Admit;
+                self.decide_case(peer, *vehicle_id, *disposition)?;
             }
             ClientCommand::RequestPurchase { upgrade_id } => {
                 ensure!(upgrade_id == "document_scanner", "unknown upgrade");
@@ -382,6 +450,12 @@ impl Simulation {
         };
         let p = self.peers.get_mut(&peer).unwrap();
         p.next_sequence += 1;
+        self.world
+            .peers
+            .iter_mut()
+            .find(|p| p.peer_id == peer)
+            .unwrap()
+            .next_command_sequence = p.next_sequence;
         // Retain every receipt for the session; the command limit bounds memory.
         p.receipts
             .insert(e.request_id, (fingerprint, receipt.clone()));
@@ -389,18 +463,7 @@ impl Simulation {
     }
     pub fn operator(&mut self, command: HostCommand) -> Result<()> {
         match &command {
-            HostCommand::StartShift => {
-                ensure!(
-                    self.world.phase == ShiftPhase::Lobby,
-                    "shift already started"
-                );
-                let peers: Vec<_> = self.world.peers.iter().filter(|p| p.connected).collect();
-                ensure!(
-                    peers.len() == 2 && peers.iter().all(|p| p.ready),
-                    "two ready peers required"
-                );
-                self.world.phase = ShiftPhase::Active;
-            }
+            HostCommand::StartShift => self.start_shift()?,
             HostCommand::SpawnNextVehicle { lane_id, kind } => {
                 ensure!(self.world.phase == ShiftPhase::Active, "shift inactive");
                 ensure!(
@@ -427,52 +490,29 @@ impl Simulation {
                     traveler_name: scenario.character.name.clone(),
                     opening_line: scenario.opening_line.clone(),
                     observed_evidence: vec![],
+                    position: [0.; 3],
+                    yaw: 0.,
+                    speed: 0.,
+                    distance_to_stop: 18. + (l.queue.len() - 1) as f32 * 30.,
+                    history: vec![],
+                    outcome: None,
+                    secondary_inspected: false,
                 });
                 self.cases.insert(
                     vehicle_id,
                     Case {
                         scenario,
                         history: vec![],
+                        secondary: false,
+                        epoch: self.epoch,
+                        waypoint: 0,
                     },
                 );
             }
             HostCommand::AdvanceWorld { delta_ms } => {
                 ensure!(*delta_ms <= 1000, "tick exceeds 1000 ms");
-                ensure!(self.world.phase != ShiftPhase::Lobby, "shift inactive");
-                self.world.remaining_ms = self.world.remaining_ms.saturating_sub(*delta_ms);
-                if self.world.remaining_ms == 0 {
-                    self.world.phase = ShiftPhase::Grace;
-                }
-                for l in &mut self.world.lanes {
-                    if let Some(id) = l.queue.first() {
-                        let v = self
-                            .world
-                            .vehicles
-                            .iter_mut()
-                            .find(|v| v.vehicle_id == *id)
-                            .unwrap();
-                        match v.stage {
-                            VehicleStage::Queued => {
-                                v.position_mm =
-                                    (v.position_mm + (*delta_ms as u32) * 5).min(10_000);
-                                if v.position_mm == 10_000 {
-                                    v.stage = VehicleStage::Stopped;
-                                }
-                            }
-                            VehicleStage::DepartingAdmit | VehicleStage::DepartingDeny => {
-                                v.position_mm += (*delta_ms as u32) * 5;
-                                if v.position_mm >= 20_000 {
-                                    v.stage = VehicleStage::Exited;
-                                }
-                            }
-                            _ => {}
-                        }
-                        if matches!(v.stage, VehicleStage::Exited | VehicleStage::Detained) {
-                            l.queue.remove(0);
-                            l.barrier_open = false;
-                        }
-                    }
-                }
+                let now = self.world.server_time_ms + delta_ms;
+                self.tick(now);
             }
             HostCommand::ApplyDamage { peer_id, amount } => {
                 let p = self
@@ -537,6 +577,8 @@ impl Simulation {
             scenario: c.scenario.clone(),
             history: c.history.clone(),
             expected_turn: c.history.len() as u64,
+            secondary: c.secondary,
+            case_epoch: c.epoch,
         })
     }
     pub fn actor(&mut self, delivery: ActorDelivery) -> Result<()> {
@@ -554,7 +596,10 @@ impl Simulation {
             "invalid utterance"
         );
         let c = self.cases.get_mut(&delivery.vehicle_id).unwrap();
-        // This foundation supports public facts only. Evidence-aware conversation replication is Part 15.
+        ensure!(
+            delivery.case_epoch == c.epoch,
+            "reply belongs to an earlier shift"
+        );
         ensure!(
             delivery.expected_turn == c.history.len() as u64,
             "stale actor turn"
@@ -562,7 +607,7 @@ impl Simulation {
         ensure!(c.history.len() < 128, "conversation limit reached");
         let reply = validate_turn_reply(
             &c.scenario,
-            false,
+            c.secondary,
             &c.history,
             &delivery.officer_utterance,
             &delivery.raw_reply,
@@ -575,6 +620,12 @@ impl Simulation {
             traveler: reply.dialogue.clone(),
             emotion: reply.emotion.clone(),
         });
+        self.world
+            .vehicles
+            .iter_mut()
+            .find(|v| v.vehicle_id == delivery.vehicle_id)
+            .unwrap()
+            .history = c.history.clone();
         self.emit("traveler_spoke",json!({"vehicle_id":delivery.vehicle_id,"officer_utterance":delivery.officer_utterance,"dialogue":reply.dialogue,"emotion":reply.emotion}));
         Ok(())
     }
@@ -613,18 +664,25 @@ mod tests {
         let mut s = sim();
         for p in 1..=2 {
             s.join(format!("Officer {p}"), 0).unwrap();
-            send(&mut s, p, ClientCommand::SetReady { ready: true }).unwrap();
+            s.world
+                .peers
+                .iter_mut()
+                .find(|v| v.peer_id == p)
+                .unwrap()
+                .ready = true;
             send(&mut s, p, ClientCommand::ClaimLane { lane_id: p as u8 }).unwrap();
         }
         s.operator(HostCommand::StartShift).unwrap();
-        s.operator(HostCommand::SpawnNextVehicle {
-            lane_id: 1,
-            kind: "car".into(),
-        })
-        .unwrap();
-        for _ in 0..2 {
+        for _ in 0..12 {
             s.operator(HostCommand::AdvanceWorld { delta_ms: 1000 })
                 .unwrap();
+        }
+        for p in &mut s.world.peers {
+            p.position = if p.peer_id == 1 {
+                [-1.6, 1.7, 0.]
+            } else {
+                [5.4, 1.7, 0.]
+            };
         }
         s
     }
@@ -632,7 +690,7 @@ mod tests {
     fn requires_two_ready_peers_and_exclusive_lanes() {
         let mut s = sim();
         s.join("A".into(), 0).unwrap();
-        send(&mut s, 1, ClientCommand::SetReady { ready: true }).unwrap();
+        assert!(send(&mut s, 1, ClientCommand::SetReady { ready: true }).is_err());
         assert!(s.operator(HostCommand::StartShift).is_err());
         s.join("B".into(), 0).unwrap();
         send(&mut s, 1, ClientCommand::ClaimLane { lane_id: 1 }).unwrap();
@@ -649,7 +707,6 @@ mod tests {
             "contradictions",
             "actor",
             "fact_ids",
-            "history",
             "resolution_rules",
         ] {
             assert!(!raw.contains(&format!("\"{key}\"")));
@@ -683,17 +740,16 @@ mod tests {
             disposition: Disposition::Deny,
         };
         assert!(s.command(1, altered, 0).is_err());
-        assert!(
-            send(
-                &mut s,
-                1,
-                ClientCommand::Decide {
-                    vehicle_id: 1,
-                    disposition: Disposition::Admit
-                }
-            )
-            .is_err()
-        );
+        send(
+            &mut s,
+            1,
+            ClientCommand::Decide {
+                vehicle_id: 1,
+                disposition: Disposition::Admit,
+            },
+        )
+        .unwrap();
+        assert_eq!(s.world.ledger.len(), 1);
     }
     #[test]
     fn health_money_and_incidents_require_host_authority() {
@@ -823,7 +879,7 @@ mod tests {
     #[test]
     fn actor_output_is_revalidated_before_broadcast() {
         let mut s = active();
-        let d=ActorDelivery{expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"award_money","fact_ids":[],"end_conversation":false}"#.into()};
+        let d=ActorDelivery{case_epoch:0,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"award_money","fact_ids":[],"end_conversation":false}"#.into()};
         assert!(s.actor(d.clone()).is_err());
         assert!(s.cases[&1].history.is_empty());
         let mut d = d;
@@ -849,5 +905,22 @@ mod tests {
         e.sequence += 10;
         assert!(s.command(1, e, 0).is_err());
         assert_eq!(s.world.revision, revision);
+    }
+    #[test]
+    fn old_ai_reply_cannot_enter_a_new_shift() {
+        let mut s = active();
+        let old = s.actor_context(1).unwrap();
+        s.world.phase = ShiftPhase::Grace;
+        s.reset_shift(1).unwrap();
+        s.world.peers[0].ready = true;
+        s.operator(HostCommand::StartShift).unwrap();
+        for _ in 0..12 {
+            s.operator(HostCommand::AdvanceWorld { delta_ms: 1000 })
+                .unwrap();
+        }
+        assert_ne!(old.case_epoch, s.actor_context(1).unwrap().case_epoch);
+        let delivery=ActorDelivery{case_epoch:old.case_epoch,expected_turn:0,protocol_version:PROTOCOL_VERSION,session_id:"test".into(),vehicle_id:1,officer_utterance:"Hello".into(),raw_reply:r#"{"dialogue":"Hello officer.","emotion":"cooperative","action":"none","fact_ids":[],"end_conversation":false}"#.into()};
+        assert!(s.actor(delivery).is_err());
+        assert!(s.cases[&1].history.is_empty());
     }
 }

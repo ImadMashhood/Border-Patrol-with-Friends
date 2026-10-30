@@ -213,8 +213,12 @@ async fn host_turn(
         .map_err(|_| error(StatusCode::BAD_GATEWAY, "Invalid host context"))?;
     let reply = tokio::time::timeout(
         Duration::from_secs(25),
-        s.provider
-            .reply(&context.scenario, false, &context.history, &req.utterance),
+        s.provider.reply(
+            &context.scenario,
+            context.secondary,
+            &context.history,
+            &req.utterance,
+        ),
     )
     .await
     .map_err(|_| error(StatusCode::GATEWAY_TIMEOUT, "Provider timed out"))?
@@ -223,7 +227,7 @@ async fn host_turn(
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid reply"))?;
     validate_turn_reply(
         &context.scenario,
-        false,
+        context.secondary,
         &context.history,
         &req.utterance,
         &raw,
@@ -238,6 +242,7 @@ async fn host_turn(
         .post(format!("{}/actor", url.trim_end_matches('/')))
         .bearer_auth(&token)
         .json(&border_net::ActorDelivery {
+            case_epoch: context.case_epoch,
             expected_turn: context.expected_turn,
             protocol_version: req.protocol_version,
             session_id: req.session_id,

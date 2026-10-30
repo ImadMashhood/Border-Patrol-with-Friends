@@ -11,7 +11,7 @@ use border_simulation::Simulation;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
     time::Instant,
 };
@@ -23,8 +23,26 @@ struct Host {
     operator: String,
     gateway: String,
     epoch: Instant,
+    manual: bool,
+    manual_now: u64,
+    gateway_url: String,
+    gateway_auth: String,
+    pending: HashSet<u64>,
+    mode: String,
 }
 type Shared = Arc<Mutex<Host>>;
+struct PendingReply {
+    state: Shared,
+    vehicle: u64,
+}
+impl Drop for PendingReply {
+    fn drop(&mut self) {
+        if let Ok(mut host) = self.state.lock() {
+            host.pending.remove(&self.vehicle);
+        }
+    }
+}
+
 type Api<T> = Result<Json<T>, (StatusCode, Json<Value>)>;
 fn error(e: impl std::fmt::Display) -> (StatusCode, Json<Value>) {
     (
@@ -45,7 +63,11 @@ fn peer(h: &Host, headers: &HeaderMap) -> Result<u64> {
         .context("invalid peer token")
 }
 fn now(h: &Host) -> u64 {
-    h.epoch.elapsed().as_millis() as u64
+    if h.manual {
+        h.manual_now
+    } else {
+        h.epoch.elapsed().as_millis() as u64
+    }
 }
 async fn join(State(s): State<Shared>, Json(r): Json<JoinRequest>) -> Api<JoinResponse> {
     let mut h = s.lock().unwrap();
@@ -77,7 +99,12 @@ async fn command(
 ) -> Api<CommandReceipt> {
     let mut h = s.lock().unwrap();
     let id = peer(&h, &headers).map_err(error)?;
+    ensure_api(
+        !matches!(r.command, ClientCommand::ResetShift) || h.pending.is_empty(),
+        "wait for pending AI replies before resetting",
+    )?;
     let time = now(&h);
+    h.sim.tick(time);
     Ok(Json(h.sim.command(id, r, time).map_err(error)?))
 }
 async fn heartbeat(
@@ -140,8 +167,141 @@ async fn operate(
     h.sim
         .check_session(r.protocol_version, &r.session_id)
         .map_err(error)?;
-    h.sim.operator(r.command).map_err(error)?;
+    if let HostCommand::AdvanceWorld { delta_ms } = r.command {
+        ensure_api(
+            h.manual,
+            "world time is automatic; manual ticks are disabled",
+        )?;
+        ensure_api(delta_ms <= 1000, "tick too large")?;
+        h.manual_now += delta_ms;
+        let time = h.manual_now;
+        h.sim.tick(time);
+    } else {
+        h.sim.operator(r.command).map_err(error)?;
+    }
     Ok(Json(h.sim.snapshot()))
+}
+async fn input(
+    State(s): State<Shared>,
+    headers: HeaderMap,
+    Json(r): Json<InputFrame>,
+) -> Api<WorldSnapshot> {
+    let mut h = s.lock().unwrap();
+    let id = peer(&h, &headers).map_err(error)?;
+    let time = now(&h);
+    h.sim.tick(time);
+    h.sim.input(id, r, time).map_err(error)?;
+    Ok(Json(h.sim.snapshot()))
+}
+async fn start_case(
+    State(s): State<Shared>,
+    headers: HeaderMap,
+    Json(r): Json<border_caller::SessionRequest>,
+) -> Api<border_caller::PublicCase> {
+    let mut h = s.lock().unwrap();
+    let id = peer(&h, &headers).map_err(error)?;
+    let mode = h.mode.clone();
+    Ok(Json(
+        h.sim
+            .public_case(id, r.session_id.parse().map_err(error)?, &mode)
+            .map_err(error)?,
+    ))
+}
+async fn inspect_case(
+    State(s): State<Shared>,
+    headers: HeaderMap,
+    Json(r): Json<border_caller::SessionRequest>,
+) -> Api<Vec<border_scenarios::Evidence>> {
+    let mut h = s.lock().unwrap();
+    let id = peer(&h, &headers).map_err(error)?;
+    Ok(Json(
+        h.sim
+            .inspect_case(id, r.session_id.parse().map_err(error)?)
+            .map_err(error)?,
+    ))
+}
+async fn decide_case(
+    State(s): State<Shared>,
+    headers: HeaderMap,
+    Json(r): Json<border_caller::DecisionRequest>,
+) -> Api<border_caller::DecisionResponse> {
+    let mut h = s.lock().unwrap();
+    let id = peer(&h, &headers).map_err(error)?;
+    let vehicle = r.session_id.parse().map_err(error)?;
+    // Cached outcomes are safe to replay; unresolved cases still require physical access.
+    if h.sim
+        .snapshot()
+        .vehicles
+        .iter()
+        .any(|v| v.vehicle_id == vehicle && v.outcome.is_none())
+    {
+        h.sim.authorize_case(id, vehicle).map_err(error)?;
+    }
+    let disposition = if r.decision == border_scenarios::Decision::Admit {
+        Disposition::Admit
+    } else {
+        Disposition::Deny
+    };
+    Ok(Json(border_caller::DecisionResponse {
+        reveal: h.sim.decide_case(id, vehicle, disposition).map_err(error)?,
+    }))
+}
+async fn turn_case(
+    State(s): State<Shared>,
+    headers: HeaderMap,
+    Json(r): Json<border_caller::TurnRequest>,
+) -> Api<border_caller::ActorReply> {
+    let vehicle: u64 = r.session_id.parse().map_err(error)?;
+    let (url, token, session) = {
+        let mut h = s.lock().unwrap();
+        let id = peer(&h, &headers).map_err(error)?;
+        h.sim.authorize_case(id, vehicle).map_err(error)?;
+        ensure_api(
+            !h.pending.contains(&vehicle),
+            "another officer is awaiting this traveler's reply",
+        )?;
+        ensure_api(
+            r.utterance.chars().count() <= 500 && !r.utterance.trim().is_empty(),
+            "question must be 1–500 characters",
+        )?;
+        h.pending.insert(vehicle);
+        (
+            h.gateway_url.clone(),
+            h.gateway_auth.clone(),
+            h.sim.snapshot().session_id,
+        )
+    };
+    let _pending = PendingReply {
+        state: s.clone(),
+        vehicle,
+    };
+    async {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(error)?;
+        let response = client
+            .post(format!("{}/host-turn", url.trim_end_matches('/')))
+            .bearer_auth(token)
+            .json(&HostTurnRequest {
+                protocol_version: PROTOCOL_VERSION,
+                session_id: session,
+                vehicle_id: vehicle,
+                utterance: r.utterance,
+            })
+            .send()
+            .await
+            .map_err(|_| error("AI gateway unavailable"))?;
+        if !response.status().is_success() {
+            return Err(error("AI gateway rejected the reply; retry the question"));
+        }
+        response
+            .json::<border_caller::ActorReply>()
+            .await
+            .map(Json)
+            .map_err(|_| error("invalid AI gateway response"))
+    }
+    .await
 }
 async fn actor_context(
     State(s): State<Shared>,
@@ -184,7 +344,8 @@ async fn main() -> Result<()> {
     let seed = std::env::var("BORDER_HOST_SEED")
         .unwrap_or_else(|_| "42".into())
         .parse()?;
-    let pack = border_scenarios::load_pack(std::path::Path::new("assets/scenarios"))?;
+    let root = std::env::var("BORDER_SCENARIOS").unwrap_or_else(|_| "assets/scenarios".into());
+    let pack = border_scenarios::load_pack(std::path::Path::new(&root))?;
     let state = Arc::new(Mutex::new(Host {
         sim: Simulation::new(Uuid::new_v4().to_string(), seed, pack)?,
         tokens: HashMap::new(),
@@ -192,15 +353,31 @@ async fn main() -> Result<()> {
         operator,
         gateway,
         epoch: Instant::now(),
+        manual: std::env::var("BORDER_HOST_MANUAL_CLOCK").as_deref() == Ok("1"),
+        manual_now: 0,
+        gateway_url: std::env::var("BORDER_GATEWAY_URL")
+            .unwrap_or_else(|_| "http://127.0.0.1:3847".into()),
+        gateway_auth: std::env::var("BORDER_SESSION_TOKEN")
+            .unwrap_or_else(|_| "local-development-only".into()),
+        pending: HashSet::new(),
+        mode: if std::env::var("OPENROUTER_API_KEY").is_ok() {
+            "live AI / host gateway"
+        } else {
+            "offline rehearsal / host gateway"
+        }
+        .into(),
     }));
     let expiry = state.clone();
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(1));
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(50));
         loop {
             tick.tick().await;
             let mut h = expiry.lock().unwrap();
             let time = now(&h);
             h.sim.expire(time);
+            if !h.manual {
+                h.sim.tick(time);
+            }
             let connected: Vec<_> = h
                 .sim
                 .snapshot()
@@ -221,6 +398,11 @@ async fn main() -> Result<()> {
         )
         .route("/join", post(join))
         .route("/command", post(command))
+        .route("/input", post(input))
+        .route("/start", post(start_case))
+        .route("/turn", post(turn_case))
+        .route("/inspect", post(inspect_case))
+        .route("/decide", post(decide_case))
         .route("/heartbeat", post(heartbeat))
         .route("/leave", post(leave))
         .route("/snapshot", get(snapshot))

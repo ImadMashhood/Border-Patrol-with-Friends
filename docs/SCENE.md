@@ -41,34 +41,36 @@ The playable yard is approximately 64 × 73 metres, with an additional walkable 
 
 Environment meshes and material handles are shared across repeated props and the vehicle pool. Rocks use seven deterministically deformed, chipped mesh variants; clouds use overlapping detailed lobes with baked cool shading. Small procedural albedo/normal maps add grit and surface variation to sand, concrete, asphalt, stone and metal; a dedicated masonry material gives the office readable block courses, while car paint stays clean without downloading texture packs. Terrain relief is strongest beyond developed areas, while walking routes and road beds stay clear and flat enough to navigate. This remains stylized art and has not been performance-certified on an RTX 2060.
 
+Normal play now begins in the shared office with the [Part 5 ready-door and clock flow](SHIFT.md). The two lanes, moving vehicles, conversation/evidence and decisions are now host-owned rather than independent local traffic.
+
 ## Vehicle cadence
 
-The first interview car drives toward the stop when the scene opens. Later cars enter at staggered times from the long approach road, brake behind the queue and maintain nine-metre centre spacing. The arrival HUD reports progress. E is enabled only after the current car has stopped and the officer aims within interview range.
+Queues remain inactive in the office lobby. After ready-up, five authored vehicles per lane approach in host-controlled order, brake to their stops and maintain queue gaps. Both clients render the same positions and barriers. Lane owners or assigned assistants can open the stopped traveler's interview.
 
-After the server returns a decision and the player closes the case file, the barrier rises and that car drives away. Admitted cars follow the outbound road as it bends left. Denied cars turn onto the west return road; they do not reverse through the waiting queue. Only when the departing car clears the checkpoint does the next case advance and the following car pull up. New cases therefore do not teleport a replacement car into the booth. Vehicles yield to a person directly in their path, while an officer beside the window does not block arrivals. Moving vehicles raise small trailing dust puffs.
+After a committed decision, closing the case file asks the host to release the vehicle. Admitted cars follow the outbound bend; denied cars turn onto the west return road. The next car advances independently in that lane. Both lanes are now real cases, not one interactive lane plus ambient traffic. Exactly seven of the ten authored travelers are honest and three smuggle. Repeated requests cannot duplicate the ledger award.
 
-Lane 2 has a separate ambient queue and automatic barrier cycle. Its cars stop briefly, then continue out along the road; this is visual traffic, not an independent AI interview. Starting another shift resets the finite vehicle pool and timing. The original ten-case content order and authoritative provider decision results are unchanged.
+The scene-preview renderer retains a local art-review traffic loop for deterministic captures; normal `./play.sh` uses the host session and clock.
 
 ## Scope boundary
 
-The expanded scene and the solo traffic loop are implemented. Vehicle motion currently runs in the graphical prototype; the separate headless host rules remain unchanged. Full host replication, additional vehicle types and interaction points remain in Parts 6/15. The office ready-up door/shift interaction remains Part 5. Work tables and crates are props; physical searches and detention behavior remain their later Parts. The current launch is the working solo interview prototype in the expanded map.
+The detailed scene and Part 5 shared-office/host session are connected. The office now has the working ready-up door. Work tables and crates remain props; trucks, physical search points, fuller detention behavior, final review/economy and complete multiplayer hardening stay in their later Parts. Current desktop co-op uses simple officer markers and shared state; the complete 20-step multiplayer acceptance run remains Part 15.
 
 ## Validation
 
 Validated on Linux with Rust 1.94.0 and the locked dependency graph:
 
-- Full workspace tests: **38 passed**, one existing explicit microphone/model fixture test ignored.
+- Full workspace tests: **46 passed**, one existing explicit microphone/model fixture test ignored.
 - Clippy for the entire workspace/all targets with warnings denied, plus Rust formatting: passed.
 - A headless connectivity test builds the actual scene and flood-fills collision-free walking routes from spawn to the office, storage, holding yard, secondary bay, driver and both ends of the bridge. It also rejects river shortcuts and the reserved future lanes.
-- `./play.sh --smoke-test` passed with the resident GPU speech models loaded and a clean automatic exit.
-- The traffic system test runs all ten cases with alternating admit/deny decisions, checks queue gaps and the west return route, then restarts the shift. Other tests cover braking, the bridge/bent approach route and yielding to a person in the driving lane.
+- `./play.sh --smoke-shift` passed with the resident GPU speech models loaded and a clean automatic exit.
+- The local preview traffic system test runs all ten cases with alternating admit/deny decisions, checks queue gaps and the west return route, then restarts the shift. Other tests cover braking, the bridge/bent approach route and yielding to a person in the driving lane.
 - Rendered views reviewed for the overview, normal driver position, rocky riverbank and road/cloud landscape.
-- Graphical interview smoke exercised an offline AI exchange and secondary inspection with the expanded scene and exited successfully. The smoke now fails if arrival, dialogue or secondary inspection does not finish. No paid model call or microphone recording was needed for these checks.
+- Two-client graphical shift/AI smoke exercised an offline AI exchange and secondary inspection with the expanded scene and exited successfully. The smoke now fails if arrival, dialogue or secondary inspection does not finish. No paid model call or microphone recording was needed for these checks.
 
 Reproduce captures after `cargo build --locked -p border-game`:
 
 ```sh
-./target/debug/border-game --smoke-test
+./target/debug/border-game --smoke-test --scene-preview
 ./target/debug/border-game --smoke-test --scene-view=overview
 ./target/debug/border-game --smoke-test --scene-view=river
 ./target/debug/border-game --smoke-test --scene-view=office

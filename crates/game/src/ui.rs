@@ -25,6 +25,7 @@ pub fn draw(
     player: Query<&Transform, With<Player>>,
     vehicles: Query<&traffic::Vehicle>,
     mut traffic_state: ResMut<traffic::Traffic>,
+    shift: Res<shift::Shift>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mut visuals = egui::Visuals::dark();
@@ -49,10 +50,29 @@ pub fn draw(
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        egui::RichText::new(format!("{:02} / 10", (g.position + 1).min(10)))
-                            .size(24.)
-                            .color(GOLD),
+                        egui::RichText::new(format!(
+                            "{:02} / 10",
+                            if shift.connected {
+                                g.position.min(10)
+                            } else {
+                                (g.position + 1).min(10)
+                            }
+                        ))
+                        .size(24.)
+                        .color(GOLD),
                     );
+                    if let Some(world) = &shift.world {
+                        let seconds = world.remaining_ms.div_ceil(1000);
+                        ui.label(
+                            egui::RichText::new(if world.phase == border_net::ShiftPhase::Lobby {
+                                "PRE-SHIFT".into()
+                            } else {
+                                format!("{:02}:{:02}", seconds / 60, seconds % 60)
+                            })
+                            .size(28.)
+                            .color(GOLD),
+                        );
+                    }
                     tag(ui, &format!("DAY SHIFT  /  SEED {}", g.seed));
                 });
             });
@@ -98,7 +118,8 @@ pub fn draw(
                 });
         }
     }
-    if g.phase == Phase::Approach
+    if !shift.connected
+        && g.phase == Phase::Approach
         && !g.overlay
         && let Some(v) = vehicles
             .iter()
@@ -128,13 +149,15 @@ pub fn draw(
                     });
             });
     }
+    shift::draw(ctx, &shift);
     if g.map_open {
         site_map(
             ctx,
             player.single().map(|p| p.translation).unwrap_or_default(),
         );
     }
-    if g.phase == Phase::Approach
+    if !shift.connected
+        && g.phase == Phase::Approach
         && !g.looking
         && !g.overlay
         && !std::env::args().any(|a| a.starts_with("--scene-view="))
@@ -243,7 +266,7 @@ pub fn draw(
                     if !r.missed_clues.is_empty(){tag(ui,"MISSED PHYSICAL CHECK");for clue in &r.missed_clues{ui.label(clue);}}
                 });
             }
-            ui.add_space(12.);if primary(ui,"CLOSE FILE & CALL NEXT CAR"){g.phase=Phase::Departing;g.overlay=false;g.looking=true;}
+            ui.add_space(12.);if primary(ui,"CLOSE FILE & CALL NEXT CAR"){if let Some(id)=g.vehicle_id{shift.send(border_net::ClientCommand::ReleaseVehicle{vehicle_id:id});}g.phase=Phase::Departing;g.overlay=false;g.looking=true;}
         });
     }
     if g.phase == Phase::Complete {
@@ -260,11 +283,24 @@ pub fn draw(
                         .size(29.)
                         .color(GOLD),
                 );
-                ui.label(
-                    "All ten travelers processed. Seven honest crossings, three smuggling cases.",
-                );
+                ui.label(format!(
+                    "{} travelers processed. The host can prepare another shift.",
+                    g.position
+                ));
                 ui.add_space(18.);
-                if primary(ui, "START ANOTHER SHIFT") {
+                if shift.connected {
+                    if shift
+                        .world
+                        .as_ref()
+                        .is_some_and(|w| w.host_peer_id == Some(shift.peer_id))
+                    {
+                        if primary(ui, "PREPARE ANOTHER SHIFT") {
+                            shift.send(border_net::ClientCommand::ResetShift);
+                        }
+                    } else {
+                        ui.label("Waiting for the host to prepare the next shift.");
+                    }
+                } else if primary(ui, "START ANOTHER SHIFT") {
                     traffic_state.restart = true;
                     g.position = 0;
                     g.score = 0;
@@ -283,7 +319,9 @@ pub fn draw(
                 if ui.button("Retry connection").clicked() {
                     g.error.clear();
                     g.pending = true;
-                    net.start(g.generation, g.ids[g.position].clone());
+                    if let Some(id) = g.vehicle_id {
+                        net.start(g.generation, id.to_string());
+                    }
                 }
             });
     }
@@ -302,6 +340,7 @@ pub fn landmarks(
     camera: Query<(&Camera, &GlobalTransform), With<Player>>,
     patrol: Res<Patrol>,
     solids: Query<(&Transform, &Solid), Without<Player>>,
+    shift: Res<shift::Shift>,
 ) -> Result {
     if patrol.overlay {
         return Ok(());
@@ -329,6 +368,15 @@ pub fn landmarks(
         }) {
             continue;
         }
+        if shift.world.as_ref().is_some_and(|w| !w.door_open) {
+            let center = Vec3::from_array(border_net::map::DOOR);
+            let half = Vec3::new(1.1, 1.5, 0.16);
+            if ray_box(origin, direction, center - half, center + half)
+                .is_some_and(|hit| hit < distance - 0.4)
+            {
+                continue;
+            }
+        }
         let Ok(point) = camera.world_to_viewport(transform, *position) else {
             continue;
         };
@@ -349,11 +397,14 @@ pub fn landmarks(
                     .fill(egui::Color32::from_rgba_unmultiplied(20, 38, 32, 220))
                     .inner_margin(5.)
                     .show(ui, |ui| {
-                        ui.label(
-                            egui::RichText::new(*label)
-                                .size(if distance < 15. { 13. } else { 11. })
-                                .strong()
-                                .color(GOLD),
+                        ui.add(
+                            egui::Label::new(
+                                egui::RichText::new(*label)
+                                    .size(if distance < 15. { 13. } else { 11. })
+                                    .strong()
+                                    .color(GOLD),
+                            )
+                            .wrap_mode(egui::TextWrapMode::Extend),
                         );
                     });
             });

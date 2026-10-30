@@ -5,7 +5,7 @@ use reqwest::blocking::Client;
 use std::{
     io::{self, BufRead},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicBool, Ordering},
     },
     time::Duration,
@@ -45,19 +45,27 @@ fn main() -> Result<()> {
         session_id: joined.session_id.clone(),
     };
     let beat_session = session.clone();
+    let controls = Arc::new(Mutex::new(([0f32; 2], false)));
+    let control_input = controls.clone();
     let heartbeat = std::thread::spawn(move || {
-        let mut ticks = 0;
+        let mut frame = 0;
         while running.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(100));
-            ticks += 1;
-            if ticks == 50 {
-                ticks = 0;
-                let _ = beat_client
-                    .post(format!("{beat_url}/heartbeat"))
-                    .bearer_auth(&token)
-                    .json(&beat_session)
-                    .send();
-            }
+            frame += 1;
+            let (movement, ready_held) = *control_input.lock().unwrap();
+            let _ = beat_client
+                .post(format!("{beat_url}/input"))
+                .bearer_auth(&token)
+                .json(&InputFrame {
+                    protocol_version: PROTOCOL_VERSION,
+                    session_id: beat_session.session_id.clone(),
+                    frame,
+                    movement,
+                    yaw: std::f32::consts::PI,
+                    jog: false,
+                    ready_held,
+                })
+                .send();
         }
     });
     let mut sequence = joined.next_sequence;
@@ -65,6 +73,29 @@ fn main() -> Result<()> {
     for line in io::stdin().lock().lines() {
         let line = line?;
         if line.trim().is_empty() {
+            continue;
+        }
+        if let Some(value) = line.strip_prefix("/move ") {
+            let parts: Result<Vec<f32>, _> = value.split_whitespace().map(str::parse).collect();
+            if let Ok(parts) = parts
+                && parts.len() == 2
+                && parts.iter().all(|v| v.is_finite() && v.abs() <= 1.)
+            {
+                controls.lock().unwrap().0 = [parts[0], parts[1]];
+                println!("{}", serde_json::json!({"input":"moving"}));
+            } else {
+                eprintln!("usage: /move X Z (components -1 to 1)");
+            }
+            continue;
+        }
+        if ["/stop", "/hold", "/release"].contains(&line.trim()) {
+            let mut state = controls.lock().unwrap();
+            match line.trim() {
+                "/hold" => state.1 = true,
+                "/release" => state.1 = false,
+                _ => state.0 = [0., 0.],
+            };
+            println!("{}", serde_json::json!({"input":"updated"}));
             continue;
         }
         if line.trim() == "/snapshot" {

@@ -1,0 +1,80 @@
+#!/usr/bin/env python3
+"""Linux desktop acceptance: two real Bevy clients share the ready door and host clock."""
+import json
+import os
+from pathlib import Path
+import secrets
+import socket
+import subprocess
+import time
+import urllib.request
+
+ROOT = Path(__file__).resolve().parents[1]
+
+def free_port():
+    with socket.socket() as sock:
+        sock.bind(('127.0.0.1', 0))
+        return sock.getsockname()[1]
+
+def main():
+    subprocess.run(['cargo', 'build', '--locked', '-p', 'border-game', '-p', 'border-caller-server'], cwd=ROOT, check=True)
+    host_port, gateway_port = free_port(), free_port()
+    env = dict(os.environ, BORDER_HOST_BIND=f'127.0.0.1:{host_port}', BORDER_HOST_URL=f'http://127.0.0.1:{host_port}', BORDER_GATEWAY_URL=f'http://127.0.0.1:{gateway_port}', BORDER_SERVER_ADDR=f'127.0.0.1:{gateway_port}', BORDER_HOST_JOIN_CODE=secrets.token_hex(8), BORDER_HOST_OPERATOR_TOKEN=secrets.token_hex(24), BORDER_HOST_GATEWAY_TOKEN=secrets.token_hex(24), BORDER_SESSION_TOKEN=secrets.token_hex(24))
+    env.pop('OPENROUTER_API_KEY', None)
+    env.pop('BORDER_HOST_MANUAL_CLOCK', None)
+    output = ROOT / 'output'
+    output.mkdir(exist_ok=True)
+    for pattern in ('shift-peer-*.json', 'shift-peer-*.png', 'ready-peer-*.png'):
+        for path in output.glob(pattern):
+            path.unlink()
+    children, logs = [], []
+    def start(binary, args, name):
+        log = open(output / name, 'w')
+        logs.append(log)
+        child = subprocess.Popen([str(ROOT / 'target/debug' / binary), *args], cwd=ROOT, env=env, stdout=log, stderr=log)
+        children.append(child)
+        return child
+    try:
+        start('border-caller-server', [], 'part5-gateway.log')
+        start('border-host', [], 'part5-host.log')
+        for _ in range(100):
+            try:
+                urllib.request.urlopen(env['BORDER_HOST_URL'] + '/health', timeout=1).close()
+                urllib.request.urlopen(env['BORDER_GATEWAY_URL'] + '/health', timeout=1).close()
+                break
+            except OSError:
+                time.sleep(.05)
+        else:
+            raise RuntimeError('host services failed to start')
+        a = start('border-game', ['--name=Officer-A', '--smoke-interview'], 'part5-client-a.log')
+        b = start('border-game', ['--name=Officer-B', '--smoke-shift'], 'part5-client-b.log')
+        deadline = time.monotonic() + 75
+        while time.monotonic() < deadline and (a.poll() is None or b.poll() is None):
+            time.sleep(.1)
+        assert a.poll() == b.poll() == 0, (a.poll(), b.poll(), 'see output/part5-client-*.log')
+        worlds = [json.loads((output / f'shift-peer-{i}.json').read_text()) for i in (1, 2)]
+        assert worlds[0]['session_id'] == worlds[1]['session_id']
+        assert worlds[0]['shift_started_ms'] == worlds[1]['shift_started_ms']
+        for world in worlds:
+            assert len(world['peers']) == len(world['lanes']) == 2
+            assert world['phase'] == 'active' and world['door_open'] and world['queues_active']
+            assert world['remaining_ms'] == 600000 - (world['server_time_ms'] - world['shift_started_ms'])
+            assert all(p['health'] == 100 and len(p['equipment']) == 3 for p in world['peers'])
+        assert list(output.glob('ready-peer-*.png')), 'missing visible ready-hold capture'
+        assert (output / 'shift-peer-1.png').exists() and (output / 'shift-peer-2.png').exists()
+        assert any(v['history'] and v['observed_evidence'] for v in worlds[0]['vehicles'] + worlds[1]['vehicles']), 'interview/inspection did not complete'
+        print('PASS: two real graphical clients; shared office; timed ready door; host-owned live countdown; shared players and vehicles; interview plus inspection')
+    finally:
+        for child in reversed(children):
+            if child.poll() is None:
+                child.terminate()
+                try:
+                    child.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    child.kill()
+                    child.wait()
+        for log in logs:
+            log.close()
+
+if __name__ == '__main__':
+    main()

@@ -2,7 +2,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 1;
+pub const PROTOCOL_VERSION: u16 = 2;
+pub const READY_HOLD_MS: u64 = 3000;
+pub const SHIFT_DURATION_MS: u64 = 600_000;
+pub mod map;
 pub const PEER_TIMEOUT_MS: u64 = 15_000;
 pub const HTTP_TIMEOUT_SECS: u64 = 5;
 pub const MAX_PLAYERS: usize = 2;
@@ -47,6 +50,15 @@ pub enum ClientCommand {
     SetReady {
         ready: bool,
     },
+    AssistLane {
+        lane_id: Option<u8>,
+    },
+    RequestLaneSwap,
+    AcceptLaneSwap,
+    ReleaseVehicle {
+        vehicle_id: u64,
+    },
+    ResetShift,
     ClaimLane {
         lane_id: u8,
     },
@@ -105,6 +117,7 @@ pub enum ShiftPhase {
 pub enum VehicleStage {
     Queued,
     Stopped,
+    Resolved,
     DepartingAdmit,
     DepartingDeny,
     Detained,
@@ -117,6 +130,12 @@ pub struct PeerView {
     pub ready: bool,
     pub connected: bool,
     pub health: u8,
+    pub position: [f32; 3],
+    pub yaw: f32,
+    pub equipment: Vec<String>,
+    pub hold_ms: u64,
+    pub assisting: Option<u8>,
+    pub next_command_sequence: u64,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LaneView {
@@ -129,6 +148,7 @@ pub struct LaneView {
 pub struct EvidenceView {
     pub id: String,
     pub description: String,
+    pub reveal_condition: border_scenarios::RevealCondition,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VehicleView {
@@ -140,6 +160,13 @@ pub struct VehicleView {
     pub traveler_name: String,
     pub opening_line: String,
     pub observed_evidence: Vec<EvidenceView>,
+    pub position: [f32; 3],
+    pub yaw: f32,
+    pub speed: f32,
+    pub distance_to_stop: f32,
+    pub history: Vec<border_caller::Turn>,
+    pub outcome: Option<border_scenarios::Reveal>,
+    pub secondary_inspected: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LedgerEntry {
@@ -187,6 +214,14 @@ pub struct WorldSnapshot {
     pub purchases: Vec<PurchaseView>,
     pub upgrades: Vec<String>,
     pub incidents: Vec<IncidentView>,
+    pub host_peer_id: Option<u64>,
+    pub server_time_ms: u64,
+    pub shift_started_ms: Option<u64>,
+    pub door_open: bool,
+    pub queues_active: bool,
+    pub events_active: bool,
+    pub lane_swap: Option<[u64; 2]>,
+    pub notices: Vec<ShiftNotice>,
 }
 /// Only the operator endpoint may deserialize these commands. Never put them in ClientCommand.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -211,6 +246,7 @@ pub struct HostEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ActorDelivery {
+    pub case_epoch: u64,
     pub expected_turn: u64,
     pub protocol_version: u16,
     pub session_id: String,
@@ -232,6 +268,26 @@ mod tests {
             r#"{"type":"request_purchase","upgrade_id":"document_scanner","cost":0}"#,
         ] {
             assert!(serde_json::from_str::<ClientCommand>(raw).is_err());
+        }
+    }
+    #[test]
+    fn input_cannot_supply_authoritative_position_or_elapsed_time() {
+        let base = serde_json::json!({"protocol_version":PROTOCOL_VERSION,"session_id":"room","frame":1,"movement":[0.,0.],"yaw":0.,"ready_held":true});
+        assert!(serde_json::from_value::<InputFrame>(base.clone()).is_ok());
+        for key in [
+            "position",
+            "elapsed_ms",
+            "held_ms",
+            "remaining_ms",
+            "reward",
+            "peer_id",
+        ] {
+            let mut value = base.clone();
+            value[key] = serde_json::json!(9999);
+            assert!(
+                serde_json::from_value::<InputFrame>(value).is_err(),
+                "accepted {key}"
+            );
         }
     }
     #[test]
@@ -265,4 +321,24 @@ pub struct ActorContextRequest {
     pub protocol_version: u16,
     pub session_id: String,
     pub vehicle_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct InputFrame {
+    pub protocol_version: u16,
+    pub session_id: String,
+    pub frame: u64,
+    pub movement: [f32; 2],
+    pub yaw: f32,
+    #[serde(default)]
+    pub jog: bool,
+    pub ready_held: bool,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShiftNotice {
+    pub id: u64,
+    pub at_ms: u64,
+    pub kind: String,
+    pub message: String,
 }

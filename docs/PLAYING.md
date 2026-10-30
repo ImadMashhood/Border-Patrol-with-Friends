@@ -22,18 +22,21 @@ Windows PowerShell:
 .\play.ps1
 ```
 
-First launch compiles the game and local interview service. Subsequent launches reuse the build. Rustup installs the pinned Rust 1.94.0 toolchain. Install Rust from https://rustup.rs if needed. Linux needs a C compiler, X11/XWayland and Vulkan-capable graphics drivers; Fedora development prerequisites are `gcc gcc-c++ make libX11-devel libxkbcommon-devel`. Windows needs the Visual Studio C++ build tools and Vulkan/DirectX drivers. Linux launcher also uses Python 3 and curl. Windows launcher uses PowerShell directly.
+First launch compiles the game, authoritative host and local interview service. Subsequent launches reuse the build. Rustup installs the pinned Rust 1.94.0 toolchain. Install Rust from https://rustup.rs if needed. Linux needs a C compiler, X11/XWayland and Vulkan-capable graphics drivers; Fedora development prerequisites are `gcc gcc-c++ make libX11-devel libxkbcommon-devel`. Windows needs the Visual Studio C++ build tools and Vulkan/DirectX drivers. Linux launcher also uses Python 3 and curl. Windows launcher uses PowerShell directly.
 
-Choose a reproducible shift order: `./play.sh --seed=123`. The service binds only to loopback and the launcher stops it when the game closes. Logs: `output/caller-server.log`. Change `BORDER_PORT` if 3847 is occupied. Launch from any directory using the full path to the script.
+Choose a reproducible shift order: `./play.sh --seed=123`. Services default to loopback, and the hosting launcher stops them when its game closes. Logs: `output/host.log` and `output/caller-server.log`. Change `BORDER_HOST_PORT` / `BORDER_PORT` if 8090 / 3847 is occupied. Launch from any directory using the full script path.
+
+For a second local player, run `./play.sh --join --name=Officer-B` in another terminal **before ready-up**. Windows: `.\play.ps1 --join --name=Officer-B`. [Part 5](SHIFT.md) explains LAN joining and the two-player session contract.
 
 ## How to play
 
-1. Click **Begin patrol**, walk with WASD and look with the mouse.
-2. Aim at the teal sedan within 3 meters; press **E** to interview the driver.
-3. Speak normally: the microphone listens automatically and sends your question after a short pause. You can also type and click **Send** or press Enter. Suggested topics fill the text box.
-4. Open **View documents**, then **Request secondary inspection** to inspect physical cargo. Compare actual evidence with the traveler's account.
-5. Choose **Admit** or **Deny**. The debrief shows immutable truth, contradictions, missed physical checks and your result.
-6. **Close file & call next car** plays an exit animation and advances. Finish all ten for your shift score.
+1. Spawn in the shared office, healed and equipped. Click the scene to look and use WASD to approach its closed exit door.
+2. Hold **E for three seconds**. The host can start, or a strict majority can register ready. The door opens and the shared ten-minute clock, queues and radio/security hooks begin.
+3. Claim a lane with **1/2**; use **J** for a consented swap and **G** to assist the other lane. **F** toggles your flashlight. The roster also offers these controls after releasing the mouse with Tab.
+4. Aim at a stopped car within 3 meters and press **E** to interview. Both officers share the same host-owned conversation and evidence when assisting.
+5. Speak normally: automatic listening sends your question after a pause. You may also type and send or press Enter. Inspect documents/cargo and compare the account against evidence.
+6. Choose **Admit** or **Deny**. The host commits the result once. **Close file & call next car** releases that vehicle while the other lane continues independently.
+7. At zero, finish already stopped drivers; fresh arrivals pause. The host can prepare another shift, returning officers to the closed office lobby. See [Part 5](SHIFT.md) for the complete start/expiry/reset behavior.
 
 **Tab** switches mouse look / typing while the interview stays open. **Esc** closes the overlay and releases the pointer; aim and E resumes the same case. Click the scene to capture the mouse. No interview ends automatically. Live spoken compliance is character-specific: opportunistic or eager travelers can repeat a false denial to get through; principled or defiant travelers can refuse. These words never change physical evidence or guilt. Repeated and irrelevant questions change the actor's reaction; nervousness does not indicate guilt.
 
@@ -89,4 +92,4 @@ The API smoke test starts a temporary offline service on 13847, runs 30 exchange
 
 Scenario data: `assets/scenarios/*.json`. Each contains personality, coherent immutable truth, initial cover stories for smugglers, document/cargo evidence, contradiction references and offline actor guidance. The live model receives only initial cover facts from the actor fields, not canned repetition/confession lines. The loader rejects malformed packs and requires exactly ten unique scenarios, three smugglers and fixed unique seeds. Unit tests run 300 authored exchanges and check disclosure/ground-truth invariants. See [design](DESIGN.md), [scenario contract](SCENARIO_SCHEMA.md), and [validation results](VALIDATION.md).
 
-This is the initial playable slice, not the entire PDF Phase 1 acceptance. Sustained live model consistency, human playtesting, speech hardware, spatial audio and Windows execution still need verification. Multiplayer, driving, combat, economy and detailed searches are outside this slice. Inspired by the crate separation in [WrongNumber](https://github.com/ImadMashhood/WrongNumber); no reference project was modified.
+This is the initial playable slice, not the entire PDF Phase 1 acceptance. Sustained live model consistency, human playtesting, speech hardware, spatial audio and Windows execution still need verification. Two-client host play and the ready-up/clock loop are now connected. Full multiplayer acceptance/reconnect, player driving, combat, final economy and detailed physical searches remain later work. Inspired by the crate separation in [WrongNumber](https://github.com/ImadMashhood/WrongNumber); no reference project was modified.

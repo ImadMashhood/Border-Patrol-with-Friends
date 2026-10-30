@@ -105,12 +105,16 @@ fn approach(distance: &mut f32, speed: &mut f32, target: f32, dt: f32) {
 #[allow(clippy::type_complexity)] // Query filters describe disjoint moving cars, barrier roots and player.
 pub fn progress(
     time: Res<Time>,
+    shift: Option<Res<shift::Shift>>,
     mut traffic: ResMut<Traffic>,
     mut g: ResMut<Patrol>,
     mut cars: Query<(&mut Transform, &mut Vehicle), Without<Barrier>>,
     mut barriers: Query<(&mut Transform, &LaneBarrier), (With<Barrier>, Without<Vehicle>)>,
     player: Query<&Transform, (With<Player>, Without<Vehicle>, Without<Barrier>)>,
 ) {
+    if shift.is_some_and(|s| s.connected) {
+        return;
+    }
     if traffic.restart {
         *traffic = Traffic::default();
         for (mut t, mut v) in &mut cars {

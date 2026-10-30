@@ -1344,6 +1344,7 @@ dependencies = [
  "bevy",
  "bevy_egui",
  "border-caller",
+ "border-net",
  "border-scenarios",
  "border-speech",
  "reqwest",
@@ -1356,6 +1357,8 @@ name = "border-net"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "border-caller",
+ "border-scenarios",
  "reqwest",
  "serde",
  "serde_json",

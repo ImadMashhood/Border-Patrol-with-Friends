@@ -6,11 +6,8 @@ use bevy::{
 };
 
 // X is east/west; +Z leads south across the river. Texas is the north bank.
-pub const YARD_MIN: Vec2 = Vec2::new(-32., -38.);
-pub const YARD_MAX: Vec2 = Vec2::new(32., 35.);
 pub fn walkable(p: Vec3) -> bool {
-    (p.x >= YARD_MIN.x && p.x <= YARD_MAX.x && p.z >= YARD_MIN.y && p.z <= YARD_MAX.y)
-        || (p.x >= -2.6 && p.x <= 9.6 && p.z >= 35. && p.z <= 77.)
+    border_net::map::walkable(p.x, p.z)
 }
 #[derive(Resource, Default)]
 pub struct Landmarks(pub Vec<(&'static str, Vec3)>);
@@ -460,11 +457,33 @@ pub fn atmosphere(
             );
     }
 }
+pub fn export_collision(path: &str) {
+    let mut app = App::new();
+    app.init_resource::<Assets<Mesh>>()
+        .init_resource::<Assets<StandardMaterial>>()
+        .init_resource::<Assets<Image>>()
+        .add_systems(Startup, setup);
+    app.update();
+    let world = app.world_mut();
+    let mut q = world.query_filtered::<(&Transform, &Solid), Without<traffic::Vehicle>>();
+    let map = border_net::map::CollisionMap {
+        schema_version: 1,
+        solids: q
+            .iter(world)
+            .map(|(t, s)| border_net::map::Aabb {
+                center: t.translation.to_array(),
+                half: s.half.to_array(),
+            })
+            .collect(),
+    };
+    std::fs::write(path, serde_json::to_string_pretty(&map).unwrap()).unwrap();
+}
 pub fn setup(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut images: ResMut<Assets<Image>>,
+    shift: Option<Res<shift::Shift>>,
 ) {
     commands.insert_resource(AmbientLight {
         color: Color::srgb(0.93, 0.82, 0.65),
@@ -841,6 +860,31 @@ pub fn setup(
             "COFFEE IS NOT A SECURITY CLEARANCE",
             Vec3::new(-8., 1.5, -4.8),
         ));
+        // Ready door opens outwards from the west hinge; collision remains host-owned.
+        let door = b
+            .commands
+            .spawn((
+                Transform::from_xyz(-13.1, 0., -3.5),
+                Visibility::default(),
+                shift::ReadyDoor,
+            ))
+            .id();
+        for (size, pos, material) in [
+            (Vec3::new(2.16, 2.95, 0.12), Vec3::new(1.1, 1.48, 0.), GREEN),
+            (
+                Vec3::new(1.2, 0.85, 0.025),
+                Vec3::new(1.1, 2., -0.075),
+                GLASS,
+            ),
+            (
+                Vec3::new(0.15, 0.12, 0.16),
+                Vec3::new(1.9, 1.15, -0.12),
+                GOLD,
+            ),
+        ] {
+            let e = b.block(size, pos, material, false);
+            b.commands.entity(door).add_child(e);
+        }
         // Equipment shelter with open frontage and visible shelves/crates.
         b.block(
             Vec3::new(7., 0.1, 8.),
@@ -1540,22 +1584,55 @@ pub fn setup(
         "rocks" => (Vec3::new(18., 1.8, 30.), Vec3::new(25., 0., 36.)),
         _ => (Vec3::new(-4.5, 1.7, -1.5), Vec3::new(0., 1.23, 2.)),
     };
+    let (eye, target) = if let Some(shift) = &shift
+        && shift.connected
+    {
+        (
+            Vec3::from_array(
+                shift
+                    .me()
+                    .map(|p| p.position)
+                    .unwrap_or(border_net::map::SPAWNS[0]),
+            ),
+            Vec3::new(-12., 1.7, -3.5),
+        )
+    } else {
+        (eye, target)
+    };
     let transform = Transform::from_translation(eye).looking_at(target, Vec3::Y);
     let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
-    commands.spawn((
-        Camera3d::default(),
-        transform,
-        Player { yaw, pitch },
-        bevy::pbr::DistanceFog {
-            color: Color::srgb(0.75, 0.69, 0.58),
-            falloff: bevy::pbr::FogFalloff::Linear {
-                start: 85.,
-                end: 360.,
+    let camera = commands
+        .spawn((
+            Camera3d::default(),
+            transform,
+            Player { yaw, pitch },
+            bevy::pbr::DistanceFog {
+                color: Color::srgb(0.75, 0.69, 0.58),
+                falloff: bevy::pbr::FogFalloff::Linear {
+                    start: 85.,
+                    end: 360.,
+                },
+                ..default()
             },
-            ..default()
-        },
-        bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
-    ));
+            bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
+        ))
+        .id();
+    let light = commands
+        .spawn((
+            SpotLight {
+                intensity: 12000.,
+                range: 20.,
+                outer_angle: 0.45,
+                inner_angle: 0.25,
+                shadows_enabled: false,
+                ..default()
+            },
+            Transform::from_xyz(0.12, -0.12, -0.1),
+            Visibility::Hidden,
+            shift::Flashlight,
+        ))
+        .id();
+    commands.entity(camera).add_child(light);
 }
 
 fn spawn_fleet(
@@ -1736,7 +1813,7 @@ fn spawn_fleet(
         }
     }
     for lane in 0..2 {
-        for ordinal in 0..if lane == 0 { 10 } else { 4 } {
+        for ordinal in 0..if lane == 0 { 10 } else { 5 } {
             if lane == 0 && ordinal == 0 {
                 continue;
             }
@@ -1790,7 +1867,7 @@ fn spawn_fleet(
         ..default()
     });
     for lane in 0..2 {
-        for ordinal in 0..if lane == 0 { 10 } else { 4 } {
+        for ordinal in 0..if lane == 0 { 10 } else { 5 } {
             for i in 0..3 {
                 commands.spawn((
                     Mesh3d(mesh.clone()),
@@ -1944,6 +2021,37 @@ fn car_body() -> Mesh {
 mod tests {
     use super::*;
     use std::collections::{HashSet, VecDeque};
+    #[test]
+    fn static_collision_matches_the_host_map() {
+        let mut app = App::new();
+        app.init_resource::<Assets<Mesh>>()
+            .init_resource::<Assets<StandardMaterial>>()
+            .init_resource::<Assets<Image>>()
+            .add_systems(Startup, setup);
+        app.update();
+        let world = app.world_mut();
+        let mut query = world.query_filtered::<(&Transform, &Solid), Without<traffic::Vehicle>>();
+        let mut actual: Vec<_> = query
+            .iter(world)
+            .map(|(t, s)| border_net::map::Aabb {
+                center: t.translation.to_array(),
+                half: s.half.to_array(),
+            })
+            .collect();
+        let mut baked = border_net::map::collision().solids;
+        let order = |a: &border_net::map::Aabb, b: &border_net::map::Aabb| {
+            a.center[0]
+                .total_cmp(&b.center[0])
+                .then(a.center[1].total_cmp(&b.center[1]))
+                .then(a.center[2].total_cmp(&b.center[2]))
+        };
+        actual.sort_by(order);
+        baked.sort_by(order);
+        assert_eq!(
+            actual, baked,
+            "regenerate with --export-collision=assets/maps/san-ignacio-collision.json after changing level solids"
+        );
+    }
     #[test]
     fn every_inspection_space_and_bridge_is_reachable_without_crossing_water_or_walls() {
         let mut app = App::new();

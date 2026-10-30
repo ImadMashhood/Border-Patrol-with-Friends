@@ -1,105 +1,74 @@
-# Headless host and protocol — Parts 2–3
+# Host and protocol
 
-The foundation runs without Bevy, a GPU, microphone or paid model call. It supports two real peers against one authoritative in-memory host. The existing `./play.sh` launches the graphical solo prototype; connecting its world to this host is Part 15. Physical inspections, combat mechanics, upgrade voting, reconnect and complete shifts remain in their later roadmap Parts.
+The host is now connected to normal graphical play. See [Part 5 controls, launch/join and validation](SHIFT.md) for the end-to-end flow. `./play.sh` hosts; `./play.sh --join` opens a second local client. The setup defaults to two players, two lanes and loopback transport.
 
-## Verify the foundation
-
-From the repository root, with the pinned Rust toolchain and Python 3 installed:
+## Headless checks
 
 ```sh
 python3 scripts/test_host.py
+cargo test --locked -p border-net -p border-simulation -p border-caller-server
 ```
 
-The script builds and launches a host, two separate `border-peer` processes and the AI gateway in offline mode. It checks ready states, exclusive lane ownership, host-owned movement, hidden-state isolation, authentication boundaries, accepted/stale/invalid actor delivery, the gateway-to-host conversation bridge, one settlement and disconnect cleanup. Credentials are generated for the test and kept out of its output. Every child is stopped on success or failure. CI runs it on Linux and Windows.
+The test launches the actual host and provider gateway with separate credentials, two authenticated peers and a manual debug clock. It exercises the door hold, host/majority rules, movement authority, exact clock, lane swaps, assisted conversation/inspection, decision deduplication, event hooks and reset. No GPU or paid model call is needed.
 
-Headless unit tests:
+For a desktop check with two real rendered clients:
 
 ```sh
-cargo test --locked -p border-scenarios -p border-caller -p border-net -p border-simulation -p border-caller-server
+python3 scripts/test_graphical_shift.py
 ```
 
-## Start a host manually
+## Manual service configuration
 
-Use distinct temporary values for these three credentials. Only the join code goes to peers; the operator and gateway credentials stay on the host/service machine.
+Run from the repository root with distinct `BORDER_HOST_OPERATOR_TOKEN` and `BORDER_HOST_GATEWAY_TOKEN` values of at least 24 characters, and a `BORDER_HOST_JOIN_CODE` of at least eight. `BORDER_SESSION_TOKEN` authenticates the local provider gateway. The launcher normally generates these service secrets and keeps them out of game-client environments.
 
 ```sh
-export BORDER_HOST_JOIN_CODE='choose-an-invite-code'
-export BORDER_HOST_OPERATOR_TOKEN='choose-a-distinct-secret-at-least-24-characters'
-export BORDER_HOST_GATEWAY_TOKEN='choose-another-distinct-secret-at-least-24-characters'
 cargo run --locked -p border-caller-server --bin border-host
 ```
 
-Defaults: `127.0.0.1:8090`, seed `42`, scenario pack `assets/scenarios`, protocol `1`. Run from the repository root. `BORDER_HOST_BIND` explicitly changes the listen address and `BORDER_HOST_SEED` changes scenario order. This is a development HTTP transport; remote encryption, Internet matchmaking, production admission controls and reconnect are later work. A session exists only in memory and restarts with a new UUID.
+Defaults: `127.0.0.1:8090`, seed 42, scenario pack `assets/scenarios`. Override with `BORDER_HOST_BIND`, `BORDER_HOST_SEED` and `BORDER_SCENARIOS`. `BORDER_GATEWAY_URL` defaults to `http://127.0.0.1:3847`; the provider gateway must have the same `BORDER_HOST_URL`, `BORDER_HOST_GATEWAY_TOKEN` and `BORDER_SESSION_TOKEN`. It keeps the existing OpenRouter/model configuration, including Gemini 2.5 Flash Lite when configured.
 
-In each of two other terminals, set the same `BORDER_HOST_JOIN_CODE`, then run:
+Normal host time advances automatically. Only explicitly setting `BORDER_HOST_MANUAL_CLOCK=1` enables trusted operator `advance_world` requests for deterministic debugging. Launchers force real-time mode. Public game clients cannot advance the clock.
+
+## Wire contract, version 2
+
+`POST /join` requires `protocol_version`, invite code and display name. It returns a room UUID, peer ID, random bearer token, next command sequence and public snapshot. Exactly two live peers may join in the lobby; active-shift reconnect is deferred.
+
+`POST /input` accepts an `InputFrame` with version/session, increasing frame ID, normalized movement intent, finite yaw, jogging intent and `ready_held`. The host owns positions, speed/collision, input freshness, ready duration and the countdown. Unknown fields such as `position`, `held_ms`, `remaining_ms` or rewards are rejected. A snapshot is returned; the graphical worker sends input at ten Hz, while the host ticks at twenty Hz.
+
+`POST /command` uses the versioned session/request/sequence envelope. Commands express intent: claim/release a lane, assist, request/accept a swap, release a committed vehicle, request a new shift or propose an upgrade. `SetReady(true)` is rejected; readiness must be earned through the door hold. `SetReady(false)` withdraws a completed vote. Client-supplied guilt, rewards, prices, arbitrary world positions and privileged host commands are not accepted.
+
+Identical accepted command retries return the original receipt. Altering an accepted request ID fails. A rejected command does not consume a sequence. Public snapshots acknowledge each peer's next accepted command sequence. There are up to 4096 accepted commands per peer/session and 32 lifetime lobby joins. Input frames use their own monotonic counter and do not consume the command budget.
+
+`GET /snapshot` and `GET /events?after=N` require the peer token. Events have `room UUID:sequence` IDs and revisions. The host retains 512 events, including world ticks, so old cursors can require resynchronization: fetch a snapshot and resume from `latest_event_sequence`. Peer expiry is 15 seconds; graphical input refreshes liveness continuously. Expiry releases lane ownership and updates the host role.
+
+The public snapshot contains officers/loadouts/positions, readiness, door state, the shared clock, lanes, vehicles, public conversation/evidence, resolved outcomes, ledger and dispatch hooks. Hidden scenario truth, actor instructions, contradictions and provider prompts are absent before a case is resolved. Only the committed debrief publishes that case's truth.
+
+## Interview bridge
+
+The host's peer-facing `/start`, `/turn`, `/inspect` and `/decide` routes use the existing caller DTOs; the session string identifies a host vehicle. The host checks physical driver range and lane ownership/assistance. The game requests a real vehicle, rather than choosing a scenario or supplying an outcome. Both officers see the same transcript and evidence.
+
+For a turn, the host calls the local provider gateway's `/host-turn`. The gateway retrieves private `/actor-context` using its service credential, constructs the ordered prompt/history, validates the response and forwards `/actor`. The host validates it again against its case epoch and turn index. The only AI action currently allowed is `none`; a model cannot open barriers, change truth, purchase or award money. One request per traveler may be pending, and histories are limited to 128 turns. Cancelled requests clean up their pending guard. Old responses cannot cross shift resets.
+
+The trusted `/operator` route remains available for debugging damage, incidents and purchases. Model output and peer tokens cannot invoke it. Prototype settlement constants remain +100 correct admit, +200 correct deny, +250 correct detain, −400 admitting a smuggler and −150 wrong deny/detain; final balancing/review is Part 12–14. The debug document-scanner proposal costs 300 and requires operator approval.
+
+## Crates and map
+
+`game` renders/input; `simulation` owns headless rules; `net` defines versioned DTOs/shared geometry; `scenarios` validates immutable content; `caller` builds/validates actor conversations; `caller-server` runs gateway/host services; `speech` handles local audio. This keeps the design lessons from Wrong Number without dispatch-specific logic.
+
+The renderer exports static solid bounds to `assets/maps/san-ignacio-collision.json`. After changing collision geometry:
+
+```sh
+cargo run --locked -p border-game -- --export-collision=assets/maps/san-ignacio-collision.json
+```
+
+The host includes this bake; a headless renderer test verifies it against the scene. The ready door is a separate dynamic host collider.
+
+The optional command-line peer still works:
 
 ```sh
 cargo run --locked -p border-net --bin border-peer -- http://127.0.0.1:8090 Officer-A
 ```
 
-Use `Officer-B` in the second terminal. The client prints public join state, keeps its random peer token in memory, and accepts newline-delimited commands:
+Set the invite through `BORDER_HOST_JOIN_CODE`. It keeps its token private and accepts `/move X Z`, `/stop`, `/hold`, `/release`, `/snapshot`, `/events` and newline JSON core commands. Movement and ready intent are pulsed automatically. It leaves on EOF.
 
-```json
-{"type":"set_ready","ready":true}
-{"type":"claim_lane","lane_id":1}
-```
-
-The second officer claims lane `2`. Type `/snapshot` to fetch current public state or `/events` to read events since the last snapshot/replay. Both peers see the same world and ledger. The CLI sends a heartbeat every five seconds and leaves on EOF. A 15-second heartbeat timeout disconnects a peer and releases their lane. Rejoining an active shift is deliberately deferred to Part 15.
-
-To exercise host operations, copy the public `session_id` printed at join, then POST an envelope to `/operator` with `Authorization: Bearer <operator token>`:
-
-```json
-{"protocol_version":1,"session_id":"SESSION-ID","command":{"type":"start_shift"}}
-```
-
-Other operator commands: `spawn_next_vehicle` (`lane_id`, `kind`: car/van/truck), `advance_world` (`delta_ms`, at most 1000), `apply_damage` (`peer_id`, `amount`), `restore_health`, `create_incident` (`kind`), `resolve_incident` (`incident_id`) and `approve_purchase` (`proposal_id`). This foundation deliberately advances simulation time through explicit operator ticks, which makes replay/debugging deterministic. Runtime clock scheduling is Part 5.
-
-A spawned vehicle queues at position zero and moves at five metres per second to a stop ten metres along the lane. Only the front vehicle advances. Its lane owner may submit `inspect_evidence` (`vehicle_id`, an authored `evidence_id`) or `decide` (`vehicle_id`, `disposition`: admit/deny/detain). Evidence IDs are validated against the hidden case; distance checks and physical search points are Part 10. After a decision, departing vehicles move to twenty metres and exit; detention removes the vehicle from the processing queue on the next tick.
-
-Current foundation settlement constants: correct admit +100, correct deny +200, correct detain +250; admitting a smuggler −400, wrong deny/detain −150. The host alone evaluates hidden truth. These are provisional rules for authority testing, not the final Part 12 balance. A peer can propose `document_scanner` with `request_purchase`; only the operator can approve it, at the host’s fixed cost of 300, once. The later gameplay system will replace this operator harness with the intended review/vote flow.
-
-## Crate and information boundaries
-
-| Crate | Responsibility |
-| --- | --- |
-| `game` | Bevy rendering, input and existing solo prototype interaction |
-| `simulation` | Headless rules, private cases/history, peer/lane ownership, clock, queue/motion, evidence, dispositions, ledger, health, incidents, purchases |
-| `net` | Versioned request and public snapshot/event DTOs; standalone peer client |
-| `scenarios` | Validated authored truth, public claims, character knowledge/cover story, evidence/reveal rules and deterministic ordering |
-| `caller` | Prompt construction, ordered conversation state, allowed fact/action schema and response validation |
-| `caller-server` | Existing provider gateway plus the new separate headless host executable |
-| `speech` | Independent local audio adapters; no world authority |
-
-`Scenario.truth` is immutable authority. `Scenario.actor`, character and public claims define what a traveler knows and says; evidence/reveal rules constrain disclosure. A private simulation case stores that scenario separately from conversation history. A public vehicle stores only observed evidence, traveler identity and opening dialogue. Public snapshots and replay events never serialize the private case, hidden truth, smuggling flag, contradictions or provider prompt. A settled ledger reveals correctness only after the decision.
-
-The reuse from Wrong Number is architectural: separate content, actor prompt/state, validated gateway and audio adapters. No dispatch call lifecycle or dispatch-specific rules enter the new simulation.
-
-Rust is pinned to 1.94.0 in `rust-toolchain.toml`, Bevy to 0.17.3 and bevy_egui to 0.38.1; the lockfile pins the resolved graph. Verified with the installed compiler, a full locked workspace build/tests and Clippy. Release references: [Rust 1.94.0 official announcement](https://blog.rust-lang.org/2026/03/05/Rust-1.94.0/) and [Bevy 0.17.3 API](https://docs.rs/bevy/0.17.3/bevy/). These are reproducible project pins, not a claim to be the newest releases.
-
-## Protocol and authority
-
-All state-changing envelopes include `protocol_version` and `session_id`; peer command envelopes also contain a unique `request_id`, strictly increasing `sequence` and optional `expected_revision`. A rejected command does not consume a sequence. Retry a transport failure with the exact same envelope: an identical accepted request returns its original receipt without mutation; reusing its ID with changed content fails. Accepted commands are bounded to 4096 per peer per session; all receipts are retained for that session. At most 32 total joins may occur before restarting the lobby.
-
-Peer identity comes from the token, never a command field. Unknown JSON fields and privileged client command variants fail deserialization. A peer may set readiness, claim/release a lane, request an inspection/decision or propose an upgrade. It cannot send guilt, rewards, balances, prices, arbitrary positions, damage, another peer’s identity or an authoritative decision result. Incapacitated peers cannot act. Host operators own world ticks, incident resolution and damage; ordinary peer tokens cannot call those routes.
-
-Each mutation produces a monotonically numbered event with an ID of `session UUID:sequence` and a world revision. Authenticated peers can GET `/snapshot` or `/events?after=N`. The replay window retains the last 512 events. An expired cursor returns `resync required`; fetch a snapshot and resume at its `latest_event_sequence`. A future cursor, wrong session/version or stale expected revision fails. HTTP clients have a five-second timeout, request bodies are limited to 8192 bytes, and private histories are limited to 128 turns.
-
-## Trusted AI bridge
-
-Run the existing `border-caller-server` gateway with these extra environment settings:
-
-```sh
-export BORDER_HOST_URL='http://127.0.0.1:8090'
-# Same server-only BORDER_HOST_GATEWAY_TOKEN as the host.
-cargo run --locked -p border-caller-server
-```
-
-The existing provider configuration still selects live OpenRouter/Gemini or offline rehearsal. A trusted local caller POSTs `/host-turn` to the gateway with its existing `BORDER_SESSION_TOKEN` bearer credential:
-
-```json
-{"protocol_version":1,"session_id":"SESSION-ID","vehicle_id":1,"utterance":"What is your name?"}
-```
-
-The gateway retrieves private `/actor-context` using the separate server-only credential, runs the provider with the host-owned scenario and history, validates the reply, and forwards it to `/actor`. The host validates it again against its own case/history and expected turn index before emitting `traveler_spoke`. Concurrent or retried stale actor results cannot append the same turn twice. The model currently has only the approved action `none`: it can speak but cannot award, purchase, open barriers, change truth or make a disposition. Future action types require explicit host rules.
-
-Peer tokens and the invite code cannot retrieve actor context or deliver model output. Provider work happens outside host locks. Invalid output, stale context or provider failure creates no transcript event. The bridge uses public-fact disclosure for now; evidence-aware replicated interviews and peer-to-gateway routing are integrated in Parts 8/15. The service bridge smoke uses offline rehearsal to avoid paid API calls; it is not a new live-model quality benchmark.
+Rust/Bevy pins remain Rust 1.94.0, Bevy 0.17.3 and bevy_egui 0.38.1 with the committed lockfile. These are project pins, not a claim to be the latest releases. Full replication/reconnect/audio polish and the complete multiplayer acceptance pass remain Part 15; production Internet transport remains later security work.

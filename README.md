@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Build status:** Parts 1–4 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. The graphical co-op loop is delivered in later Parts.
+**Build status:** Parts 1–5 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Full multiplayer acceptance/hardening remains Part 15.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -79,7 +79,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Art direction update:** Keep the compound open with no enclosure fences; retain only the riverbank border wall and bridge guardrails. Use a clean textured cinderblock office and clean automotive paint. The latest direction supersedes the original dunes: use rough sandy terrain, chipped rocks, dry trees/scrub, weathered surfaces and detailed clouds. Roads continue beyond the site and bend into distant haze.
 
-**Validation:** [Scene inventory, timed solo traffic, controls, screenshots and checks](docs/SCENE.md). The ready door and replicated gameplay remain in their later Parts.
+**Validation:** [Scene inventory, traffic, controls, screenshots and checks](docs/SCENE.md). The shared ready door and host-driven gameplay are implemented in Part 5.
 
 **Exit gate:** The compact scene loads with clear lane, office, inspection and detention spaces; the art and map boundaries are readable.
 
@@ -89,21 +89,23 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Connect movement and E/hold-E interactions to the office door, ready votes, spawning and the host-owned shift state machine. Queue/event activation hooks are established here; their content follows later.
 
-- [ ] Spawn everyone in the shared office, healed and equipped.
-- [ ] Give the exit door a hold-E interaction with a visible three-second progress bar.
-- [ ] Allow the host to complete the hold, or allow a majority of connected players to register ready.
-- [ ] Have the host validate the ready threshold, open the door and start the authoritative ten-minute timer.
-- [ ] Activate vehicle queues and random security events when the shift begins.
-- [ ] Allow players to choose lanes, swap lanes and assist one another.
-- [ ] **M1:** room, lanes, door, movement and simple low-poly environment.
-- [ ] One shared administration office and one working three-second hold-E ready-up door.
-- [ ] **M1 — Environment blockout:** office, ready door, two lanes, barriers and basic cars.
+- [x] Spawn everyone in the shared office, healed and equipped.
+- [x] Give the exit door a hold-E interaction with a visible three-second progress bar.
+- [x] Allow the host to complete the hold, or allow a majority of connected players to register ready.
+- [x] Have the host validate the ready threshold, open the door and start the authoritative ten-minute timer.
+- [x] Activate vehicle queues and random security events when the shift begins.
+- [x] Allow players to choose lanes, swap lanes and assist one another.
+- [x] **M1:** room, lanes, door, movement and simple low-poly environment.
+- [x] One shared administration office and one working three-second hold-E ready-up door.
+- [x] **M1 — Environment blockout:** office, ready door, two lanes, barriers and basic cars.
+
+**Validation:** [Launch/join, controls, authority rules and two-client checks](docs/SHIFT.md). Random security scheduling currently activates radio/dispatch hooks; its combat/breach content stays in later Parts.
 
 **Exit gate:** The host or ready majority can start a shift through the three-second door interaction, and both clients agree on the ten-minute clock.
 
 ## Part 6 — Implement lane and vehicle lifecycle systems
 
-**Prototype progress:** Timed solo arrivals, braking, queue gaps, two animated barriers, departures and next-case handoff are now visible in `./play.sh`. The checks below still require the complete host-integrated lifecycle, vehicle types and interactions.
+**Prototype progress:** Timed arrivals, braking, queue gaps, two animated barriers, departures and next-case handoff are now visible in `./play.sh`. The host now drives both lanes; these remaining checks cover the complete vehicle types, interaction points and lifecycle acceptance.
 
 **Depends on:** Parts 3–5.
 

@@ -56,7 +56,7 @@ impl Network {
         self.request(
             g,
             "/start",
-            border_caller::StartRequest { scenario_id: id },
+            border_caller::SessionRequest { session_id: id },
             NetEvent::Started,
         );
     }

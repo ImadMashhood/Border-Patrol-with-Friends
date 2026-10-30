@@ -12,3 +12,4 @@ border-scenarios.workspace = true
 border-caller.workspace = true
 border-speech.workspace = true
 reqwest.workspace = true
+border-net.workspace = true
