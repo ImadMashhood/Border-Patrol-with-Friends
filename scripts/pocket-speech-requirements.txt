@@ -1,0 +1,9 @@
+# CPU Pocket TTS plus GPU Whisper; isolated from Qwen/Kokoro NumPy requirements.
+pocket-tts==4.0.1
+torch==2.6.0
+numpy==2.4.6
+soundfile==0.13.1
+faster-whisper==1.2.1
+ctranslate2==4.8.4
+nvidia-cublas-cu12==12.4.5.8
+nvidia-cudnn-cu12==9.1.0.70

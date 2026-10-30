@@ -13,9 +13,9 @@
   "stt_model": "small",
   "stt_compute_type": "int8_float16",
   "stt_beam_size": 3,
-  "tts_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "tts_model": "kyutai/pocket-tts-without-voice-cloning:english_2026-10",
   "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600.",
-  "tts_engine": "qwen",
-  "tts_quantization": "fp16_with_cpu_text_embeddings_and_audio_decoder",
+  "tts_engine": "pocket",
+  "tts_quantization": "float32_cpu",
   "stt_device": "cuda"
 }

@@ -3,60 +3,70 @@
     "speaker": "Serena",
     "description": "Bright adult female voice, light British English accent; animated, warm, quick when excited.",
     "seed": 1000,
-    "example": "Oh, hang on—are we talking about the camera or the trip?"
+    "example": "Oh, hang on\u2014are we talking about the camera or the trip?",
+    "pocket_voice": "alba"
   },
   "02_nadia": {
     "speaker": "Vivian",
     "description": "Adult female voice, dry low-energy American English; clipped, sleep-deprived and wry.",
     "seed": 1001,
-    "example": "Seriously? I just got off a shift. One question at a time."
+    "example": "Seriously? I just got off a shift. One question at a time.",
+    "pocket_voice": "eponine"
   },
   "03_victor": {
     "speaker": "Aiden",
     "description": "Mature male voice, smooth lightly Southern American accent; polished and unhurried, charm turning brittle under pressure.",
     "seed": 1002,
-    "example": "Now, hold on. That sounded worse than I meant it."
+    "example": "Now, hold on. That sounded worse than I meant it.",
+    "pocket_voice": "bill_boerst"
   },
   "04_evelyn": {
     "speaker": "Serena",
     "description": "Older female voice, warm soft American English; measured, clear, affectionate, capable of a sharp firm reprimand.",
     "seed": 1003,
-    "example": "Oh, dear. Let me start that again."
+    "example": "Oh, dear. Let me start that again.",
+    "pocket_voice": "fantine"
   },
   "05_leo": {
     "speaker": "Ryan",
     "description": "Young adult male voice, lively London English accent; playful musical cadence and theatrical timing.",
     "seed": 1004,
-    "example": "Mate, that is a spectacularly weird question."
+    "example": "Mate, that is a spectacularly weird question.",
+    "pocket_voice": "paul"
   },
   "06_dorian": {
     "speaker": "Ryan",
     "description": "Adult male voice, rough compact Texas English; impatient low register, sharp bursts when angered.",
     "seed": 1005,
-    "example": "Man, I am trying to get somewhere. What do you need?"
+    "example": "Man, I am trying to get somewhere. What do you need?",
+    "pocket_voice": "javert"
   },
   "07_amir": {
     "speaker": "Aiden",
     "description": "Young adult male voice, clear general American accent; hesitant, soft, slightly fast and breathless under stress.",
     "seed": 1006,
-    "example": "Wait—did I do something wrong, or are you just asking?"
+    "example": "Wait\u2014did I do something wrong, or are you just asking?",
+    "pocket_voice": "marius"
   },
   "08_rosa": {
     "speaker": "Vivian",
     "description": "Mature female voice, earthy Texas English accent; blunt and dry, forceful and protective when upset.",
     "seed": 1007,
-    "example": "Buddy, I heard you. I just do not like the question."
+    "example": "Buddy, I heard you. I just do not like the question.",
+    "pocket_voice": "cosette"
   },
   "09_cal": {
     "speaker": "Ryan",
     "description": "Adult male voice, natural Texas drawl; cocky and amused, conversational, quick bargains, brittle fear when threatened.",
     "seed": 1008,
-    "example": "C'mon, man. That is one hell of a way to ask."
+    "example": "C'mon, man. That is one hell of a way to ask.",
+    "pocket_voice": "michael"
   },
   "10_priya": {
     "speaker": "Serena",
     "description": "Adult female voice, crisp British English accent; curious, witty, expressive, sharp when offended.",
     "seed": 1009,
-    "example": "Right. Was that a question, or are you workshopping a joke?"
+    "example": "Right. Was that a question, or are you workshopping a joke?",
+    "pocket_voice": "azelma"
   }
 }

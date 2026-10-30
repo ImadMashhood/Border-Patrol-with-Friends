@@ -16,7 +16,9 @@ All ten authored travelers have expanded speech directions: contractions, cadenc
 
 ## Expressive synthesis
 
-The default quality voice is **Qwen3-TTS 12Hz 1.7B CustomVoice**, with ten authored character directions in [traveler_voices.json](../assets/settings/traveler_voices.json). Stable speaker assignments plus age, cadence, attitude and accent instructions distinguish voices. Validated reply emotions reach the synthesis service: anger, confusion, irritation, fear, panic and desperation no longer all use the same neutral delivery. Explicit alarmed cries can generate nonverbal screams. Emotion and accent are instructions to the model, not guaranteed human-rated performances.
+**Update:** [Pocket TTS is now the installed default](POCKET_TTS.md). This section records the optional Qwen implementation and its measurements.
+
+The instruction-controlled voice option is **Qwen3-TTS 12Hz 1.7B CustomVoice**, with ten authored character directions in [traveler_voices.json](../assets/settings/traveler_voices.json). Stable speaker assignments plus age, cadence, attitude and accent instructions distinguish voices. Validated reply emotions reach the synthesis service: anger, confusion, irritation, fear, panic and desperation no longer all use the same neutral delivery. Explicit alarmed cries can generate nonverbal screams. Emotion and accent are instructions to the model, not guaranteed human-rated performances.
 
 The model's documented CustomVoice interface supports speaker and natural-language delivery instructions. [Official Qwen3-TTS implementation](https://github.com/QwenLM/Qwen3-TTS). The production path keeps its acoustic weights at FP16; text embedding lookup and final audio decoding run on CPU to reduce VRAM without the speech errors observed with aggressive weight compression. The configured speech allocation target is now **4.5 GiB**, replacing the former 3 GiB Kokoro target. The overall engineering reference remains six cores, 16 GiB RAM and a 6 GiB RTX 2060, with limited remaining VRAM headroom and no hardware certification yet.
 
@@ -27,7 +29,7 @@ Install/update the local profile once:
 ./play.sh
 ```
 
-This downloads model weights into ignored `.tools/`, keeps inference local, and uses the existing authenticated loopback service. The configured workspace is already installed and warmed. The face-positioned stereo playback, microphone echo suppression, cancellation and local “Excuse me?” fallback remain connected. HTTP synthesis allows enough time for the larger model; it does not block rendering.
+This downloads model weights into ignored `.tools/`, keeps inference local, and uses the existing authenticated loopback service. The selected speech profile is installed and warmed by setup. The face-positioned stereo playback, microphone echo suppression, cancellation and local “Excuse me?” fallback remain connected. HTTP synthesis allows enough time for the larger model; it does not block rendering.
 
 For the faster, less expressive Kokoro path:
 

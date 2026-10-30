@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Persistent, authenticated, loopback-only GPU speech service. No paid API keys required."""
+"""Persistent, authenticated, loopback-only local speech service. No paid API keys required."""
 import argparse
 import hmac
 import io
@@ -36,11 +36,18 @@ class Speech:
         self.stt_device=os.environ.get('BORDER_STT_DEVICE',PROFILE.get('stt_device','cpu'))
         self.stt_compute='int8_float16' if self.stt_device=='cuda' else 'int8'
         self.asr = WhisperModel(self.stt_name,device=self.stt_device,compute_type=self.stt_compute,cpu_threads=4,num_workers=1)
-        self.engine=os.environ.get('BORDER_TTS_ENGINE',PROFILE.get('tts_engine','kokoro'))
-        if self.engine=='qwen':
+        self.engine=os.environ.get('BORDER_TTS_ENGINE',PROFILE.get('tts_engine','pocket'))
+        if self.engine=='pocket':
+            from pocket_tts import TTSModel
+            print('Loading Pocket TTS on CPU…',file=sys.stderr,flush=True)
+            self.tts_name='kyutai/pocket-tts-without-voice-cloning:english_2026-10'
+            self.tts=TTSModel.load_model(language='english_2026-10')
+            # Public preset states need no voice-cloning credentials or audio samples.
+            self.pocket_voices={voice:self.tts.get_state_for_audio_prompt(voice) for voice in sorted({p['pocket_voice'] for p in VOICES.values()})}
+        elif self.engine=='qwen':
             from qwen_tts import Qwen3TTSModel
             print('Loading expressive Qwen3-TTS with CPU text embeddings and audio decoder…',file=sys.stderr,flush=True)
-            self.tts_name=PROFILE['tts_model']
+            self.tts_name='Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice'
             self.tts=Qwen3TTSModel.from_pretrained(self.tts_name,device_map='cuda:0',dtype=torch.float16,attn_implementation='sdpa')
             # Keep full-precision acoustic weights. Only text lookup and final waveform
             # decoding use CPU; this saves GPU memory without lossy weight compression.
@@ -61,7 +68,7 @@ class Speech:
             self.tts=KPipeline(lang_code='a',repo_id=self.tts_name,device='cuda')
             self.voices={False:os.environ.get('BORDER_TTS_VOICE','am_michael'),True:os.environ.get('BORDER_TTS_VOICE_ALTERNATE','af_heart')}
             for voice in self.voices.values():self.tts.load_voice(voice)
-        else:raise ValueError('BORDER_TTS_ENGINE must be qwen or kokoro')
+        else:raise ValueError('BORDER_TTS_ENGINE must be pocket, qwen or kokoro')
         print('Warming speech models…',file=sys.stderr,flush=True)
         # Initialize kernels before the first real interview.
         self.synthesize('Good evening, officer.',False)
@@ -89,7 +96,7 @@ class Speech:
             gpu_process_mib = next(float(row.split(',')[1].strip()) for row in rows if int(row.split(',')[0].strip()) == os.getpid())
         except (OSError,ValueError,StopIteration,subprocess.SubprocessError):
             pass
-        return dict(ok=True,gpu_process_mib=gpu_process_mib,stt=self.stt_name,compute_type=self.stt_compute,stt_device=self.stt_device,tts=self.tts_name,tts_engine=self.engine,voice_profiles=len(VOICES),device=self.torch.cuda.get_device_name(),speech_vram_delta_mib=self.measure(),observed_peak_delta_mib=round(self.peak_delta/1024**2,1),rss_mib=round(rss,1) if rss else None,reference=PROFILE)
+        return dict(ok=True,gpu_process_mib=gpu_process_mib,stt=self.stt_name,compute_type=self.stt_compute,stt_device=self.stt_device,tts=self.tts_name,tts_engine=self.engine,tts_device='cpu' if self.engine=='pocket' else 'cuda',tts_instruction_control=self.engine=='qwen',voice_profiles=len(VOICES),device=self.torch.cuda.get_device_name(),speech_vram_delta_mib=self.measure(),observed_peak_delta_mib=round(self.peak_delta/1024**2,1),rss_mib=round(rss,1) if rss else None,reference=PROFILE)
 
     def transcribe(self,data):
         started=time.monotonic()
@@ -126,8 +133,15 @@ class Speech:
         if emotion not in acting:raise ValueError('Unsupported speech emotion')
         profile=VOICES.get(scenario_id or '',VOICES['01_mara' if alternate else '09_cal'])
         started=time.monotonic()
-        with self.lock,self.torch.inference_mode():
-            if self.engine=='qwen':
+        with self.lock,(self.torch.no_grad() if self.engine=='pocket' else self.torch.inference_mode()):
+            if self.engine=='pocket':
+                # Never mutate the cached speaker state across turns/characters.
+                # Pocket infers prosody from words and punctuation; it has no
+                # natural-language accent/emotion instruction API.
+                self.torch.manual_seed(profile['seed'])
+                audio=self.tts.generate_audio(self.pocket_voices[profile['pocket_voice']],text,copy_state=True).detach().cpu().numpy()
+                sr=self.tts.sample_rate
+            elif self.engine=='qwen':
                 self.torch.manual_seed(profile['seed'])
                 cry=text.strip().upper() in ('AAAH!','AAAAH!','AHHH!','AAAH','AAAAH','AHHH')
                 instruction=profile['description']+' '+acting[emotion]+(' A real alarmed scream, not the spelled letters.' if cry else '')+' Speak only the given words, at a conversational pace with short pauses and no prolonged silences.'
