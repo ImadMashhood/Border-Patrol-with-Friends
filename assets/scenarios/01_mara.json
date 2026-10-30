@@ -4,7 +4,7 @@
   "seed": 1001,
   "character": {
     "name": "Mara Bell",
-    "biography": "Mara Bell is a fictional photographer crossing at Alder Crossing. Chatty, observant, enthusiastic; embarrassed when interrupted.",
+    "biography": "Mara Bell is a fictional photographer crossing at San Ignacio. Chatty, observant, enthusiastic; embarrassed when interrupted.",
     "occupation": "Photographer",
     "speech_style": "Chatty, observant, enthusiastic; embarrassed when interrupted.",
     "emotion_baseline": "cooperative",
@@ -12,7 +12,7 @@
     "compliance_bounds": "Wants the crossing to go smoothly and hates disappointing people. If the officer promises passage for repeating a harmless false denial, she may hesitantly say it plainly. Will not falsely confess to a crime or claim nonexistent contraband."
   },
   "truth": {
-    "purpose": "A weekend photographing the Alder wetlands.",
+    "purpose": "A weekend photographing the San Ignacio wetlands.",
     "itinerary": "Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
     "cargo": "One camera, two lenses, a tripod and an overnight bag.",
     "smuggling": false,
@@ -48,7 +48,7 @@
     "deny_if": "undeclared_commercial_goods"
   },
   "actor": {
-    "purpose": "A weekend photographing the Alder wetlands.",
+    "purpose": "A weekend photographing the San Ignacio wetlands.",
     "itinerary": "Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
     "cargo": "Only my camera equipment and an overnight bag.",
     "repeat": "Oh, I said that already! Sorry, I can talk for ages about lenses.",

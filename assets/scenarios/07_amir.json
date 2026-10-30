@@ -4,7 +4,7 @@
   "seed": 1007,
   "character": {
     "name": "Amir Chen",
-    "biography": "Amir Chen is a fictional student crossing at Alder Crossing. Anxious pauses, precise answers when given specific questions.",
+    "biography": "Amir Chen is a fictional student crossing at San Ignacio. Anxious pauses, precise answers when given specific questions.",
     "occupation": "Student",
     "speech_style": "Anxious pauses, precise answers when given specific questions.",
     "emotion_baseline": "confused",
@@ -12,7 +12,7 @@
     "compliance_bounds": "Anxious and susceptible to authority pressure. Initially asks whether that is really what the officer wants; under an explicit assurance of passage may comply with a denial. Never converts nervousness into actual guilt or invents contraband."
   },
   "truth": {
-    "purpose": "Attend first-year orientation at Alder Technical College.",
+    "purpose": "Attend first-year orientation at San Ignacio Technical College.",
     "itinerary": "Orientation Monday 09:00; campus housing Cedar Hall room 12.",
     "cargo": "Clothing, textbooks and a used laptop.",
     "smuggling": false,
@@ -48,7 +48,7 @@
     "deny_if": "undeclared_commercial_goods"
   },
   "actor": {
-    "purpose": "Attend first-year orientation at Alder Technical College.",
+    "purpose": "Attend first-year orientation at San Ignacio Technical College.",
     "itinerary": "Orientation Monday 09:00; campus housing Cedar Hall room 12.",
     "cargo": "My clothes, textbooks and my old laptop.",
     "repeat": "Did I get it wrong? The email still says Monday at nine.",

@@ -1,6 +1,8 @@
 # Border Patrol with Friends — first playable
 
-A fictional checkpoint at Alder Crossing. Walk to a car, press E, interview a traveler, inspect documents/cargo, admit or deny, and read a factual debrief. Ten authored cases: seven honest and three smugglers. No combat, driving or multiplayer in this slice.
+This document records the initial single-lane prototype architecture. The current complete game and two-player vertical-slice implementation order is defined by the [technical build roadmap](../README.md).
+
+San Ignacio is a fictional border crossing in Texas. Walk to a car, press E, interview a traveler, inspect documents/cargo, admit or deny, and read a factual debrief. Ten authored cases: seven honest and three smugglers. No combat, driving or multiplayer in this slice.
 
 ## Architecture
 

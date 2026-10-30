@@ -165,7 +165,7 @@ fn main() {
         .insert_resource(net)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Border Patrol with Friends • Alder Crossing".into(),
+                title: "Border Patrol with Friends • San Ignacio".into(),
                 resolution: if std::env::args().any(|a| a == "--reference-hardware") {
                     (1920, 1080).into()
                 } else {

@@ -38,7 +38,7 @@ pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>
             ui.horizontal(|ui| {
                 ui.vertical(|ui| {
                     tag(ui, "DEPARTMENT OF BORDER AFFAIRS  /  FIELD OPERATIONS");
-                    ui.label(egui::RichText::new("ALDER CROSSING").size(24.).strong());
+                    ui.label(egui::RichText::new("SAN IGNACIO").size(24.).strong());
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
@@ -206,7 +206,7 @@ pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>
             .resizable(false)
             .collapsible(false)
             .show(ctx, |ui| {
-                tag(ui, "ALDER CROSSING / END OF WATCH");
+                tag(ui, "SAN IGNACIO / END OF WATCH");
                 ui.add_space(14.);
                 ui.label(
                     egui::RichText::new(format!("{} / 10 correct decisions", g.score))

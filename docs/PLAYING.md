@@ -1,10 +1,10 @@
 # Running the current Border Patrol with Friends prototype
 
-Run terminal commands in this guide from the repository root. This guide describes the current prototype; the [main design checklist](../README.md) describes the complete target game.
+Run terminal commands in this guide from the repository root. This guide describes the current prototype; the [technical build roadmap](../README.md) describes the complete target game.
 
-A Rust / Bevy first-person checkpoint prototype. Interview ten fictional travelers at **Alder Crossing**, compare their accounts with documents and cargo, and decide who crosses. Exactly seven honest travelers and three smugglers. Built from primitive meshes; no art downloads required.
+A Rust / Bevy first-person checkpoint prototype. Interview ten fictional travelers at **San Ignacio, a fictional border crossing in Texas**, compare their accounts with documents and cargo, and decide who crosses. Exactly seven honest travelers and three smugglers. Built from primitive meshes; no art downloads required.
 
-![Alder Crossing checkpoint](checkpoint.png)
+![San Ignacio checkpoint](checkpoint.png)
 
 ## Launch from a terminal
 
