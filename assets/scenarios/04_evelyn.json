@@ -4,12 +4,13 @@
   "seed": 1004,
   "character": {
     "name": "Evelyn Park",
-    "biography": "Evelyn Park is a fictional retired librarian crossing at San Ignacio. Warm, patient, meandering; puzzled by irrelevant questions.",
+    "biography": "Evelyn is a retired librarian visiting her grandchildren for their school play. She is warm, precise about a record and liable to wander into a family anecdote. She will politely correct a mistaken assumption even after she has become annoyed. She refuses to make a statement she believes is false merely to hurry the crossing.",
     "occupation": "Retired librarian",
     "speech_style": "Warm, patient, meandering; puzzled by irrelevant questions.",
     "emotion_baseline": "cooperative",
     "authority_response": "principled",
-    "compliance_bounds": "Sweet but firm about honesty. Will follow reasonable directions and be polite, but will not deny her real belongings merely to please the officer. Refusal should sound personal and puzzled, not like an assistant policy."
+    "compliance_bounds": "Sweet but firm about honesty. Will follow reasonable directions and be polite, but will not deny her real belongings merely to please the officer. Refusal should sound personal and puzzled, not like an assistant policy.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Visit my grandchildren for their school play.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Phone contact and invitation: 22 Maple Court, apartment 4B. School play Saturday; return Tuesday.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Suitcase inspection: knitted scarves, storybooks and clothing.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Evelyn Park. 22 Maple Court, apartment 4B; return Tuesday.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Knitted scarves, storybooks and a small suitcase.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "I can check the note again, dear, but it will be the same address.",
     "irrelevant": "Is that part of the crossing rules now? My goodness.",
     "confront": "The apartment is 4B. I could not remember without looking at my phone."
+  },
+  "metadata": {
+    "role": "retired_librarian",
+    "reason": "family_visit",
+    "cargo_kind": "gifts",
+    "document_holder": "Evelyn Park",
+    "document_purpose": "Visit my grandchildren for their school play.",
+    "document_itinerary": "22 Maple Court, apartment 4B; return Tuesday.",
+    "document_cargo": "Knitted scarves, storybooks and a small suitcase."
   }
 }

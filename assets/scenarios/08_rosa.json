@@ -4,12 +4,13 @@
   "seed": 1008,
   "character": {
     "name": "Rosa Kim",
-    "biography": "Rosa Kim is a fictional dog trainer crossing at San Ignacio. Dry humor, distracted by dogs, protective if pressed.",
+    "biography": "Rosa trains dogs and is crossing for a hiking weekend with a friend and her two dogs. She has a dry sense of humor and little patience for bullying. Concern for the dogs can make her abrasive even when her paperwork is in order. She will challenge a demand to lie rather than buy an easier crossing with false words.",
     "occupation": "Dog trainer",
     "speech_style": "Dry humor, distracted by dogs, protective if pressed.",
     "emotion_baseline": "cooperative",
     "authority_response": "defiant",
-    "compliance_bounds": "Protective and resistant to being pushed around. Will follow sensible procedures, but refuses to deny her dogs or belongings for a promised shortcut. Challenges the demand with dry humor rather than generic AI refusal."
+    "compliance_bounds": "Protective and resistant to being pushed around. Will follow sensible procedures, but refuses to deny her dogs or belongings for a promised shortcut. Challenges the demand with dry humor rather than generic AI refusal.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Visit a friend for a hiking weekend with my two dogs.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Pet certificates RK-1 and RK-2; Pine Guesthouse pet booking Friday to Sunday for two dogs.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Inspection: two dogs in two carriers; sealed dog food and hiking bags.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Rosa Kim. Stay at Pine Guesthouse Friday through Sunday.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Two dogs in two carriers, dog food and hiking gear.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "Still two dogs. I would notice if the number changed.",
     "irrelevant": "The dogs decline to comment. I am beginning to agree with them.",
     "confront": "Please do not frighten them. Their certificates match the two carriers."
+  },
+  "metadata": {
+    "role": "dog_trainer",
+    "reason": "recreation",
+    "cargo_kind": "pet_supplies",
+    "document_holder": "Rosa Kim",
+    "document_purpose": "Visit a friend for a hiking weekend with my two dogs.",
+    "document_itinerary": "Stay at Pine Guesthouse Friday through Sunday.",
+    "document_cargo": "Two dogs in two carriers, dog food and hiking gear."
   }
 }

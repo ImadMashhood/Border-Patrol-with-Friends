@@ -13,6 +13,7 @@ The expanded [Part 4 scene](SCENE.md) includes a river bridge, Texas-bank fence,
 Linux / Fedora:
 
 ```bash
+cd "/home/imad/Documents/ChatGPT/Border Patrol with Friends 2"
 ./play.sh
 ```
 
@@ -33,9 +34,9 @@ For a second local player, run `./play.sh --join --name=Officer-B` in another te
 1. Spawn in the shared office, healed and equipped. Click the scene to look and use WASD to approach its closed exit door.
 2. Hold **E for two seconds**. The host can start, or a strict majority can register ready. The door opens and the shared ten-minute clock, queues and radio/security hooks begin.
 3. Claim a lane with **1/2**; use **J** for a consented swap and **G** to assist the other lane. **F** toggles your flashlight. The roster also offers these controls after releasing the mouse with Tab.
-4. Aim at a stopped car within 3 meters and press **E** to interview. Both officers share the same host-owned conversation and evidence when assisting.
-5. Speak normally: automatic listening sends your question after a pause. You may also type and send or press Enter. Inspect documents/cargo and compare the account against evidence.
-6. Choose **Admit** or **Deny**. The host commits the result once. **Close file & call next car** releases that vehicle while the other lane continues independently.
+4. Aim at a stopped car within 2 meters and press **E** to interview. Both officers share the same host-owned conversation and evidence when assisting.
+5. Speak normally: automatic listening sends your question after a pause. You may also type and send or press Enter. View the declaration/documents. Request secondary, then walk to the passenger door or rear cargo point and press E; search the glove compartment or cargo container there. Utility pickups also have a rear trailer inspection point.
+6. Return to the driver and choose **Admit**, **Deny** or evidence-supported **Detain**. The host commits the result once. **Close file & call next car** releases that vehicle while the other lane continues independently.
 7. At zero, finish already stopped drivers; fresh arrivals pause. The host can prepare another shift, returning officers to the closed office lobby. See [Part 5](SHIFT.md) for the complete start/expiry/reset behavior.
 
 **Tab** switches mouse look / typing while the interview stays open. **Esc** closes the overlay and releases the pointer; aim and E resumes the same case. Click the scene to capture the mouse. No interview ends automatically. Live spoken compliance is character-specific: opportunistic or eager travelers can repeat a false denial to get through; principled or defiant travelers can refuse. These words never change physical evidence or guilt. Repeated and irrelevant questions change the actor's reaction; nervousness does not indicate guilt.
@@ -88,12 +89,14 @@ python3 scripts/smoke_live.py
 ./play.sh --smoke-test
 ```
 
-The API smoke test starts a temporary offline service on 13847, runs 30 exchanges per case, inspects evidence, commits all ten correct decisions, and tests auth/input/state/budget errors. The graphical smoke mode saves `output/checkpoint.png` then exits. `./play.sh --smoke-interview` also exercises an interview and secondary inspection, saving `output/interview.png` and `output/evidence.png` after the first car has arrived. It is a rendering smoke check, not a human playthrough. CI is configured for Linux and Windows; an actual Windows run is not yet verified.
+The API smoke test starts a temporary offline service on 13847, runs 30 exchanges per case, inspects evidence, commits all ten correct decisions, and tests auth/input/state/budget errors. The graphical smoke mode saves `output/checkpoint.png` then exits. `./play.sh --smoke-interview` exercises an interview and requests secondary; `python3 scripts/test_graphical_shift.py --lifecycle` performs physical cargo/container searches with two real clients, saving `output/interview.png` and `output/evidence.png` after the first car has arrived. It is a rendering smoke check, not a human playthrough. CI is configured for Linux and Windows; an actual Windows run is not yet verified.
 
 Scenario data: `assets/scenarios/*.json`. Each contains personality, coherent immutable truth, initial cover stories for smugglers, document/cargo evidence, contradiction references and offline actor guidance. The live model receives only initial cover facts from the actor fields, not canned repetition/confession lines. The loader rejects malformed packs and requires exactly ten unique scenarios, three smugglers and fixed unique seeds. Unit tests run 300 authored exchanges and check disclosure/ground-truth invariants. See [design](DESIGN.md), [scenario contract](SCENARIO_SCHEMA.md), and [validation results](VALIDATION.md).
 
-This is the initial playable slice, not the entire PDF Phase 1 acceptance. Sustained live model consistency, human playtesting, speech hardware, spatial audio and Windows execution still need verification. Two-client host play and the ready-up/clock loop are now connected. Full multiplayer acceptance/reconnect, player driving, combat, final economy and detailed physical searches remain later work. Inspired by the crate separation in [WrongNumber](https://github.com/ImadMashhood/WrongNumber); no reference project was modified.
+This is the initial playable slice, not the entire PDF Phase 1 acceptance. Sustained live model consistency, human playtesting, speech hardware, spatial audio and Windows execution still need verification. Two-client host play and the ready-up/clock loop are now connected. Full multiplayer acceptance/reconnect, player driving, final economy, production art and full custody/resistance remain later work. Projectile combat, ragdolls and the Part 10 compartment searches are playable. Inspired by the crate separation in [WrongNumber](https://github.com/ImadMashhood/WrongNumber); no reference project was modified.
 
-Part 6: both lanes now receive sedans and pickups. Aim at a stopped vehicle's driver window to talk, or its passenger door, hood or rear cargo point to inspect using E. Physical cargo inspections share their findings with the other officer. [Vehicle controls and validation](VEHICLES.md).
+Parts 6–10: both lanes receive six vehicle types, including a utility pickup with a small trailer. Aim at a stopped vehicle's driver window to talk, or its passenger door, hood or rear cargo point to inspect using E. Physical cargo inspections share their findings with the other officer. [Vehicle controls and validation](VEHICLES.md).
 
 The [projectile pistol and vehicle controls](COMBAT.md) add B to draw, left click to fire, R to reload, Q for front doors, V/Shift+V for side windows, X to order a traveler out/back, and T for recovery of a dead driver’s vehicle. All impacts and physical NPC state are host-owned.
+
+[Parts 7–10: case generation, character state, physical searches, voice isolation and measured resource budgets](PARTS_7_10.md).

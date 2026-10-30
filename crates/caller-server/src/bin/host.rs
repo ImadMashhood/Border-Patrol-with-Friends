@@ -237,10 +237,10 @@ async fn decide_case(
     {
         h.sim.authorize_case(id, vehicle).map_err(error)?;
     }
-    let disposition = if r.decision == border_scenarios::Decision::Admit {
-        Disposition::Admit
-    } else {
-        Disposition::Deny
+    let disposition = match r.decision {
+        border_scenarios::Decision::Admit => Disposition::Admit,
+        border_scenarios::Decision::Deny => Disposition::Deny,
+        border_scenarios::Decision::Detain => Disposition::Detain,
     };
     Ok(Json(border_caller::DecisionResponse {
         reveal: h.sim.decide_case(id, vehicle, disposition).map_err(error)?,
@@ -293,7 +293,11 @@ async fn turn_case(
             .await
             .map_err(|_| error("AI gateway unavailable"))?;
         if !response.status().is_success() {
-            return Err(error("AI gateway rejected the reply; retry the question"));
+            return Err(match response.status() {
+                StatusCode::TOO_MANY_REQUESTS => (StatusCode::TOO_MANY_REQUESTS, Json(json!({"error":"AI provider is rate-limited. Wait a minute, then retry your question. The conversation is preserved."}))),
+                StatusCode::SERVICE_UNAVAILABLE => error("AI provider unavailable. The host must check the provider account or try later."),
+                _ => error("AI reply unavailable; retry the question. No traveler reply was invented."),
+            });
         }
         response
             .json::<border_caller::ActorReply>()

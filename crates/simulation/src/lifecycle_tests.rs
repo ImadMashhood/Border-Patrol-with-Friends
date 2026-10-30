@@ -183,3 +183,137 @@ fn truck_collision_and_yield_use_the_full_body_length() {
     run(&mut s, 15);
     assert_eq!(s.world.vehicles[1].stage, VehicleStage::Stopped);
 }
+
+#[test]
+fn every_case_has_a_physical_evidence_path_without_requiring_confession() {
+    use border_scenarios::EvidenceLocation as L;
+    for index in 0..10 {
+        let mut s = active();
+        run(&mut s, 15);
+        s.cases.get_mut(&1).unwrap().scenario = s.pack[index].instantiate(42);
+        at_point(&mut s, 1, 1, VehiclePoint::Driver);
+        s.public_case(1, 1, "offline").unwrap();
+        assert!(s.inspect_case(1, 1).is_err(), "no remote cargo reveal");
+        assert!(s.search_compartment(1, 1, L::Container).is_err());
+        at_point(&mut s, 1, 1, VehiclePoint::Passenger);
+        assert!(
+            s.search_compartment(1, 1, L::Glovebox).is_err(),
+            "open door first"
+        );
+        s.inspect_point(1, 1, VehiclePoint::Passenger).unwrap();
+        s.search_compartment(1, 1, L::Glovebox).unwrap();
+        let context = s.actor_context(1).unwrap();
+        assert!(!context.secondary);
+        assert!(
+            context.scenario.fact_allowed("glovebox_record", false),
+            "a searched glovebox must be known without revealing cargo"
+        );
+        assert!(
+            context
+                .scenario
+                .visible_evidence(false)
+                .iter()
+                .any(|e| e.location == L::Glovebox)
+        );
+        assert!(
+            !context
+                .scenario
+                .evidence
+                .iter()
+                .any(|e| e.location == L::Container || e.location == L::Cargo)
+        );
+        at_point(&mut s, 1, 1, VehiclePoint::Cargo);
+        s.inspect_point(1, 1, VehiclePoint::Cargo).unwrap();
+        s.search_compartment(1, 1, L::Container).unwrap();
+        assert!(s.search_compartment(2, 1, L::Cargo).is_err());
+        let before = serde_json::to_value(&s.cases[&1].scenario.truth).unwrap();
+        let smuggling = s.cases[&1].scenario.truth.smuggling;
+        let evidence = &s.world.vehicles[0].observed_evidence;
+        assert_eq!(
+            evidence.iter().any(|e| !e.contradicts.is_empty()),
+            smuggling
+        );
+        assert!(
+            s.world.vehicles[0].history.is_empty(),
+            "no confession needed"
+        );
+        at_point(&mut s, 1, 1, VehiclePoint::Driver);
+        let choice = if smuggling {
+            Disposition::Detain
+        } else {
+            Disposition::Admit
+        };
+        let outcome = s.decide_case(1, 1, choice).unwrap();
+        assert!(outcome.correct);
+        let money = s.world.money;
+        s.decide_case(1, 1, choice).unwrap();
+        assert_eq!(s.world.money, money);
+        assert!(s.decide_case(2, 1, choice).is_err());
+        assert_eq!(
+            serde_json::to_value(&s.cases[&1].scenario.truth).unwrap(),
+            before
+        );
+        s.release_case(1, 1).unwrap();
+        run(&mut s, 70);
+        assert_eq!(s.world.vehicles[0].stage, VehicleStage::Exited);
+    }
+}
+#[test]
+fn evidence_ids_cannot_reveal_remote_cargo_and_detention_requires_recorded_support() {
+    let mut s = active();
+    run(&mut s, 15);
+    at_point(&mut s, 1, 1, VehiclePoint::Driver);
+    assert!(s.decide_case(1, 1, Disposition::Detain).is_err());
+    let sequence = s.peers[&1].next_sequence;
+    assert!(
+        s.command(
+            1,
+            CommandEnvelope {
+                protocol_version: PROTOCOL_VERSION,
+                session_id: "lifecycle".into(),
+                request_id: "remote-cargo".into(),
+                sequence,
+                expected_revision: None,
+                command: ClientCommand::InspectEvidence {
+                    vehicle_id: 1,
+                    evidence_id: "cargo_inspection".into()
+                }
+            },
+            s.world.server_time_ms
+        )
+        .is_err()
+    );
+    assert!(s.world.vehicles[0].observed_evidence.is_empty());
+    assert!(!s.world.vehicles[0].secondary_inspected);
+}
+
+#[test]
+fn a_utility_trailer_has_its_own_physical_search_location() {
+    use border_scenarios::EvidenceLocation as L;
+    let mut s = active();
+    run(&mut s, 15);
+    assert_eq!(s.world.vehicles[5].kind, "utility_truck");
+    s.world.vehicles[5].stage = VehicleStage::Stopped;
+    s.world.vehicles[5].position = [7., 0., 0.];
+    at_point(&mut s, 2, 6, VehiclePoint::Cargo);
+    assert!(s.search_compartment(2, 6, L::Trailer).is_err());
+    at_point(&mut s, 2, 6, VehiclePoint::Trailer);
+    s.inspect_point(2, 6, VehiclePoint::Trailer).unwrap();
+    let v = &s.world.vehicles[5];
+    assert_eq!(v.searched_compartments, [L::Trailer]);
+    assert!(
+        v.observed_evidence
+            .iter()
+            .any(|e| e.id == "trailer_manifest")
+    );
+    assert!(
+        !v.observed_evidence
+            .iter()
+            .any(|e| e.location == L::Cargo || e.location == L::Container)
+    );
+    at_point(&mut s, 1, 1, VehiclePoint::Trailer);
+    assert!(
+        s.search_compartment(1, 1, L::Trailer).is_err(),
+        "a sedan must not expose a nonexistent trailer"
+    );
+}

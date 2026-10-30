@@ -383,55 +383,156 @@ impl Simulation {
             "use the driver window to talk"
         );
         let i = self.owns_vehicle(peer, id)?;
+        ensure!(
+            point != vehicle::VehiclePoint::Trailer
+                || self.world.vehicles[i].kind == "utility_truck",
+            "vehicle has no trailer"
+        );
         self.require_point(peer, i, point)?;
         if point == vehicle::VehiclePoint::Passenger {
             self.world.vehicles[i].physics.door_open[1] = true;
         }
         if !self.world.vehicles[i].inspected_points.contains(&point) {
             self.world.vehicles[i].inspected_points.push(point);
-            if point == vehicle::VehiclePoint::Cargo {
-                self.reveal_cargo(i, id);
-            }
             self.emit(
                 "vehicle_point_inspected",
                 json!({"vehicle_id":id,"point":point}),
             );
         }
+        match point {
+            vehicle::VehiclePoint::Cargo => {
+                self.search_compartment(peer, id, border_scenarios::EvidenceLocation::Cargo)?;
+            }
+            vehicle::VehiclePoint::Trailer => {
+                self.search_compartment(peer, id, border_scenarios::EvidenceLocation::Trailer)?;
+            }
+            _ => {}
+        }
         Ok(())
     }
-    fn reveal_cargo(&mut self, i: usize, id: u64) -> Vec<Evidence> {
-        let c = self.cases.get_mut(&id).unwrap();
-        c.secondary = true;
-        let evidence = c.scenario.visible_evidence(true);
-        self.world.vehicles[i].observed_evidence = evidence
+    pub fn search_compartment(
+        &mut self,
+        peer: u64,
+        id: u64,
+        location: border_scenarios::EvidenceLocation,
+    ) -> Result<()> {
+        use border_scenarios::EvidenceLocation as L;
+        let i = self.owns_vehicle(peer, id)?;
+        let point = match location {
+            L::Documents => vehicle::VehiclePoint::Driver,
+            L::Glovebox => vehicle::VehiclePoint::Passenger,
+            L::Cargo | L::Container => vehicle::VehiclePoint::Cargo,
+            L::Trailer => vehicle::VehiclePoint::Trailer,
+        };
+        ensure!(
+            location != L::Trailer || self.world.vehicles[i].kind == "utility_truck",
+            "vehicle has no trailer"
+        );
+        self.require_point(peer, i, point)?;
+        ensure!(
+            location != L::Container
+                || self.world.vehicles[i]
+                    .inspected_points
+                    .contains(&vehicle::VehiclePoint::Cargo),
+            "open the trunk or tailgate before searching the container"
+        );
+        ensure!(
+            location != L::Glovebox
+                || self.world.vehicles[i]
+                    .inspected_points
+                    .contains(&vehicle::VehiclePoint::Passenger),
+            "open the passenger door before searching the glove compartment"
+        );
+        if self.world.vehicles[i]
+            .searched_compartments
+            .contains(&location)
+        {
+            return Ok(());
+        }
+        let c = &self.cases[&id];
+        let findings: Vec<_> = c
+            .scenario
+            .evidence
             .iter()
+            .filter(|e| e.location == location)
             .map(|e| EvidenceView {
                 id: e.id.clone(),
                 description: e.description.clone(),
                 reveal_condition: e.reveal_condition.clone(),
+                location: e.location,
+                reveal_rule: e.reveal_rule.clone(),
+                contradicts: c
+                    .scenario
+                    .contradictions
+                    .iter()
+                    .filter(|c| c.evidence_id == e.id)
+                    .map(|c| c.claim_id.clone())
+                    .collect(),
             })
             .collect();
-        self.world.vehicles[i].secondary_inspected = true;
-        evidence
+        let v = &mut self.world.vehicles[i];
+        for e in findings {
+            if !v.observed_evidence.iter().any(|old| old.id == e.id) {
+                v.observed_evidence.push(e);
+            }
+        }
+        if !v.searched_compartments.contains(&location) {
+            v.searched_compartments.push(location);
+        }
+        if location == L::Glovebox {
+            v.physics.door_open[1] = true;
+        }
+        if matches!(location, L::Cargo | L::Container | L::Trailer) {
+            v.secondary_inspected = true;
+            self.cases.get_mut(&id).unwrap().secondary = true;
+        }
+        self.emit(
+            "compartment_searched",
+            json!({"vehicle_id":id,"location":location}),
+        );
+        Ok(())
     }
     pub fn public_case(&mut self, peer: u64, id: u64, mode: &str) -> Result<PublicCase> {
-        self.authorize_case(peer, id)?;
+        let i = self.authorize_case(peer, id)?;
+        self.search_compartment(peer, id, border_scenarios::EvidenceLocation::Documents)?;
         let c = &self.cases[&id];
+        let ids = self.world.vehicles[i]
+            .observed_evidence
+            .iter()
+            .map(|e| e.id.clone())
+            .collect::<Vec<_>>();
         Ok(PublicCase {
+            declared_claims: c.scenario.public_claims.clone(),
             session_id: id.to_string(),
             scenario_id: c.scenario.scenario_id.clone(),
             name: c.scenario.character.name.clone(),
             occupation: c.scenario.character.occupation.clone(),
             opening_line: c.scenario.opening_line.clone(),
-            evidence: c.scenario.visible_evidence(c.secondary),
+            evidence: c
+                .scenario
+                .evidence
+                .iter()
+                .filter(|e| ids.contains(&e.id))
+                .cloned()
+                .collect(),
             mode: mode.into(),
         })
     }
     pub fn inspect_case(&mut self, peer: u64, id: u64) -> Result<Vec<Evidence>> {
-        let i = self.authorize_case(peer, id)?;
-        let evidence = self.reveal_cargo(i, id);
-        self.emit("evidence_inspected", json!({"vehicle_id":id}));
-        Ok(evidence)
+        self.inspect_point(peer, id, vehicle::VehiclePoint::Cargo)?;
+        let v = self
+            .world
+            .vehicles
+            .iter()
+            .find(|v| v.vehicle_id == id)
+            .unwrap();
+        Ok(self.cases[&id]
+            .scenario
+            .evidence
+            .iter()
+            .filter(|e| v.observed_evidence.iter().any(|o| o.id == e.id))
+            .cloned()
+            .collect())
     }
     pub fn decide_case(
         &mut self,
@@ -439,13 +540,34 @@ impl Simulation {
         id: u64,
         disposition: Disposition,
     ) -> Result<border_scenarios::Reveal> {
+        let lane_id = self
+            .world
+            .vehicles
+            .iter()
+            .find(|v| v.vehicle_id == id)
+            .ok_or_else(|| anyhow::anyhow!("unknown vehicle"))?
+            .lane_id;
+        ensure!(
+            self.world
+                .lanes
+                .iter()
+                .any(|l| l.lane_id == lane_id && l.owner == Some(peer))
+                || self
+                    .world
+                    .peers
+                    .iter()
+                    .any(|p| p.peer_id == peer && p.assisting == Some(lane_id)),
+            "lane not assigned"
+        );
         if let Some(v) = self.world.vehicles.iter().find(|v| v.vehicle_id == id)
             && let Some(outcome) = &v.outcome
         {
             ensure!(
                 matches!(
                     (disposition, outcome.decision),
-                    (Disposition::Admit, Decision::Admit) | (Disposition::Deny, Decision::Deny)
+                    (Disposition::Admit, Decision::Admit)
+                        | (Disposition::Deny, Decision::Deny)
+                        | (Disposition::Detain, Decision::Detain)
                 ),
                 "disposition already committed"
             );
@@ -453,17 +575,43 @@ impl Simulation {
         }
         let i = self.authorize_case(peer, id)?;
         let c = &self.cases[&id];
-        let decision = if disposition == Disposition::Admit {
-            Decision::Admit
-        } else {
-            Decision::Deny
+        let supported = self.world.vehicles[i]
+            .observed_evidence
+            .iter()
+            .any(|e| !e.contradicts.is_empty());
+        ensure!(
+            disposition != Disposition::Detain || supported,
+            "record contradictory physical or documentary evidence before detaining"
+        );
+        let decision = match disposition {
+            Disposition::Admit => Decision::Admit,
+            Disposition::Deny => Decision::Deny,
+            Disposition::Detain => Decision::Detain,
         };
-        let outcome = c.scenario.resolve(decision, c.secondary);
+        let mut outcome = c.scenario.resolve(decision, c.secondary);
+        outcome.missed_clues = c
+            .scenario
+            .contradictions
+            .iter()
+            .filter(|link| {
+                !self.world.vehicles[i]
+                    .observed_evidence
+                    .iter()
+                    .any(|e| e.id == link.evidence_id)
+            })
+            .map(|link| link.explanation.clone())
+            .collect();
         let correct = outcome.correct;
         let amount = match (disposition, correct) {
             (Disposition::Admit, true) => 100,
             (Disposition::Admit, false) => -400,
-            (Disposition::Deny, true) => 200,
+            (Disposition::Deny, true) => {
+                if supported {
+                    200
+                } else {
+                    0
+                }
+            }
             (Disposition::Detain, true) => 250,
             _ => -150,
         };
@@ -473,7 +621,9 @@ impl Simulation {
             disposition,
             correct,
             amount,
-            reason: if correct {
+            reason: if correct && disposition == Disposition::Deny && !supported {
+                "correct result; no recorded supporting evidence"
+            } else if correct {
                 "correct disposition"
             } else {
                 "incorrect disposition"

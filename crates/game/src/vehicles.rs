@@ -19,6 +19,7 @@ pub struct Panel {
     pub point: VehiclePoint,
     pub base: Quat,
     pub truck_tailgate: bool,
+    pub compartment: Option<border_scenarios::EvidenceLocation>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -228,6 +229,7 @@ fn panel(
                 ordinal,
                 point,
                 base: Quat::IDENTITY,
+                compartment: None,
                 truck_tailgate: point == VehiclePoint::Cargo && size.z < 0.2,
             },
         ))
@@ -321,7 +323,11 @@ pub fn animate(
             w.vehicles.iter().any(|v| {
                 v.vehicle_id == id
                     && v.stage == VehicleStage::Stopped
-                    && v.inspected_points.contains(&p.point)
+                    && if let Some(location) = p.compartment {
+                        v.searched_compartments.contains(&location)
+                    } else {
+                        v.inspected_points.contains(&p.point)
+                    }
             })
         });
         let target = if open {
@@ -330,6 +336,7 @@ pub fn animate(
                     Quat::from_rotation_x(if p.truck_tailgate { 1.2 } else { -1.0 })
                 }
                 VehiclePoint::Hood => Quat::from_rotation_x(1.0),
+                _ if p.compartment.is_some() => Quat::from_rotation_x(1.1),
                 _ => Quat::from_rotation_y(1.0),
             }
         } else {
@@ -365,6 +372,9 @@ pub fn interaction(
         .flat_map(|v| VehiclePoint::ALL.into_iter().map(move |point| (v, point)))
         .filter_map(|(v, point)| {
             let spec = vehicle::spec(&v.kind);
+            if point == VehiclePoint::Trailer && v.kind != "utility_truck" {
+                return None;
+            }
             if point == VehiclePoint::Driver && v.physics.npc.health == 0 {
                 return None;
             }
@@ -401,7 +411,8 @@ pub fn dressing(
     kind: &str,
     paint: Handle<StandardMaterial>,
 ) {
-    let spec = vehicle::spec(kind);
+    let mut spec = vehicle::spec(kind);
+    spec.half_length = vehicle::body_half_length(kind);
     let lift = vehicle::cab_lift(kind);
     let pickup = vehicle::pickup(kind);
     let dark = materials.add(StandardMaterial {
@@ -421,6 +432,67 @@ pub fn dressing(
         emissive: LinearRgba::rgb(0.1, 0.08, 0.04),
         ..default()
     });
+    for (location, point, pivot, size, offset) in [
+        (
+            border_scenarios::EvidenceLocation::Glovebox,
+            VehiclePoint::Passenger,
+            Vec3::new(
+                0.48,
+                0.91 + if pickup { 0.35 } else { lift },
+                spec.window_z - 0.385,
+            ),
+            Vec3::new(0.40, 0.20, 0.035),
+            Vec3::new(0., 0.10, 0.),
+        ),
+        (
+            border_scenarios::EvidenceLocation::Container,
+            VehiclePoint::Cargo,
+            Vec3::new(
+                0.,
+                if pickup { 1.46 } else { 0.91 },
+                if pickup { 1.3 } else { 1.4 },
+            ),
+            Vec3::new(0.80, 0.04, 0.60),
+            Vec3::new(0., 0., 0.30),
+        ),
+    ] {
+        let hinge = commands
+            .spawn((
+                Transform::from_translation(pivot),
+                Visibility::default(),
+                Panel {
+                    lane,
+                    ordinal,
+                    point,
+                    base: Quat::IDENTITY,
+                    truck_tailgate: false,
+                    compartment: Some(location),
+                },
+            ))
+            .id();
+        let lid = commands
+            .spawn((
+                Mesh3d(meshes.add(Cuboid::from_size(size))),
+                MeshMaterial3d(dark.clone()),
+                Transform::from_translation(offset),
+            ))
+            .id();
+        commands.entity(hinge).add_child(lid);
+        commands.entity(root).add_child(hinge);
+    }
+    if kind == "utility_truck" {
+        for x in [-0.95_f32, 0.95] {
+            let wheel = commands
+                .spawn((
+                    Mesh3d(meshes.add(Cylinder::new(0.35, 0.18).mesh().resolution(18))),
+                    MeshMaterial3d(dark.clone()),
+                    Transform::from_xyz(x, 0.35, 4.5)
+                        .with_rotation(Quat::from_rotation_z(std::f32::consts::FRAC_PI_2)),
+                ))
+                .id();
+            commands.entity(root).add_child(wheel);
+        }
+    }
     let mut part = |size: Vec3, pos: Vec3, mat: Handle<StandardMaterial>| {
         let e = commands
             .spawn((
@@ -436,6 +508,45 @@ pub fn dressing(
             Vec3::from_array(half) * 2.,
             Vec3::from_array(center),
             paint.clone(),
+        );
+    }
+    // A hollow, visibly attached cargo box; its lid is the searched container hinge.
+    let crate_y = if pickup { 1.28 } else { 0.73 };
+    let crate_z = if pickup { 1.6 } else { 1.7 };
+    part(
+        Vec3::new(0.80, 0.04, 0.60),
+        Vec3::new(0., crate_y - 0.16, crate_z),
+        dark.clone(),
+    );
+    for x in [-0.38, 0.38] {
+        part(
+            Vec3::new(0.04, 0.34, 0.60),
+            Vec3::new(x, crate_y, crate_z),
+            dark.clone(),
+        );
+    }
+    for z in [-0.28, 0.28] {
+        part(
+            Vec3::new(0.80, 0.34, 0.04),
+            Vec3::new(0., crate_y, crate_z + z),
+            dark.clone(),
+        );
+    }
+    part(
+        Vec3::new(0.60, 0.04, 0.42),
+        Vec3::new(0., crate_y - 0.1, crate_z),
+        plate.clone(),
+    );
+    if kind == "utility_truck" {
+        part(
+            Vec3::new(1.3, 0.6, 1.3),
+            Vec3::new(0., 1.12, 4.5),
+            dark.clone(),
+        );
+        part(
+            Vec3::new(0.40, 0.02, 0.25),
+            Vec3::new(0., 1.43, 4.5),
+            plate.clone(),
         );
     }
     // Plates, grille slats, hood seams, wipers, sills and fuel cover are visible at officer distance.

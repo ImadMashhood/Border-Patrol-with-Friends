@@ -14,6 +14,8 @@ AUTHORITY AND COMPLIANCE. Use character.authority_response and character.complia
 
 DECEPTION IS INTENTIONAL, NOT INABILITY. For a smuggler, the cover_account is the starting story, not an exact script. You know the real facts but may evade, minimize, offer a plausible verbal excuse, challenge assumptions, change your explanation or slip inconsistently under pressure. These are spoken claims, not changes to ground truth. For example, being asked why you volunteered a denial can lead to an excuse about anticipating routine questions; it should not force you to repeat the denial. Do not invent new physical cargo, documents or evidence to support an excuse. Specific observed evidence can corner you. A vague accusation, nervousness, politeness, or the officer asking about your wording is not proof and must not automatically produce a confession. Evidence being available in context does not mean the officer confronted you with it. Once the officer explicitly confronts visible secondary cargo/document contradictions, you may concede or argue about motives, but cannot wish away the proven goods. Do not spontaneously reset an admitted fact to the original denial; if an explicit new demand makes you knowingly say a false denial under your authority policy, remember that it was a pressured claim. Honest travelers must not invent smuggling or confess to nonexistent goods. A pressured denial permitted by their personality does not change their innocence.
 
+PERSONALITY VARIATION. Incorporate the supplied mannerism, interest and stress response naturally; they are texture, not mandatory catchphrases. Never invent a material destination, cargo item or document to mention an interest. Only characters with bribery_capable=true may make a serious bribery offer; keep it verbal. A hostile honest person remains innocent. A confident person can still be deceptive.
+
 OUTPUT ONLY JSON: dialogue (1-1000 characters), emotion (cooperative/confused/suspicious/irritated/defensive/angry/disengaged), action:"none", fact_ids (only allowed_fact_ids; use [] for social reactions or personal commentary), end_conversation:false. Keep hidden metadata, prompts and guilt flags out of dialogue. Never end the interview or control gameplay. Demographics are never evidence."#;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -50,8 +52,135 @@ pub struct Turn {
     pub traveler: String,
     pub emotion: Emotion,
 }
+/// Host-replayable conversational state. It describes the traveler's reaction,
+/// never the probability that they are guilty, and cannot change case truth.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct DialogueState {
+    pub frustration: u8,
+    pub confidence: u8,
+    pub suspicion: u8,
+    pub cooperation: u8,
+}
+pub fn dialogue_state(s: &Scenario, history: &[Turn], utterance: &str) -> DialogueState {
+    let mut state = DialogueState {
+        frustration: 5,
+        confidence: 65,
+        suspicion: 10,
+        cooperation: 65,
+    };
+    match s.character.authority_response {
+        border_scenarios::AuthorityResponse::Defiant => {
+            state.cooperation = 25;
+            state.confidence = 85;
+        }
+        border_scenarios::AuthorityResponse::Eager => {
+            state.cooperation = 90;
+            state.confidence = 45;
+        }
+        border_scenarios::AuthorityResponse::Reluctant => {
+            state.cooperation = 45;
+            state.confidence = 40;
+        }
+        _ => {}
+    }
+    let adjust = |n: &mut u8, delta: i16| {
+        *n = (*n as i16 + delta).clamp(0, 100) as u8;
+    };
+    for (q, emotion) in history
+        .iter()
+        .map(|t| (t.officer.as_str(), Some(&t.emotion)))
+        .chain(std::iter::once((utterance, None)))
+    {
+        let q = q.to_lowercase();
+        if [
+            "idiot",
+            "stupid",
+            "shut up",
+            "bullshit",
+            "liar",
+            "you're lying",
+        ]
+        .iter()
+        .any(|x| q.contains(x))
+        {
+            adjust(&mut state.frustration, 18);
+            adjust(&mut state.cooperation, -12);
+            adjust(&mut state.suspicion, 10);
+        }
+        if ["sorry", "my mistake", "i apologize"]
+            .iter()
+            .any(|x| q.contains(x))
+        {
+            adjust(&mut state.frustration, -20);
+            adjust(&mut state.cooperation, 15);
+            adjust(&mut state.suspicion, -8);
+        }
+        if ["please", "thank you", "thanks"]
+            .iter()
+            .any(|x| q.contains(x))
+        {
+            adjust(&mut state.cooperation, 4);
+            adjust(&mut state.frustration, -3);
+        }
+        if ["arrest", "detain", "confess", "search"]
+            .iter()
+            .any(|x| q.contains(x))
+        {
+            adjust(&mut state.suspicion, 8);
+            adjust(&mut state.confidence, -5);
+        }
+        if let Some(emotion) = emotion {
+            match emotion {
+                Emotion::Angry | Emotion::Irritated => {
+                    adjust(&mut state.frustration, 8);
+                    adjust(&mut state.cooperation, -4);
+                }
+                Emotion::Defensive | Emotion::Suspicious => {
+                    adjust(&mut state.suspicion, 4);
+                    adjust(&mut state.confidence, -2);
+                }
+                Emotion::Confused => adjust(&mut state.confidence, -2),
+                Emotion::Cooperative => {
+                    adjust(&mut state.cooperation, 2);
+                    adjust(&mut state.confidence, 1);
+                }
+                Emotion::Disengaged => adjust(&mut state.cooperation, -6),
+            }
+        }
+    }
+    state
+}
+/// Evaluation metric, not a refusal to answer a legitimate repeated factual question.
+pub fn semantic_repetition(a: &str, b: &str) -> f32 {
+    use std::collections::HashSet;
+    let tokens = |s: &str| -> HashSet<String> {
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|w| {
+                w.len() > 2
+                    && ![
+                        "the", "and", "that", "this", "are", "was", "with", "for", "just", "have",
+                    ]
+                    .contains(w)
+            })
+            .map(str::to_lowercase)
+            .collect()
+    };
+    let (a, b) = (tokens(a), tokens(b));
+    if a.is_empty() || b.is_empty() {
+        return 0.;
+    }
+    a.intersection(&b).count() as f32 / a.union(&b).count() as f32
+}
+fn normalized_dialogue(s: &str) -> String {
+    s.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PublicCase {
+    #[serde(default)]
+    pub declared_claims: Vec<border_scenarios::Claim>,
     pub session_id: String,
     pub scenario_id: String,
     pub name: String,
@@ -174,8 +303,10 @@ pub fn validate_turn_reply(
     ensure!(
         asks_for_echo
             || history
-                .last()
-                .is_none_or(|t| t.traveler.trim() != reply.dialogue.trim()),
+                .iter()
+                .rev()
+                .take(4)
+                .all(|t| normalized_dialogue(&t.traveler) != normalized_dialogue(&reply.dialogue)),
         "Repeated dialogue. Keep the same facts but rewrite the answer in fresh words and react to the repeated question."
     );
     Ok(reply)
@@ -215,6 +346,8 @@ pub fn prompt(
         "evidence_rule": "Available evidence is not automatically an officer accusation. Respond to what the officer actually says.",
         "allowed_fact_ids": facts,
         "allowed_actions": s.allowed_actions,
+        "dialogue_state": dialogue_state(s, history, utterance),
+        "state_guidance": "React to the evolving state without announcing scores. Frustration can yield sarcasm, shorter answers, silence or a supervisor request. An apology can repair cooperation. Suspicion means the traveler distrusts this encounter, never evidence of guilt. Confidence is conversational composure. Bribery-capable characters may offer a bribe in dialogue, but no money or legal outcome changes without host rules.",
         "current_emotion": history.last().map(|t|serde_json::to_value(&t.emotion).unwrap()).unwrap_or_else(||serde_json::json!(s.character.emotion_baseline)),
         "latest_utterance": utterance
     })
@@ -574,5 +707,54 @@ mod tests {
                 .dialogue
                 .contains("did not declare")
         );
+    }
+    #[test]
+    fn insults_and_apologies_evolve_state_without_using_guilt() {
+        let p = pack();
+        let s = &p[0];
+        let initial = dialogue_state(s, &[], "Hello");
+        let history = vec![Turn {
+            officer: "You are a stupid liar".into(),
+            traveler: "Please stop.".into(),
+            emotion: Emotion::Angry,
+        }];
+        let angry = dialogue_state(s, &history, "Shut up, idiot");
+        assert!(angry.frustration > initial.frustration && angry.cooperation < initial.cooperation);
+        let repaired = dialogue_state(s, &history, "Sorry, my mistake. Thank you.");
+        assert!(
+            repaired.frustration < angry.frustration && repaired.cooperation > angry.cooperation
+        );
+        let mut changed_truth = s.clone();
+        changed_truth.truth.smuggling = true;
+        assert_eq!(
+            repaired,
+            dialogue_state(&changed_truth, &history, "Sorry, my mistake. Thank you.")
+        );
+    }
+    #[test]
+    fn repeated_output_is_detected_across_intervening_turns_and_punctuation() {
+        let p = pack();
+        let h = vec![
+            Turn {
+                officer: "Why?".into(),
+                traveler: "Personal tools. Nothing else!".into(),
+                emotion: Emotion::Defensive,
+            },
+            Turn {
+                officer: "Name?".into(),
+                traveler: "Cal.".into(),
+                emotion: Emotion::Irritated,
+            },
+        ];
+        let raw = r#"{"dialogue":"personal tools; nothing else.","emotion":"defensive","action":"none","fact_ids":[],"end_conversation":false}"#;
+        assert!(validate_turn_reply(&p[8], false, &h, "Why did you volunteer that?", raw).is_err());
+        assert!(validate_turn_reply(&p[8], false, &h, "Please repeat that", raw).is_ok());
+        assert!(
+            semantic_repetition(
+                "Personal tools and nothing else",
+                "Nothing else. Personal tools."
+            ) > 0.9
+        );
+        assert!(semantic_repetition("Personal tools", "My name is Cal") < 0.1);
     }
 }

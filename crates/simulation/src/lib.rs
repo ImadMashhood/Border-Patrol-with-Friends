@@ -439,28 +439,28 @@ impl Simulation {
             ClientCommand::InspectVehiclePoint { vehicle_id, point } => {
                 self.inspect_point(peer, *vehicle_id, *point)?;
             }
+            ClientCommand::RequestSecondary { vehicle_id } => {
+                let i = self.authorize_case(peer, *vehicle_id)?;
+                self.world.vehicles[i].secondary_requested = true;
+                self.emit("secondary_requested", json!({"vehicle_id":vehicle_id}));
+            }
+            ClientCommand::SearchCompartment {
+                vehicle_id,
+                location,
+            } => {
+                self.search_compartment(peer, *vehicle_id, *location)?;
+            }
             ClientCommand::InspectEvidence {
                 vehicle_id,
                 evidence_id,
             } => {
-                let i = self.authorize_case(peer, *vehicle_id)?;
-                let evidence = self.cases[vehicle_id]
-                    .scenario
-                    .evidence
-                    .iter()
-                    .find(|e| e.id == *evidence_id)
-                    .ok_or_else(|| anyhow::anyhow!("unknown evidence"))?;
-                if !self.world.vehicles[i]
-                    .observed_evidence
-                    .iter()
-                    .any(|e| e.id == *evidence_id)
-                {
-                    self.world.vehicles[i].observed_evidence.push(EvidenceView {
-                        id: evidence.id.clone(),
-                        description: evidence.description.clone(),
-                        reveal_condition: evidence.reveal_condition.clone(),
-                    });
-                }
+                let location = self
+                    .cases
+                    .get(vehicle_id)
+                    .and_then(|c| c.scenario.evidence.iter().find(|e| e.id == *evidence_id))
+                    .ok_or_else(|| anyhow::anyhow!("unknown evidence"))?
+                    .location;
+                self.search_compartment(peer, *vehicle_id, location)?;
             }
             ClientCommand::Decide {
                 vehicle_id,
@@ -534,7 +534,15 @@ impl Simulation {
                     .find(|l| l.lane_id == *lane_id)
                     .ok_or_else(|| anyhow::anyhow!("unknown lane"))?;
                 let vehicle_id = self.cursor as u64 + 1;
-                let scenario = self.pack[self.order[self.cursor]].clone();
+                let mut scenario = self.pack[self.order[self.cursor]]
+                    .instantiate(self.world.seed ^ self.epoch.rotate_left(32) ^ vehicle_id);
+                if kind == "utility_truck" {
+                    scenario.evidence.push(border_scenarios::Evidence {
+                        id: "trailer_manifest".into(), location: border_scenarios::EvidenceLocation::Trailer,
+                        reveal_condition: border_scenarios::RevealCondition::Secondary, reveal_rule: "physical_search".into(),
+                        description: format!("Trailer inspected: secured container and inventory card. {} No additional consignment listed.", scenario.truth.cargo),
+                    });
+                }
                 self.cursor += 1;
                 l.queue.push(vehicle_id);
                 self.world.vehicles.push(VehicleView {
@@ -553,6 +561,8 @@ impl Simulation {
                     history: vec![],
                     outcome: None,
                     secondary_inspected: false,
+                    secondary_requested: false,
+                    searched_compartments: vec![],
                     inspected_points: vec![],
                     physics: border_net::combat::VehiclePhysics::default(),
                 });
@@ -641,7 +651,12 @@ impl Simulation {
         let c = &self.cases[&vehicle];
         ensure!(c.history.len() < 128, "conversation limit reached");
         Ok(ActorContext {
-            scenario: c.scenario.clone(),
+            scenario: c.scenario.with_observations(
+                &v.observed_evidence
+                    .iter()
+                    .map(|e| e.id.clone())
+                    .collect::<Vec<_>>(),
+            ),
             history: c.history.clone(),
             expected_turn: c.history.len() as u64,
             secondary: c.secondary,
@@ -680,8 +695,14 @@ impl Simulation {
             "stale actor turn"
         );
         ensure!(c.history.len() < 128, "conversation limit reached");
+        let observed = c.scenario.with_observations(
+            &v.observed_evidence
+                .iter()
+                .map(|e| e.id.clone())
+                .collect::<Vec<_>>(),
+        );
         let reply = validate_turn_reply(
-            &c.scenario,
+            &observed,
             c.secondary,
             &c.history,
             &delivery.officer_utterance,

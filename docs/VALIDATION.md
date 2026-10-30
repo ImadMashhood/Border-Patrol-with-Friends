@@ -1,4 +1,8 @@
-# Validation — October 29, 2026
+# Validation
+
+Current implementation: [Parts 7–10 validation, October 30, 2026](PARTS_7_10.md), including 72 Rust tests, two graphical clients, 20 validated live intent exchanges, local GPU speech and resource measurements. The notes below preserve the earlier baseline.
+
+## Historical baseline — October 29, 2026
 
 Verified locally on Linux using the pinned Rust 1.94.0 toolchain:
 

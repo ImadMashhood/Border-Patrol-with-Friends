@@ -4,12 +4,13 @@
   "seed": 1003,
   "character": {
     "name": "Victor Hale",
-    "biography": "Victor Hale is a fictional antiques dealer crossing at San Ignacio. Charming, polished, redirects to pleasantries; defensive when shown receipt.",
+    "biography": "Victor has practiced the polished small talk of an antiques dealer. He likes turning an uncomfortable question into an exchange of compliments, and treats his gallery delivery as something he can talk his way through. Documentary specifics unsettle him more than insults. He may bargain or make a discreet verbal bribery offer; he need not confess.",
     "occupation": "Antiques dealer",
     "speech_style": "Charming, polished, redirects to pleasantries; defensive when shown receipt.",
     "emotion_baseline": "cooperative",
     "authority_response": "opportunistic",
-    "compliance_bounds": "Readily adopts wording that gets him admitted, including denying belongings when told that is the price of passage. Charming compliance can contradict his prior claims; cargo and documents remain real. Refuses to volunteer a new criminal confession without evidence."
+    "compliance_bounds": "Readily adopts wording that gets him admitted, including denying belongings when told that is the price of passage. Charming compliance can contradict his prior claims; cargo and documents remain real. Refuses to volunteer a new criminal confession without evidence.",
+    "bribery_capable": true
   },
   "truth": {
     "purpose": "Deliver three crates of undeclared antiques for sale at Hale Gallery.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Cargo receipt VH-31: three crates, Hale Gallery, Saturday 10:00, commercial sale.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Trunk inspection: three crates of antiques; invoice VH-31 marked commercial resale.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Victor Hale. Hale Gallery appointment Saturday 10:00; return Sunday.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Three crates of antiques for commercial resale, undeclared.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [
@@ -48,6 +67,11 @@
       "claim_id": "cargo_claim",
       "evidence_id": "cargo_inspection",
       "explanation": "The claim \"Only personal luggage. Nothing for sale.\" is contradicted by Trunk inspection: three crates of antiques; invoice VH-31 marked commercial resale."
+    },
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "container_record",
+      "explanation": "The container contents contradict the cover account: Three crates of antiques for commercial resale, undeclared."
     }
   ],
   "allowed_actions": [
@@ -65,5 +89,14 @@
     "repeat": "As I said, it is a personal visit. Surely we need not rehearse every word?",
     "irrelevant": "That is an unusual question. Do you collect antiques yourself?",
     "confront": "All right. Those crates are for Hale Gallery. I did not declare the sale goods."
+  },
+  "metadata": {
+    "role": "antiques_dealer",
+    "reason": "commercial_delivery",
+    "cargo_kind": "antiques",
+    "document_holder": "Victor Hale",
+    "document_purpose": "Deliver three crates of undeclared antiques for sale at Hale Gallery.",
+    "document_itinerary": "Hale Gallery appointment Saturday 10:00; return Sunday.",
+    "document_cargo": "Three crates of antiques for commercial resale, undeclared."
   }
 }

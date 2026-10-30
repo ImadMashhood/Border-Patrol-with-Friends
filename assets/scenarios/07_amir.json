@@ -4,12 +4,13 @@
   "seed": 1007,
   "character": {
     "name": "Amir Chen",
-    "biography": "Amir Chen is a fictional student crossing at San Ignacio. Anxious pauses, precise answers when given specific questions.",
+    "biography": "Amir is a first-year student on his way to orientation. He has rehearsed the important details but finds an authoritative silence intimidating. Clear questions make him precise; vague accusations make him overexplain or ask what he has done wrong. He can seek reassurance without being deceptive and does not know arbitrary facts outside his own trip.",
     "occupation": "Student",
     "speech_style": "Anxious pauses, precise answers when given specific questions.",
     "emotion_baseline": "confused",
     "authority_response": "reluctant",
-    "compliance_bounds": "Anxious and susceptible to authority pressure. Initially asks whether that is really what the officer wants; under an explicit assurance of passage may comply with a denial. Never converts nervousness into actual guilt or invents contraband."
+    "compliance_bounds": "Anxious and susceptible to authority pressure. Initially asks whether that is really what the officer wants; under an explicit assurance of passage may comply with a denial. Never converts nervousness into actual guilt or invents contraband.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Attend first-year orientation at San Ignacio Technical College.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Student ID AC-12 and orientation email: Monday 09:00, Cedar Hall room 12.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Bag inspection: clothing, textbooks, one used laptop.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Amir Chen. Orientation Monday 09:00; campus housing Cedar Hall room 12.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Clothing, textbooks and a used laptop.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "Did I get it wrong? The email still says Monday at nine.",
     "irrelevant": "I do not understand. Could you ask me something specific?",
     "confront": "I am nervous because I have never done this alone. My college email has the details."
+  },
+  "metadata": {
+    "role": "student",
+    "reason": "study",
+    "cargo_kind": "personal_luggage",
+    "document_holder": "Amir Chen",
+    "document_purpose": "Attend first-year orientation at San Ignacio Technical College.",
+    "document_itinerary": "Orientation Monday 09:00; campus housing Cedar Hall room 12.",
+    "document_cargo": "Clothing, textbooks and a used laptop."
   }
 }

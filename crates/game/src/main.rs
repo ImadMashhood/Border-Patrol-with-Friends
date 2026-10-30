@@ -61,6 +61,7 @@ struct Patrol {
     mic_active: bool,
     mic_error: String,
     speaking: bool,
+    playback: Option<border_speech::SpeechPlayback>,
     speech_pending: bool,
     request_focus: bool,
     settings_open: bool,
@@ -99,6 +100,7 @@ impl Patrol {
             mic_active: false,
             mic_error: String::new(),
             speaking: false,
+            playback: None,
             speech_pending: false,
             request_focus: false,
             settings_open: false,
@@ -123,6 +125,7 @@ impl Patrol {
         self.mic_active = false;
         self.speech_pending = false;
         self.speaking = false;
+        self.playback = None;
         self.phase = Phase::Approach;
     }
 }
@@ -603,6 +606,9 @@ fn ray_box(origin: Vec3, dir: Vec3, min: Vec3, max: Vec3) -> Option<f32> {
     Some(near)
 }
 fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Shift>>) {
+    if g.muted {
+        g.playback = None;
+    }
     let events: Vec<_> = net.rx.lock().unwrap().try_iter().collect();
     for (generation, event) in events {
         if generation != g.generation {
@@ -613,11 +619,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.subtitle = case.opening_line.clone();
                 if !g.muted {
                     g.speaking = true;
-                    net.speak(
+                    g.playback = Some(net.speak(
                         g.generation,
                         case.opening_line.clone(),
                         case.scenario_id.clone(),
-                    );
+                    ));
                 }
                 g.evidence = case.evidence.clone();
                 g.case = Some(case);
@@ -639,11 +645,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.request_focus = true;
                 if !g.muted {
                     g.speaking = true;
-                    net.speak(
+                    g.playback = Some(net.speak(
                         g.generation,
                         r.dialogue,
                         g.case.as_ref().unwrap().scenario_id.clone(),
-                    );
+                    ));
                 }
             }
             NetEvent::Evidence(e) => {
@@ -658,10 +664,19 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 }
                 g.reveal = Some(r);
                 g.phase = Phase::Reveal;
+                g.playback = None;
+                g.mic = None;
                 g.pending = false;
                 g.overlay = true;
                 g.looking = false;
                 g.subtitle.clear();
+            }
+            NetEvent::TurnFailed { message, question } => {
+                g.error = message;
+                g.input = question;
+                g.pending = false;
+                g.speech_pending = false;
+                g.request_focus = true;
             }
             NetEvent::Error(e) => {
                 g.error = e;
@@ -1038,6 +1053,10 @@ fn smoke_test(
             vehicle_id: id,
             point: border_net::vehicle::VehiclePoint::Cargo,
         });
+        shift.send(border_net::ClientCommand::SearchCompartment {
+            vehicle_id: id,
+            location: border_scenarios::EvidenceLocation::Container,
+        });
         shift.inspection = Some((id, border_net::vehicle::VehiclePoint::Cargo));
         g.overlay = false;
         smoke.step = 5;
@@ -1050,6 +1069,8 @@ fn smoke_test(
                 shift.permits(v.lane_id)
                     && v.inspected_points
                         .contains(&border_net::vehicle::VehiclePoint::Cargo)
+                    && v.searched_compartments
+                        .contains(&border_scenarios::EvidenceLocation::Container)
             })
         })
     {
@@ -1103,8 +1124,13 @@ fn smoke_test(
             && !g.pending
             && let Some(case) = &g.case
         {
-            net.inspect(g.generation, case.session_id.clone());
-            g.pending = true;
+            if let Some(id) = g.vehicle_id {
+                shift.send(border_net::ClientCommand::RequestSecondary { vehicle_id: id });
+                g.evidence_open = true;
+            } else {
+                net.inspect(g.generation, case.session_id.clone());
+                g.pending = true;
+            }
             smoke.step = 3;
         }
         if smoke.elapsed > 21. && smoke.step == 3 && !g.pending {
@@ -1192,7 +1218,7 @@ fn smoke_test(
         }
         if smoke.interview
             && (smoke.step < if smoke.lifecycle { 6 } else { 4 }
-                || !g.secondary
+                || (smoke.lifecycle && !g.secondary)
                 || !g.error.is_empty())
         {
             error!(
@@ -1275,6 +1301,7 @@ mod tests {
         patrol.phase = Phase::Interview;
         patrol.muted = true;
         patrol.case = Some(PublicCase {
+            declared_claims: vec![],
             session_id: "voice-session".into(),
             scenario_id: "01_mara".into(),
             name: "Mara".into(),
@@ -1312,5 +1339,34 @@ mod tests {
         assert_eq!(ray_box(Vec3::new(4., 0., 3.), Vec3::NEG_Z, min, max), None);
         assert!(ray_box(Vec3::new(0., 0., 6.), Vec3::NEG_Z, min, max).unwrap() > 3.);
         assert_eq!(ray_box(Vec3::new(0., 0., 3.), Vec3::Z, min, max), None);
+    }
+    #[test]
+    fn failed_turn_keeps_the_question_and_does_not_invent_dialogue() {
+        let (tx, rx) = mpsc::channel();
+        tx.send((
+            0,
+            NetEvent::TurnFailed {
+                message: "Provider rate limit; retry".into(),
+                question: "What is your name?".into(),
+            },
+        ))
+        .unwrap();
+        let network = Network {
+            base: String::new(),
+            token: String::new(),
+            tx,
+            rx: Arc::new(Mutex::new(rx)),
+        };
+        let mut patrol = Patrol::new(vec![], 42);
+        patrol.pending = true;
+        let mut app = App::new();
+        app.insert_resource(patrol)
+            .insert_resource(network)
+            .add_systems(Update, receive);
+        app.update();
+        let p = app.world().resource::<Patrol>();
+        assert_eq!(p.input, "What is your name?");
+        assert!(p.history.is_empty());
+        assert!(!p.pending);
     }
 }

@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. [Smooth movement, aiming, constrained skeletons, connected vehicle assemblies and physical glass](docs/PHYSICS.md) extend that prototype. Full multiplayer acceptance/hardening remains Part 15.
+**Build status:** Parts 1–10 implemented and integrated. [Parts 7–10 controls, contracts and validation](docs/PARTS_7_10.md) cover seeded characters, trusted dialogue, local voice, compartment searches and evidence-based disposition. Reference hardware frame-rate certification, physical audio playtests and Windows capture remain explicit later acceptance work. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. [Smooth movement, aiming, constrained skeletons, connected vehicle assemblies and physical glass](docs/PHYSICS.md) extend that prototype. Full multiplayer acceptance/hardening remains Part 15.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -129,15 +129,15 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Create the ten authored cases, case IDs, seeds, hidden truth and initial personality/knowledge data before the LLM sees them. Include a small generation proof of concept; defer the full content-library counts to Part 18.
 
-- [ ] Give the traveler authored hidden truth, a procedural personality and an initial story.
-- [ ] Deliver ten authored scenarios: **seven honest and three smuggling**, each with distinct personality and evidence.
-- [ ] Deliver a small procedural personality-combination proof of concept without requiring the full 100/20/200/500 library to ship the slice.
-- [ ] Generate a seedable traveler record before AI interaction.
-- [ ] Detect incompatible role/reason/cargo combinations.
-- [ ] Detect duplicate names within a session, contradictory documents and accidental leakage of hidden truth.
-- [ ] Use authored templates plus controlled variation rather than raw unrestricted LLM world generation.
-- [ ] Ten authored traveler scenarios, including honest, deceptive, rude, anxious and bribery-capable personalities.
-- [ ] Create `case_templates.json` with truthful and deceptive archetypes, canonical truth, evidence and contradiction rules.
+- [x] Give the traveler authored hidden truth, a procedural personality and an initial story.
+- [x] Deliver ten authored scenarios: **seven honest and three smuggling**, each with distinct personality and evidence.
+- [x] Deliver a small procedural personality-combination proof of concept without requiring the full 100/20/200/500 library to ship the slice.
+- [x] Generate a seedable traveler record before AI interaction.
+- [x] Detect incompatible role/reason/cargo combinations.
+- [x] Detect duplicate names within a session, contradictory documents and accidental leakage of hidden truth.
+- [x] Use authored templates plus controlled variation rather than raw unrestricted LLM world generation.
+- [x] Ten authored traveler scenarios, including honest, deceptive, rude, anxious and bribery-capable personalities.
+- [x] Create `case_templates.json` with truthful and deceptive archetypes, canonical truth, evidence and contradiction rules.
 
 **Exit gate:** All ten cases load and validate; legal status, evidence and compatibility are fixed before an interview begins.
 
@@ -147,28 +147,28 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Connect traveler-facing knowledge and real dialogue history to the hosted LLM through the trusted caller service. Keep material truth authoritative and test conversation intent before adding audio complexity.
 
-- [ ] Make entertaining improvised conversations a core pillar.
-- [ ] Treat the LLM as an improvisational actor, not the source of truth.
-- [ ] Have it directly address player questions, recognize jokes, sarcasm, insults, repetition and accusations, and vary its tone.
-- [ ] Allow emotional expression, refusal to answer, argument, deflection, bargaining, attempted bribery and requests for a supervisor.
-- [ ] Prevent invention of new decisive cargo, documents or destinations.
-- [ ] Do not force a confession when evidence is shown.
-- [ ] Track frustration, confidence, suspicion and cooperation as evolving state variables.
-- [ ] Permit innocuous conversational improvisation while keeping material claims coherent.
-- [ ] Detect and reject unwanted exact duplicate output, test semantic repetition, and avoid hard-coded catchphrases appearing every turn.
-- [ ] Use a trusted provider gateway to call an inexpensive hosted LLM, validate structured output and maintain dialogue history.
-- [ ] Protect shared API credentials on a trusted server rather than in game clients.
-- [ ] Give every traveler a distinct biography, a coherent purpose for crossing, documents and cargo consistent with hidden truth, a personality, and memory of the current interview.
-- [ ] Answer the officer's actual question instead of simply matching keywords or repeating a canned cargo line.
-- [ ] Recognize sarcasm, accusations, insults, absurd questions and attempts to provoke a reaction.
-- [ ] Let a repeatedly insulted traveler become angry, sarcastic, silent or evasive, or demand a supervisor.
-- [ ] Let a smuggler lie convincingly, make mistakes or deny evidence; never make confession mandatory.
-- [ ] Keep a rude or prejudiced honest traveler honest.
-- [ ] Keep material scenario facts authoritative and prevent model output from changing them.
-- [ ] Detect exact repetition and evaluate semantic repetition in testing.
-- [ ] Avoid forced-confession instructions, exhaustive factual dialogue lists and scripted fallback text disguised as generative AI.
-- [ ] Let the LLM improvise harmless personality and conversational details.
-- [ ] Use AI to enrich these interactions rather than substitute for them.
+- [x] Make entertaining improvised conversations a core pillar.
+- [x] Treat the LLM as an improvisational actor, not the source of truth.
+- [x] Have it directly address player questions, recognize jokes, sarcasm, insults, repetition and accusations, and vary its tone.
+- [x] Allow emotional expression, refusal to answer, argument, deflection, bargaining, attempted bribery and requests for a supervisor.
+- [x] Prevent invention of new decisive cargo, documents or destinations.
+- [x] Do not force a confession when evidence is shown.
+- [x] Track frustration, confidence, suspicion and cooperation as evolving state variables.
+- [x] Permit innocuous conversational improvisation while keeping material claims coherent.
+- [x] Detect and reject unwanted exact duplicate output, test semantic repetition, and avoid hard-coded catchphrases appearing every turn.
+- [x] Use a trusted provider gateway to call an inexpensive hosted LLM, validate structured output and maintain dialogue history.
+- [x] Protect shared API credentials on a trusted server rather than in game clients.
+- [x] Give every traveler a distinct biography, a coherent purpose for crossing, documents and cargo consistent with hidden truth, a personality, and memory of the current interview.
+- [x] Answer the officer's actual question instead of simply matching keywords or repeating a canned cargo line.
+- [x] Recognize sarcasm, accusations, insults, absurd questions and attempts to provoke a reaction.
+- [x] Let a repeatedly insulted traveler become angry, sarcastic, silent or evasive, or demand a supervisor.
+- [x] Let a smuggler lie convincingly, make mistakes or deny evidence; never make confession mandatory.
+- [x] Keep a rude or prejudiced honest traveler honest.
+- [x] Keep material scenario facts authoritative and prevent model output from changing them.
+- [x] Detect exact repetition and evaluate semantic repetition in testing.
+- [x] Avoid forced-confession instructions, exhaustive factual dialogue lists and scripted fallback text disguised as generative AI.
+- [x] Let the LLM improvise harmless personality and conversational details.
+- [x] Use AI to enrich these interactions rather than substitute for them.
 
 **Exit gate:** Typed interviews preserve facts and memory, support varied reactions and expose provider failures without inventing a successful conversation.
 
@@ -178,14 +178,14 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Add persistent local STT/TTS, microphone capture, playback, subtitles and typed fallback on each client. Preserve the current always-on interaction, 1.5-second silence endpoint and 20-second utterance limit. Validate against the six-core/16 GB/RTX 2060 reference budget.
 
-- [ ] Run local speech-to-text and text-to-speech on each player's PC.
-- [ ] Support subtitles and typed input.
-- [ ] Have client PCs handle local capture, STT, TTS and UI.
-- [ ] **M3:** AI conversations, emotion and memory, local STT/TTS and typed fallback.
-- [ ] Audio processing does not freeze rendering.
-- [ ] Microphone-driven AI dialogue, local STT and TTS, subtitles and typed-input fallback.
-- [ ] Have clients capture and synthesize their own audio and submit requests.
-- [ ] **M3 — AI conversations:** personality, memory, local STT/TTS, provider validation and latency controls.
+- [x] Run local speech-to-text and text-to-speech on each player's PC.
+- [x] Support subtitles and typed input.
+- [x] Have client PCs handle local capture, STT, TTS and UI.
+- [x] **M3:** AI conversations, emotion and memory, local STT/TTS and typed fallback.
+- [x] Audio processing does not freeze rendering.
+- [x] Microphone-driven AI dialogue, local STT and TTS, subtitles and typed-input fallback.
+- [x] Have clients capture and synthesize their own audio and submit requests.
+- [x] **M3 — AI conversations:** personality, memory, local STT/TTS, provider validation and latency controls.
 
 **Exit gate:** Each player can speak and hear their own interview without freezing rendering or mixing up another player’s audio.
 
@@ -195,23 +195,23 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Connect document/cargo locations and reveal rules to physical searches, contradictions and host-validated admit/deny/detain commands. Finish the vehicle-processing and evidence milestone gates here.
 
-- [ ] Make evidence-based decisions a core pillar.
-- [ ] Make tangible vehicle and cargo interactions a core pillar.
-- [ ] Let the officer ask questions, examine documents, search the vehicle and cargo, and optionally perform secondary inspection.
-- [ ] Offer admit, deny and detain decisions.
-- [ ] Have the host validate evidence, apply rewards or penalties, and move the car along the correct exit path.
-- [ ] Let players inspect documents and cargo manifests.
-- [ ] Let players inspect trunks, glove compartments, trailers and containers.
-- [ ] Make physical evidence matter more than forced AI admissions.
-- [ ] Give evidence an ID, location, reveal condition and contradiction links.
-- [ ] Have the server determine actual outcomes.
-- [ ] **M2:** vehicle queue, E interaction, inspection and disposition.
-- [ ] **M4:** evidence and contradictions, immutable truth and scoring.
-- [ ] Smugglers can be detected by evidence without confessing.
-- [ ] Document inspection, basic cargo search and secondary inspection.
-- [ ] Admit, deny and detain decisions validated by the host.
-- [ ] **M2 — Vehicle processing:** arrival, stopping, E interaction, inspection, decisions and departure.
-- [ ] **M4 — Evidence:** documents, cargo, contradictions and immutable truth.
+- [x] Make evidence-based decisions a core pillar.
+- [x] Make tangible vehicle and cargo interactions a core pillar.
+- [x] Let the officer ask questions, examine documents, search the vehicle and cargo, and optionally perform secondary inspection.
+- [x] Offer admit, deny and detain decisions.
+- [x] Have the host validate evidence, apply rewards or penalties, and move the car along the correct exit path.
+- [x] Let players inspect documents and cargo manifests.
+- [x] Let players inspect trunks, glove compartments, trailers and containers.
+- [x] Make physical evidence matter more than forced AI admissions.
+- [x] Give evidence an ID, location, reveal condition and contradiction links.
+- [x] Have the server determine actual outcomes.
+- [x] **M2:** vehicle queue, E interaction, inspection and disposition.
+- [x] **M4:** evidence and contradictions, immutable truth and scoring.
+- [x] Smugglers can be detected by evidence without confessing.
+- [x] Document inspection, basic cargo search and secondary inspection.
+- [x] Admit, deny and detain decisions validated by the host.
+- [x] **M2 — Vehicle processing:** arrival, stopping, E interaction, inspection, decisions and departure.
+- [x] **M4 — Evidence:** documents, cargo, contradictions and immutable truth.
 
 **Exit gate:** A player can discover a fair evidence path, commit one valid disposition and send the vehicle down the correct exit route.
 

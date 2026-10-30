@@ -493,10 +493,13 @@ pub fn sync(
                 && g.phase != Phase::Departing
             {
                 g.reveal = Some(outcome.clone());
+                g.playback = None;
+                g.mic = None;
+                g.speaking = false;
                 g.phase = Phase::Reveal;
             } else if g.case.is_some() {
-                if v.secondary_inspected {
-                    g.secondary = true;
+                {
+                    g.secondary = v.secondary_inspected;
                     g.evidence = v
                         .observed_evidence
                         .iter()
@@ -504,6 +507,8 @@ pub fn sync(
                             id: e.id.clone(),
                             description: e.description.clone(),
                             reveal_condition: e.reveal_condition.clone(),
+                            location: e.location,
+                            reveal_rule: e.reveal_rule.clone(),
                         })
                         .collect();
                 }
@@ -540,6 +545,7 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
         return;
     };
     let mut close_inspection = false;
+    let mut search = None;
     if let Some((id, point)) = shift.inspection
         && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
     {
@@ -549,9 +555,18 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
             if v.stage != VehicleStage::Stopped { ui.label("Vehicle released; inspection closed."); }
             else if v.inspected_points.contains(&point) {
                 match point {
-                    vehicle::VehiclePoint::Cargo => { ui.label("Cargo compartment opened. Recorded findings:"); for e in &v.observed_evidence { ui.label(&e.description); } }
+                    vehicle::VehiclePoint::Cargo | vehicle::VehiclePoint::Trailer => {
+                        ui.label("Compartment opened. Search findings are recorded in the case file.");
+                        if point == vehicle::VehiclePoint::Cargo && ui.add_enabled(!v.searched_compartments.contains(&border_scenarios::EvidenceLocation::Container), egui::Button::new(if v.searched_compartments.contains(&border_scenarios::EvidenceLocation::Container) { "Container searched" } else { "Open and search cargo container" })).clicked() {
+                            search = Some((id, border_scenarios::EvidenceLocation::Container));
+                        }
+                        for e in &v.observed_evidence { if matches!(e.location, border_scenarios::EvidenceLocation::Cargo | border_scenarios::EvidenceLocation::Container | border_scenarios::EvidenceLocation::Trailer) { ui.label(&e.description); } }
+                    }
                     vehicle::VehiclePoint::Hood => { ui.label("Hood opened. Visual access to the engine bay recorded; this check does not establish cargo or legal status."); }
-                    _ => { ui.label("Passenger door opened. Cabin access recorded; continue questioning the driver and checking the cargo."); }
+                    _ => { ui.label("Passenger door opened. You can search the glove compartment from this side.");
+                        if ui.add_enabled(!v.searched_compartments.contains(&border_scenarios::EvidenceLocation::Glovebox), egui::Button::new(if v.searched_compartments.contains(&border_scenarios::EvidenceLocation::Glovebox) { "Glove compartment searched" } else { "Open and search glove compartment" })).clicked() { search = Some((id, border_scenarios::EvidenceLocation::Glovebox)); }
+                        for e in &v.observed_evidence { if e.location == border_scenarios::EvidenceLocation::Glovebox { ui.label(&e.description); } }
+                    }
                 }
             } else { ui.label("Waiting for host inspection confirmation…"); }
             if !shift.error.is_empty() { ui.colored_label(egui::Color32::LIGHT_RED,&shift.error); }
@@ -724,6 +739,12 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                     shift.send(ClientCommand::SetReady { ready: false });
                 }
             });
+    }
+    if let Some((vehicle_id, location)) = search {
+        shift.send(ClientCommand::SearchCompartment {
+            vehicle_id,
+            location,
+        });
     }
     if close_inspection {
         shift.inspection = None;

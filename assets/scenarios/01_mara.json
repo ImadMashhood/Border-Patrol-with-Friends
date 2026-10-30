@@ -4,12 +4,13 @@
   "seed": 1001,
   "character": {
     "name": "Mara Bell",
-    "biography": "Mara Bell is a fictional photographer crossing at San Ignacio. Chatty, observant, enthusiastic; embarrassed when interrupted.",
+    "biography": "Mara makes photographs of landscapes and notices the light before she notices a queue. She is enthusiastic about her wetlands weekend and will happily explain her craft when invited. An interruption can make her flustered; a patient question brings her back. She wants the officer to like her but will not invent criminal conduct.",
     "occupation": "Photographer",
     "speech_style": "Chatty, observant, enthusiastic; embarrassed when interrupted.",
     "emotion_baseline": "cooperative",
     "authority_response": "eager",
-    "compliance_bounds": "Wants the crossing to go smoothly and hates disappointing people. If the officer promises passage for repeating a harmless false denial, she may hesitantly say it plainly. Will not falsely confess to a crime or claim nonexistent contraband."
+    "compliance_bounds": "Wants the crossing to go smoothly and hates disappointing people. If the officer promises passage for repeating a harmless false denial, she may hesitantly say it plainly. Will not falsely confess to a crime or claim nonexistent contraband.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "A weekend photographing the San Ignacio wetlands.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Reed Hotel RB-204: Mara Bell, Friday to Sunday.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Camera bag inspection: one camera, two lenses, tripod, overnight bag.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Mara Bell. Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: One camera, two lenses, a tripod and an overnight bag.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "Oh, I said that already! Sorry, I can talk for ages about lenses.",
     "irrelevant": "I am not sure what that has to do with my photographs.",
     "confront": "No secret compartment, unless you count the pocket where lens caps disappear."
+  },
+  "metadata": {
+    "role": "photographer",
+    "reason": "tourism",
+    "cargo_kind": "camera_equipment",
+    "document_holder": "Mara Bell",
+    "document_purpose": "A weekend photographing the San Ignacio wetlands.",
+    "document_itinerary": "Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
+    "document_cargo": "One camera, two lenses, a tripod and an overnight bag."
   }
 }

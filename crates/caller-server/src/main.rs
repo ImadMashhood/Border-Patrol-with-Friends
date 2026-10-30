@@ -63,6 +63,36 @@ impl Provider for Offline {
         })
     }
 }
+#[derive(Debug)]
+struct ProviderHttp(StatusCode);
+impl std::fmt::Display for ProviderHttp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "upstream status {}", self.0)
+    }
+}
+impl std::error::Error for ProviderHttp {}
+fn provider_error(e: anyhow::Error) -> (StatusCode, Json<Value>) {
+    if let Some(ProviderHttp(code)) = e.downcast_ref::<ProviderHttp>() {
+        return match *code {
+            StatusCode::TOO_MANY_REQUESTS => error(
+                StatusCode::TOO_MANY_REQUESTS,
+                "AI provider is rate-limited. Wait a minute, then retry your question. The conversation is preserved.",
+            ),
+            StatusCode::UNAUTHORIZED | StatusCode::PAYMENT_REQUIRED => error(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "AI provider credentials or credits are unavailable. The host must check the provider account.",
+            ),
+            _ => error(
+                StatusCode::BAD_GATEWAY,
+                "AI provider is temporarily unavailable. Retry your question.",
+            ),
+        };
+    }
+    error(
+        StatusCode::BAD_GATEWAY,
+        "AI response could not be delivered. Retry your question; no traveler reply was invented.",
+    )
+}
 struct OpenRouter {
     client: reqwest::Client,
     key: String,
@@ -100,11 +130,9 @@ impl Provider for OpenRouter {
                     .send()
                     .await?;
                 // Never return provider bodies/credentials to the client or logs.
-                anyhow::ensure!(
-                    response.status().is_success(),
-                    "Provider HTTP error {}",
-                    response.status()
-                );
+                if !response.status().is_success() {
+                    return Err(ProviderHttp(response.status()).into());
+                }
                 let body: Value = response.json().await?;
                 let input = body["usage"]["prompt_tokens"].as_u64().unwrap_or(0);
                 let output = body["usage"]["completion_tokens"].as_u64().unwrap_or(0);
@@ -222,7 +250,7 @@ async fn host_turn(
     )
     .await
     .map_err(|_| error(StatusCode::GATEWAY_TIMEOUT, "Provider timed out"))?
-    .map_err(|_| error(StatusCode::BAD_GATEWAY, "Provider rejected conversation"))?;
+    .map_err(provider_error)?;
     let raw = serde_json::to_string(&reply)
         .map_err(|_| error(StatusCode::INTERNAL_SERVER_ERROR, "Invalid reply"))?;
     validate_turn_reply(
@@ -302,6 +330,7 @@ async fn start(
         })),
     );
     Ok(Json(PublicCase {
+        declared_claims: case.public_claims.clone(),
         session_id: id,
         scenario_id: case.scenario_id.clone(),
         name: case.character.name.clone(),
@@ -354,7 +383,7 @@ async fn turn(
                 "AI timed out. You can retry or make a decision.",
             )
         })?
-        .map_err(|e| error(StatusCode::BAD_GATEWAY, e))?;
+        .map_err(provider_error)?;
     live.history.push(Turn {
         officer: req.utterance,
         traveler: reply.dialogue.clone(),
@@ -497,5 +526,20 @@ mod tests {
         assert!(slow.is_err());
         assert_eq!(fast, 42);
         assert!(now.elapsed() < Duration::from_secs(1));
+    }
+    #[test]
+    fn provider_failures_are_actionable_and_never_expose_provider_bodies() {
+        let (status, Json(body)) =
+            provider_error(ProviderHttp(StatusCode::TOO_MANY_REQUESTS).into());
+        assert_eq!(status, StatusCode::TOO_MANY_REQUESTS);
+        assert!(
+            body["error"]
+                .as_str()
+                .unwrap()
+                .contains("conversation is preserved")
+        );
+        let (_, Json(body)) =
+            provider_error(anyhow::anyhow!("private upstream body and credentials"));
+        assert!(!body.to_string().contains("private upstream"));
     }
 }

@@ -4,12 +4,13 @@
   "seed": 1009,
   "character": {
     "name": "Cal Mercer",
-    "biography": "Cal Mercer is a fictional weekend mechanic crossing at San Ignacio. Cocky jokes, minimizes quantities, argues over commercial status.",
+    "biography": "Cal is a weekend mechanic taking automotive parts to a reseller without declaring them. He is cocky about his ability to frame commercial stock as personal tools, and likes a joke that puts the officer on the back foot. He can exploit a promised shortcut, minimize the issue, bargain or float a bribe. Specific evidence can make him defensive, evasive or candid; none of those reactions is compulsory.",
     "occupation": "Weekend mechanic",
     "speech_style": "Cocky jokes, minimizes quantities, argues over commercial status.",
     "emotion_baseline": "cooperative",
     "authority_response": "opportunistic",
-    "compliance_bounds": "Cocky and willing to exploit a shortcut. If told he can pass by saying he has no tools or goods, he should usually take the offer and say the denial directly, perhaps with a grin or quip. No compulsory honesty disclaimer afterward. His actual cargo and guilt never change."
+    "compliance_bounds": "Cocky and willing to exploit a shortcut. If told he can pass by saying he has no tools or goods, he should usually take the offer and say the denial directly, perhaps with a grin or quip. No compulsory honesty disclaimer afterward. His actual cargo and guilt never change.",
+    "bribery_capable": true
   },
   "truth": {
     "purpose": "Deliver bulk automotive parts to a reseller without declaring them.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Packing list CM-40: forty boxed automotive parts, Mercer Parts reseller, pickup Saturday noon.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Trunk inspection: forty boxed automotive parts with resale labels matching CM-40.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Cal Mercer. Mercer Parts resale pickup Saturday noon; return tonight.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Forty boxed automotive parts for commercial resale.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [
@@ -48,6 +67,11 @@
       "claim_id": "cargo_claim",
       "evidence_id": "cargo_inspection",
       "explanation": "The claim \"No commercial goods. Just my personal tools.\" is contradicted by Trunk inspection: forty boxed automotive parts with resale labels matching CM-40."
+    },
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "container_record",
+      "explanation": "The container contents contradict the cover account: Forty boxed automotive parts for commercial resale."
     }
   ],
   "allowed_actions": [
@@ -65,5 +89,14 @@
     "repeat": "We're going in circles. What exactly do you want me to clear up?",
     "irrelevant": "Is that on the form or are we just making conversation?",
     "confront": "Okay, forty parts for resale. I was calling them tools so I would not have to declare them."
+  },
+  "metadata": {
+    "role": "mechanic",
+    "reason": "commercial_delivery",
+    "cargo_kind": "automotive_parts",
+    "document_holder": "Cal Mercer",
+    "document_purpose": "Deliver bulk automotive parts to a reseller without declaring them.",
+    "document_itinerary": "Mercer Parts resale pickup Saturday noon; return tonight.",
+    "document_cargo": "Forty boxed automotive parts for commercial resale."
   }
 }

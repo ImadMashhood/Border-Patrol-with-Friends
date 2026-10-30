@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "templates": [
+    {
+      "scenario_id": "01_mara",
+      "role": "photographer",
+      "allowed_reasons": [
+        "tourism"
+      ],
+      "allowed_cargo": [
+        "camera_equipment"
+      ],
+      "smuggling": false,
+      "occupation": "Photographer"
+    },
+    {
+      "scenario_id": "02_nadia",
+      "role": "nurse",
+      "allowed_reasons": [
+        "family_visit"
+      ],
+      "allowed_cargo": [
+        "personal_gifts"
+      ],
+      "smuggling": false,
+      "occupation": "Nurse"
+    },
+    {
+      "scenario_id": "03_victor",
+      "role": "antiques_dealer",
+      "allowed_reasons": [
+        "commercial_delivery"
+      ],
+      "allowed_cargo": [
+        "antiques"
+      ],
+      "smuggling": true,
+      "occupation": "Antiques dealer"
+    },
+    {
+      "scenario_id": "04_evelyn",
+      "role": "retired_librarian",
+      "allowed_reasons": [
+        "family_visit"
+      ],
+      "allowed_cargo": [
+        "gifts"
+      ],
+      "smuggling": false,
+      "occupation": "Retired librarian"
+    },
+    {
+      "scenario_id": "05_leo",
+      "role": "musician",
+      "allowed_reasons": [
+        "unpaid_performance"
+      ],
+      "allowed_cargo": [
+        "musical_equipment"
+      ],
+      "smuggling": false,
+      "occupation": "Amateur musician"
+    },
+    {
+      "scenario_id": "06_dorian",
+      "role": "delivery_contractor",
+      "allowed_reasons": [
+        "commercial_delivery"
+      ],
+      "allowed_cargo": [
+        "electronics"
+      ],
+      "smuggling": true,
+      "occupation": "Delivery contractor"
+    },
+    {
+      "scenario_id": "07_amir",
+      "role": "student",
+      "allowed_reasons": [
+        "study"
+      ],
+      "allowed_cargo": [
+        "personal_luggage"
+      ],
+      "smuggling": false,
+      "occupation": "Student"
+    },
+    {
+      "scenario_id": "08_rosa",
+      "role": "dog_trainer",
+      "allowed_reasons": [
+        "recreation"
+      ],
+      "allowed_cargo": [
+        "pet_supplies"
+      ],
+      "smuggling": false,
+      "occupation": "Dog trainer"
+    },
+    {
+      "scenario_id": "09_cal",
+      "role": "mechanic",
+      "allowed_reasons": [
+        "commercial_delivery"
+      ],
+      "allowed_cargo": [
+        "automotive_parts"
+      ],
+      "smuggling": true,
+      "occupation": "Weekend mechanic"
+    },
+    {
+      "scenario_id": "10_priya",
+      "role": "food_blogger",
+      "allowed_reasons": [
+        "work"
+      ],
+      "allowed_cargo": [
+        "food_review_equipment"
+      ],
+      "smuggling": false,
+      "occupation": "Food blogger"
+    }
+  ],
+  "mannerisms": [
+    "measured pauses",
+    "quick replies",
+    "dry humor",
+    "careful wording"
+  ],
+  "interests": [
+    "family routines",
+    "local food",
+    "music",
+    "roadside scenery",
+    "weekend hobbies"
+  ],
+  "stress_responses": [
+    "asks for clarification",
+    "gets terse",
+    "seeks reassurance",
+    "pushes back politely"
+  ]
+}

@@ -143,7 +143,16 @@ def main():
         reply = request('/turn', {'session_id': '1', 'utterance': 'What is your name?'}, peers[1]['peer_token'])
         assert reply['action'] == 'none'
         assert len(snapshot(0)['vehicles'][0]['history']) == len(snapshot(1)['vehicles'][0]['history']) == 1
-        request('/inspect', {'session_id': '1'}, peers[1]['peer_token'])
+        request('/inspect', {'session_id': '1'}, peers[1]['peer_token'], expected=400)
+        command(1, {'type':'request_secondary','vehicle_id':1})
+        command(1, {'type':'inspect_evidence','vehicle_id':1,'evidence_id':'cargo_inspection'}, expected=400)
+        for waypoint in [(-1.6,2.95),(0.,2.95)]: move_to(1,waypoint)
+        request('/inspect', {'session_id':'1'}, peers[1]['peer_token'])
+        command(1, {'type':'search_compartment','vehicle_id':1,'location':'container'})
+        findings=snapshot()['vehicles'][0]
+        assert findings['secondary_requested'] and 'container' in findings['searched_compartments']
+        assert {e['location'] for e in findings['observed_evidence']} == {'documents','cargo','container'}
+        for waypoint in [(-1.6,2.95),(-1.6,0.)]: move_to(1,waypoint)
         request('/decide', {'session_id': '1', 'decision': 'admit'}, peers[1]['peer_token'])
         request('/decide', {'session_id': '1', 'decision': 'admit'}, peers[1]['peer_token'])
         assert len(snapshot()['ledger']) == 1
@@ -153,12 +162,20 @@ def main():
             move_to(1,waypoint)
         request('/start', {'session_id':'2'}, peers[1]['peer_token'])
         command(1, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'}, expected=400)
+        for waypoint in [(5.4,-4.5),(8.62,-4.5),(8.62,-1.2)]: move_to(1,waypoint)
+        command(1, {'type':'search_compartment','vehicle_id':2,'location':'glovebox'}, expected=400)
+        command(1, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'passenger'})
+        command(1, {'type':'search_compartment','vehicle_id':2,'location':'glovebox'})
+        glove=snapshot()['vehicles'][1]
+        assert 'glovebox' in glove['searched_compartments'] and not glove['secondary_inspected']
+        assert {e['location'] for e in glove['observed_evidence']} == {'documents','glovebox'}
+        for waypoint in [(8.62,-4.5),(5.4,-4.5),(5.4,-1.2)]: move_to(1,waypoint)
         for waypoint in [(5.4,3.95),(7.,3.95)]:
             move_to(1,waypoint)
         command(0, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'}, expected=400)
         command(1, {'type':'inspect_vehicle_point','vehicle_id':2,'point':'cargo'})
         truck=snapshot()['vehicles'][1]
-        assert truck['secondary_inspected'] and truck['inspected_points']==['cargo'] and truck['observed_evidence']
+        assert truck['secondary_inspected'] and set(truck['inspected_points'])=={'passenger','cargo'} and truck['observed_evidence']
         for waypoint in [(5.4,3.95),(5.4,-1.2)]:
             move_to(1,waypoint)
         request('/decide', {'session_id':'2','decision':'deny'}, peers[1]['peer_token'])

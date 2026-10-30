@@ -13,6 +13,10 @@ pub struct Character {
     pub authority_response: AuthorityResponse,
     #[serde(default)]
     pub compliance_bounds: String,
+    #[serde(default)]
+    pub variation: PersonalityVariation,
+    #[serde(default)]
+    pub bribery_capable: bool,
 }
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -47,6 +51,10 @@ pub enum RevealCondition {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Evidence {
+    #[serde(default)]
+    pub location: EvidenceLocation,
+    #[serde(default)]
+    pub reveal_rule: String,
     pub id: String,
     pub description: String,
     pub reveal_condition: RevealCondition,
@@ -73,6 +81,12 @@ pub struct ResolutionRules {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Scenario {
+    #[serde(default)]
+    pub observation_scope: bool,
+    #[serde(default)]
+    pub metadata: Option<CaseMetadata>,
+    #[serde(default)]
+    pub record_seed: u64,
     pub schema_version: u32,
     pub scenario_id: String,
     pub seed: u64,
@@ -86,7 +100,86 @@ pub struct Scenario {
     pub resolution_rules: ResolutionRules,
     pub actor: Actor,
 }
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PersonalityVariation {
+    pub mannerism: String,
+    pub interest: String,
+    pub stress_response: String,
+}
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq, Hash)]
+#[serde(rename_all = "snake_case")]
+pub enum EvidenceLocation {
+    #[default]
+    Documents,
+    Glovebox,
+    Cargo,
+    Container,
+    Trailer,
+}
+impl EvidenceLocation {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Documents => "Presented documents",
+            Self::Glovebox => "Glove compartment",
+            Self::Cargo => "Trunk / pickup bed",
+            Self::Container => "Cargo container",
+            Self::Trailer => "Utility trailer",
+        }
+    }
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CaseMetadata {
+    pub role: String,
+    pub reason: String,
+    pub cargo_kind: String,
+    pub document_holder: String,
+    pub document_purpose: String,
+    pub document_itinerary: String,
+    pub document_cargo: String,
+}
+#[derive(Deserialize)]
+struct Templates {
+    version: u32,
+    templates: Vec<Archetype>,
+    mannerisms: Vec<String>,
+    interests: Vec<String>,
+    stress_responses: Vec<String>,
+}
+#[derive(Deserialize)]
+struct Archetype {
+    occupation: String,
+    scenario_id: String,
+    role: String,
+    allowed_reasons: Vec<String>,
+    allowed_cargo: Vec<String>,
+    smuggling: bool,
+}
+fn templates() -> Templates {
+    serde_json::from_str(include_str!("../../../assets/case_templates.json"))
+        .expect("bundled authored templates")
+}
 impl Scenario {
+    pub fn with_observations(&self, ids: &[String]) -> Self {
+        let mut actor_case = self.clone();
+        actor_case.observation_scope = true;
+        actor_case.evidence.retain(|e| ids.contains(&e.id));
+        actor_case
+            .contradictions
+            .retain(|c| ids.contains(&c.evidence_id));
+        actor_case
+    }
+    pub fn instantiate(&self, seed: u64) -> Self {
+        let t = templates();
+        let mut case = self.clone();
+        case.record_seed = seed ^ self.seed.rotate_left(17);
+        let order = seeded_order(64, case.record_seed);
+        case.character.variation = PersonalityVariation {
+            mannerism: t.mannerisms[order[0] % t.mannerisms.len()].clone(),
+            interest: t.interests[order[1] % t.interests.len()].clone(),
+            stress_response: t.stress_responses[order[2] % t.stress_responses.len()].clone(),
+        };
+        case
+    }
     pub fn validate(&self) -> Result<()> {
         ensure!(self.schema_version == 1, "Unsupported scenario schema");
         for value in [
@@ -108,6 +201,35 @@ impl Scenario {
             ensure!(!value.trim().is_empty(), "Empty required scenario field");
         }
         ensure!(!self.truth.documents.is_empty(), "Missing documents");
+        let t = templates();
+        ensure!(t.version == 1, "Unsupported archetype version");
+        let m = self
+            .metadata
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("Missing canonical case metadata"))?;
+        let archetype = t
+            .templates
+            .iter()
+            .find(|a| a.scenario_id == self.scenario_id)
+            .ok_or_else(|| anyhow::anyhow!("Unknown authored archetype"))?;
+        ensure!(
+            self.character.occupation == archetype.occupation
+                && m.role == archetype.role
+                && archetype.allowed_reasons.contains(&m.reason)
+                && archetype.allowed_cargo.contains(&m.cargo_kind),
+            "Incompatible role/reason/cargo combination"
+        );
+        ensure!(
+            self.truth.smuggling == archetype.smuggling,
+            "Legal status conflicts with authored archetype"
+        );
+        ensure!(
+            m.document_holder == self.character.name
+                && m.document_purpose == self.truth.purpose
+                && m.document_itinerary == self.truth.itinerary
+                && m.document_cargo == self.truth.cargo,
+            "Documents contradict canonical identity, purpose, itinerary or cargo"
+        );
         ensure!(
             matches!(
                 self.character.emotion_baseline.as_str(),
@@ -138,6 +260,20 @@ impl Scenario {
             );
         }
         for e in &self.evidence {
+            ensure!(
+                (e.location == EvidenceLocation::Documents)
+                    == (e.reveal_condition == RevealCondition::Documents),
+                "Evidence location/reveal mismatch"
+            );
+            ensure!(
+                e.reveal_rule
+                    == if e.location == EvidenceLocation::Documents {
+                        "presented_at_driver"
+                    } else {
+                        "physical_search"
+                    },
+                "Invalid evidence reveal rule"
+            );
             ensure!(
                 !e.id.is_empty() && !e.description.is_empty() && ids.insert(&e.id),
                 "Duplicate/empty evidence ID"
@@ -175,7 +311,11 @@ impl Scenario {
     pub fn visible_evidence(&self, secondary: bool) -> Vec<Evidence> {
         self.evidence
             .iter()
-            .filter(|e| secondary || e.reveal_condition == RevealCondition::Documents)
+            .filter(|e| {
+                self.observation_scope
+                    || secondary
+                    || e.reveal_condition == RevealCondition::Documents
+            })
             .cloned()
             .collect()
     }
@@ -188,7 +328,7 @@ impl Scenario {
     pub fn resolve(&self, decision: Decision, secondary: bool) -> Reveal {
         let correct = match decision {
             Decision::Admit => !self.truth.smuggling,
-            Decision::Deny => self.truth.smuggling,
+            Decision::Deny | Decision::Detain => self.truth.smuggling,
         };
         Reveal {
             name: self.character.name.clone(),
@@ -219,6 +359,7 @@ impl Scenario {
 pub enum Decision {
     Admit,
     Deny,
+    Detain,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Reveal {
@@ -251,8 +392,17 @@ pub fn validate_pack(pack: &[Scenario]) -> Result<()> {
     );
     let mut ids = HashSet::new();
     let mut seeds = HashSet::new();
+    let mut names = HashSet::new();
     for s in pack {
+        ensure!(
+            !s.observation_scope,
+            "Authored pack cannot pre-disclose evidence"
+        );
         s.validate()?;
+        ensure!(
+            names.insert(s.character.name.trim().to_lowercase()),
+            "Duplicate traveler name"
+        );
         if !ids.insert(&s.scenario_id) || !seeds.insert(s.seed) {
             bail!("Duplicate scenario ID/seed");
         }
@@ -317,5 +467,46 @@ mod tests {
         let mut p = pack();
         p[0].evidence[1].id = p[0].evidence[0].id.clone();
         assert!(validate_pack(&p).is_err());
+    }
+    #[test]
+    fn seeded_variation_changes_personality_but_never_truth_or_evidence() {
+        let p = pack();
+        let truth = serde_json::to_value(&p[0].truth).unwrap();
+        let evidence = serde_json::to_value(&p[0].evidence).unwrap();
+        let mut variations = HashSet::new();
+        for seed in 1..100 {
+            let c = p[0].instantiate(seed);
+            c.validate().unwrap();
+            assert_eq!(serde_json::to_value(&c.truth).unwrap(), truth);
+            assert_eq!(serde_json::to_value(&c.evidence).unwrap(), evidence);
+            assert_eq!(
+                c.character.variation,
+                p[0].instantiate(seed).character.variation
+            );
+            variations.insert(serde_json::to_string(&c.character.variation).unwrap());
+        }
+        assert!(variations.len() >= 20);
+    }
+    #[test]
+    fn incompatible_combinations_documents_and_duplicate_names_are_rejected() {
+        let p = pack();
+        let mut bad = p[0].clone();
+        bad.metadata.as_mut().unwrap().reason = "commercial_delivery".into();
+        assert!(bad.validate().is_err());
+        let mut bad = p[0].clone();
+        bad.metadata.as_mut().unwrap().document_cargo = "Invented goods".into();
+        assert!(bad.validate().is_err());
+        let mut bad = p.clone();
+        bad[1].character.name = bad[0].character.name.clone();
+        bad[1].metadata.as_mut().unwrap().document_holder = bad[0].character.name.clone();
+        assert!(
+            validate_pack(&bad)
+                .unwrap_err()
+                .to_string()
+                .contains("Duplicate traveler name")
+        );
+        let mut bad = p[0].clone();
+        bad.evidence[1].location = EvidenceLocation::Documents;
+        assert!(bad.validate().is_err());
     }
 }

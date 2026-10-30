@@ -13,11 +13,19 @@ pub enum VehiclePoint {
     Passenger,
     Hood,
     Cargo,
+    Trailer,
 }
 impl VehiclePoint {
-    pub const ALL: [Self; 4] = [Self::Driver, Self::Passenger, Self::Hood, Self::Cargo];
+    pub const ALL: [Self; 5] = [
+        Self::Driver,
+        Self::Passenger,
+        Self::Hood,
+        Self::Cargo,
+        Self::Trailer,
+    ];
     pub fn label(self, kind: &str) -> &'static str {
         match self {
+            Self::Trailer => "Utility trailer · inspect",
             Self::Driver => "Driver window · talk",
             Self::Passenger => "Passenger door · inspect",
             Self::Hood => "Hood · inspect",
@@ -53,10 +61,17 @@ pub fn rear_glass_z(kind: &str) -> f32 {
         _ => 1.16,
     }
 }
+pub fn body_half_length(kind: &str) -> f32 {
+    if kind == "utility_truck" {
+        3.3
+    } else {
+        spec(kind).half_length
+    }
+}
 pub fn spec(kind: &str) -> VehicleSpec {
     let (kind, w, l, h, z) = match kind {
         "truck" => ("truck", 1.17, 3.3, 2.35, -1.2),
-        "utility_truck" => ("utility_truck", 1.17, 3.3, 2.55, -1.2),
+        "utility_truck" => ("utility_truck", 1.17, 5.5, 2.55, -1.2),
         "suv" => ("suv", 1.14, 2.55, 2.15, -0.25),
         "van" => ("van", 1.14, 2.9, 2.55, -0.25),
         "hatchback" => ("hatchback", 1.02, 2.1, 1.85, -0.25),
@@ -99,8 +114,9 @@ impl VehicleSpec {
                 1.5 + cab_lift(self.kind),
                 self.window_z,
             ],
-            VehiclePoint::Hood => [0., 1.2, -self.half_length - 0.6],
-            VehiclePoint::Cargo => [0., 1.3, self.half_length + 0.65],
+            VehiclePoint::Trailer => [0., 1.2, 6.05],
+            VehiclePoint::Hood => [0., 1.2, -body_half_length(self.kind) - 0.6],
+            VehiclePoint::Cargo => [0., 1.3, body_half_length(self.kind) + 0.65],
         }
     }
     pub fn world_point(self, position: [f32; 3], yaw: f32, point: VehiclePoint) -> [f32; 3] {
@@ -119,7 +135,7 @@ impl VehicleSpec {
             VehiclePoint::Driver => p[0] += 0.55,
             VehiclePoint::Passenger => p[0] -= 0.55,
             VehiclePoint::Hood => p[2] += 0.65,
-            VehiclePoint::Cargo => p[2] -= 0.65,
+            VehiclePoint::Cargo | VehiclePoint::Trailer => p[2] -= 0.65,
         }
         let (sin, cos) = yaw.sin_cos();
         [
@@ -179,7 +195,8 @@ pub fn door_layout(kind: &str) -> DoorLayout {
 /// Connected shell pieces: roof, pillars, rockers, engine bay and quarter panels.
 /// Centers and half extents are used unchanged by rendering and physical collision.
 pub fn assembly_boxes(kind: &str) -> Vec<([f32; 3], [f32; 3])> {
-    let s = spec(kind);
+    let mut s = spec(kind);
+    s.half_length = body_half_length(kind);
     let d = door_layout(kind);
     let front = s.window_z - if pickup(kind) { 0.85 } else { 0.65 };
     let rear = rear_glass_z(kind);
@@ -230,6 +247,16 @@ pub fn assembly_boxes(kind: &str) -> Vec<([f32; 3], [f32; 3])> {
         [0., (bottom + hood) * 0.5, -s.half_length],
         [s.half_width, (hood - bottom) * 0.5, 0.055],
     ));
+    if kind == "utility_truck" {
+        boxes.push(([0., 0.62, 3.5], [0.10, 0.08, 0.65]));
+        boxes.push(([0., 0.72, 4.5], [0.9, 0.10, 0.95]));
+        for x in [-0.9, 0.9] {
+            boxes.push(([x, 0.95, 4.5], [0.045, 0.25, 0.95]));
+        }
+        for z in [3.55, 5.45] {
+            boxes.push(([0., 0.95, z], [0.9, 0.25, 0.045]));
+        }
+    }
     boxes
 }
 
@@ -243,7 +270,7 @@ mod assembly_tests {
             let mut pieces = assembly_boxes(kind);
             pieces.push((
                 [0., if pickup(kind) { 0.65 } else { 0.5 }, 0.],
-                [s.half_width, 0.16, s.half_length],
+                [s.half_width, 0.16, body_half_length(kind)],
             ));
             let mut connected = vec![false; pieces.len()];
             *connected.last_mut().unwrap() = true;

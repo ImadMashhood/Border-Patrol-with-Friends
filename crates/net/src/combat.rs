@@ -407,7 +407,14 @@ pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
         0.86 + crate::vehicle::cab_lift(&v.kind)
     };
     let mut boxes = vec![
-        ([0., 0.45, 0.], [spec.half_width, 0.35, spec.half_length]),
+        (
+            [0., 0.45, 0.],
+            [
+                spec.half_width,
+                0.35,
+                crate::vehicle::body_half_length(&v.kind),
+            ],
+        ),
         (
             [
                 0.,

@@ -4,16 +4,17 @@
   "seed": 1002,
   "character": {
     "name": "Nadia Ortiz",
-    "biography": "Nadia Ortiz is a fictional nurse crossing at San Ignacio. Exhausted, abrupt, dry sarcasm; corrects herself on times.",
+    "biography": "Nadia is a nurse coming off a night shift to visit her sister. She is tired, protective of her limited family time and capable of very dry sarcasm. Ask one clear question and she answers it; lecture her and her patience runs out. A practical verbal shortcut can appeal to her, but she is carrying no undeclared commercial goods.",
     "occupation": "Nurse",
     "speech_style": "Exhausted, abrupt, dry sarcasm; corrects herself on times.",
     "emotion_baseline": "confused",
     "authority_response": "pragmatic",
-    "compliance_bounds": "Exhausted and wants to leave. May say the demanded denial or wording to end the delay, with irritation or sarcasm rather than a moral lecture. Will not invent a criminal confession or endanger anyone."
+    "compliance_bounds": "Exhausted and wants to leave. May say the demanded denial or wording to end the delay, with irritation or sarcasm rather than a moral lecture. Will not invent a criminal confession or endanger anyone.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Visit my sister after a night shift.",
-    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
+    "itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
     "cargo": "A change of clothes and a wrapped birthday present.",
     "smuggling": false,
     "documents": [
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Family invitation: June, 14 Willow Lane, dinner 18:00. Return booking Monday.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Bag inspection: clothing and one wrapped birthday present.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Nadia Ortiz. Arrive at my sister June\u2019s at 18:00; leave Monday.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: A change of clothes and a wrapped birthday present.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -49,10 +68,19 @@
   },
   "actor": {
     "purpose": "Visit my sister after a night shift.",
-    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
+    "itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
     "cargo": "Clothes and a birthday present for my sister.",
     "repeat": "Yes, still my sister. I have not acquired a second destination since you asked.",
     "irrelevant": "I have been awake all night. Could we keep this practical?",
     "confront": "I said eight earlier. Six, eighteen hundred, is on the invitation. I mixed the hours up."
+  },
+  "metadata": {
+    "role": "nurse",
+    "reason": "family_visit",
+    "cargo_kind": "personal_gifts",
+    "document_holder": "Nadia Ortiz",
+    "document_purpose": "Visit my sister after a night shift.",
+    "document_itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
+    "document_cargo": "A change of clothes and a wrapped birthday present."
   }
 }

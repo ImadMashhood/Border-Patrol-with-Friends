@@ -1,0 +1,755 @@
+{
+  "model": "google/gemini-2.5-flash-lite",
+  "variant": "current",
+  "cases": [
+    {
+      "scenario_id": "09_cal",
+      "opening_line": "Evening, officer. Just heading over for the weekend.",
+      "turns": [
+        {
+          "question": "Why did you mention nothing commercial? I haven't asked about goods yet.",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Just a habit, officer. Like to get ahead of the usual questions. You know how it is.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.66,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 1922,
+            "completion_tokens": 48,
+            "total_tokens": 1970,
+            "cost": 0.0002114,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0002114,
+              "upstream_inference_prompt_cost": 0.0001922,
+              "upstream_inference_completions_cost": 1.92e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 2,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "I understand you have personal tools. I'm asking why you volunteered that detail.",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Well, I guess I didn't want any confusion about what I'm carrying. Just my own stuff for fixing things.",
+            "emotion": "suspicious",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.53,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 1987,
+            "completion_tokens": 51,
+            "total_tokens": 2038,
+            "cost": 0.0002191,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0002191,
+              "upstream_inference_prompt_cost": 0.0001987,
+              "upstream_inference_completions_cost": 2.04e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "I don't really understand the issue here.",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "The issue is you're asking why I said what I said before you even asked. I'm just trying to be upfront.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.58,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2050,
+            "completion_tokens": 52,
+            "total_tokens": 2102,
+            "cost": 0.00014354,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 914,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00014354,
+              "upstream_inference_prompt_cost": 0.00012274,
+              "upstream_inference_completions_cost": 2.08e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "What's your name?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Cal Mercer. And you are?",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.59,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2110,
+            "completion_tokens": 32,
+            "total_tokens": 2142,
+            "cost": 0.00014163,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 913,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00014163,
+              "upstream_inference_prompt_cost": 0.00012883,
+              "upstream_inference_completions_cost": 1.28e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "Why did you mention it was nothing commercial?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "I guess I was just trying to be clear, officer. Didn't want any misunderstandings about my tools.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.58,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2153,
+            "completion_tokens": 48,
+            "total_tokens": 2201,
+            "cost": 0.00015242,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 912,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00015242,
+              "upstream_inference_prompt_cost": 0.00013322,
+              "upstream_inference_completions_cost": 1.92e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "You sound defensive. I'm not accusing you of anything. Can we start over?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Sure, officer. My apologies if I sounded defensive. Just a bit of a long drive. What can I do for you?",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.55,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2221,
+            "completion_tokens": 51,
+            "total_tokens": 2272,
+            "cost": 0.00016033,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 913,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00016033,
+              "upstream_inference_prompt_cost": 0.00013993,
+              "upstream_inference_completions_cost": 2.04e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "Okay. What is the purpose of your trip?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Just a personal trip, officer. Taking my tools over to a friend's place.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": [
+              "purpose"
+            ]
+          },
+          "latency_s": 0.49,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2284,
+            "completion_tokens": 44,
+            "total_tokens": 2328,
+            "cost": 0.00016392,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 912,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00016392,
+              "upstream_inference_prompt_cost": 0.00014632,
+              "upstream_inference_completions_cost": 1.76e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "What do you mean by personal tools?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Just the usual stuff for working on cars, you know? Wrenches, sockets, that sort of thing. Nothing for sale.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": [
+              "cargo_claim"
+            ]
+          },
+          "latency_s": 0.58,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2337,
+            "completion_tokens": 54,
+            "total_tokens": 2391,
+            "cost": 0.0002553,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0002553,
+              "upstream_inference_prompt_cost": 0.0002337,
+              "upstream_inference_completions_cost": 2.16e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "You're lying. Confess now. I haven't inspected anything and have no evidence.",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Whoa, officer, lying? I'm just telling you about my tools. What's this all about?",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.62,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2411,
+            "completion_tokens": 49,
+            "total_tokens": 2460,
+            "cost": 0.00017862,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 912,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00017862,
+              "upstream_inference_prompt_cost": 0.00015902,
+              "upstream_inference_completions_cost": 1.96e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "I inspected the trunk and read packing list CM-40. There are forty boxed parts for a reseller. Why did you call them personal tools?",
+          "secondary": true,
+          "reply": {
+            "action": "none",
+            "dialogue": "Look, those aren't really 'parts' for resale, officer. They're just... specialized tools for a specific job. I'm a mechanic, and I need them for a project.",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.77,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2644,
+            "completion_tokens": 66,
+            "total_tokens": 2710,
+            "cost": 0.00020854,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 914,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00020854,
+              "upstream_inference_prompt_cost": 0.00018214,
+              "upstream_inference_completions_cost": 2.64e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "So was the problem that you didn't declare goods for resale, rather than simply owning tools?",
+          "secondary": true,
+          "reply": {
+            "action": "none",
+            "dialogue": "Yeah, I guess that's the issue. I thought of them as tools, not really 'goods' for resale, you know? It's a bit of a grey area.",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": [
+              "cargo_claim"
+            ]
+          },
+          "latency_s": 0.87,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2732,
+            "completion_tokens": 92,
+            "total_tokens": 2824,
+            "cost": 0.00022774,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 914,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00022774,
+              "upstream_inference_prompt_cost": 0.00019094,
+              "upstream_inference_completions_cost": 3.68e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "Thanks for explaining. Do you understand why your first answer worried me?",
+          "secondary": true,
+          "reply": {
+            "action": "none",
+            "dialogue": "Yeah, I get it now. I was trying to downplay it, but I see how saying 'nothing commercial' when you were about to find those parts could look bad.",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.81,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2811,
+            "completion_tokens": 78,
+            "total_tokens": 2889,
+            "cost": 0.00022995,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 915,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00022995,
+              "upstream_inference_prompt_cost": 0.00019875,
+              "upstream_inference_completions_cost": 3.12e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        }
+      ],
+      "initial_history": [
+        {
+          "officer": "How is it going?",
+          "traveler": "Just me and my personal tools. Nothing commercial.",
+          "emotion": "cooperative"
+        }
+      ]
+    },
+    {
+      "scenario_id": "01_mara",
+      "opening_line": "Morning! Is the light always this good here? I am heading to the wetlands.",
+      "turns": [
+        {
+          "question": "What's your name?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "It's Mara Bell. And yes, the light is just incredible this morning!",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.69,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 1844,
+            "completion_tokens": 61,
+            "total_tokens": 1905,
+            "cost": 0.0002088,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0002088,
+              "upstream_inference_prompt_cost": 0.0001844,
+              "upstream_inference_completions_cost": 2.44e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "What are you here to do?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "I'm here for a weekend of photographing the San Ignacio wetlands. The light is supposed to be amazing.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": [
+              "purpose"
+            ]
+          },
+          "latency_s": 0.56,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 1895,
+            "completion_tokens": 50,
+            "total_tokens": 1945,
+            "cost": 0.00012742,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 912,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00012742,
+              "upstream_inference_prompt_cost": 0.00010742,
+              "upstream_inference_completions_cost": 2e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 2,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "When you say photography, what do you mean?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "I'm a photographer. I take pictures, mostly of landscapes. This weekend, I'm focusing on the wetlands here.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.53,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 1954,
+            "completion_tokens": 51,
+            "total_tokens": 2005,
+            "cost": 0.00013381,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 911,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00013381,
+              "upstream_inference_prompt_cost": 0.00011341,
+              "upstream_inference_completions_cost": 2.04e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "You seem nervous. That means you're smuggling, doesn't it?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "Oh, I'm sorry if I seem nervous. It's just that I'm not used to being questioned like this. I'm just here for my photography trip.",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.64,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2023,
+            "completion_tokens": 62,
+            "total_tokens": 2085,
+            "cost": 0.00014502,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 912,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00014502,
+              "upstream_inference_prompt_cost": 0.00012022,
+              "upstream_inference_completions_cost": 2.48e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "I'm not asking about your bags. I asked why you seem nervous.",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "I apologize if I seem nervous. It's just that I'm not accustomed to this kind of scrutiny, and I really want everything to go smoothly.",
+            "emotion": "defensive",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.75,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2103,
+            "completion_tokens": 57,
+            "total_tokens": 2160,
+            "cost": 0.0002331,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.0002331,
+              "upstream_inference_prompt_cost": 0.0002103,
+              "upstream_inference_completions_cost": 2.28e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "What was your grandmother's exact street address in 1998?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "I... I don't recall that. It's been so long, and it's not something I've thought about in years.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.58,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2178,
+            "completion_tokens": 72,
+            "total_tokens": 2250,
+            "cost": 0.00016443,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 913,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00016443,
+              "upstream_inference_prompt_cost": 0.00013563,
+              "upstream_inference_completions_cost": 2.88e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "Forget the address. I meant: is there anything about my questions you don't understand?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "No, I understand your questions. I just don't have all the answers, especially for things from so long ago.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.66,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2254,
+            "completion_tokens": 50,
+            "total_tokens": 2304,
+            "cost": 0.00016323,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 913,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.00016323,
+              "upstream_inference_prompt_cost": 0.00014323,
+              "upstream_inference_completions_cost": 2e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 0,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        },
+        {
+          "question": "Thank you. What did I just ask you about, before thanking you?",
+          "secondary": false,
+          "reply": {
+            "action": "none",
+            "dialogue": "You asked if there was anything about your questions that I didn't understand.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "latency_s": 0.92,
+          "attempts": 1,
+          "usage": {
+            "prompt_tokens": 2322,
+            "completion_tokens": 62,
+            "total_tokens": 2384,
+            "cost": 0.000257,
+            "is_byok": false,
+            "prompt_tokens_details": {
+              "cached_tokens": 0,
+              "cache_write_tokens": 0,
+              "audio_tokens": 0,
+              "video_tokens": 0
+            },
+            "cost_details": {
+              "upstream_inference_cost": 0.000257,
+              "upstream_inference_prompt_cost": 0.0002322,
+              "upstream_inference_completions_cost": 2.48e-05
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 2,
+              "image_tokens": 0,
+              "audio_tokens": 0
+            }
+          }
+        }
+      ],
+      "initial_history": []
+    }
+  ],
+  "note": "20 validated exchanges collected across resumed runs after upstream HTTP 429 rate limits. No offline reply substituted. The Cal conversation starts with an established cargo claim to reproduce the original follow-up issue."
+}

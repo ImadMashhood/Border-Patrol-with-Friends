@@ -1,0 +1,62 @@
+{
+  "date": "2026-10-30",
+  "rust_tests_passed": 72,
+  "rust_tests_ignored": 1,
+  "clippy": "passed",
+  "host_http_regression": "passed",
+  "two_graphical_clients": "physical cargo and separate container searches passed",
+  "speech_http_boundary": "2 tests passed",
+  "gpu_speech_adapters": {
+    "stt": "large-v3-turbo",
+    "tts": "hexgrad/Kokoro-82M",
+    "twenty_second_input": "passed",
+    "voice_previews": 2,
+    "speech_process_mib": 1954
+  },
+  "live_intent": {
+    "model": "google/gemini-2.5-flash-lite",
+    "valid_replies": 20,
+    "planned_questions": 20,
+    "median_success_latency_s": 0.605,
+    "upstream_429_encountered": true,
+    "resumed_with_ordered_history": true,
+    "offline_substitution": false,
+    "semantic_review": "Explains volunteered wording; distinguishes honest uncertainty from deception; responds to name and clarification; refuses unsupported confession; supports minimization under evidence; recalls preceding question. This is a sampled review, not a semantic guarantee."
+  },
+  "reference_runtime": {
+    "reference": {
+      "cpu_physical_cores": 6,
+      "system_ram_gib": 16,
+      "gpu": "NVIDIA GeForce RTX 2060",
+      "gpu_vram_gib": 6,
+      "render_resolution": [
+        1920,
+        1080
+      ],
+      "render_target_fps": 60,
+      "speech_vram_budget_mib": 3072,
+      "speech_cpu_threads": 4,
+      "stt_model": "large-v3-turbo",
+      "stt_compute_type": "int8_float16",
+      "stt_beam_size": 3,
+      "tts_model": "hexgrad/Kokoro-82M",
+      "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600."
+    },
+    "samples": 127,
+    "baseline_device_mib": 1397,
+    "whole_device_peak_mib": 4000,
+    "incremental_device_peak_mib": 2603,
+    "combined_process_peak_rss_mib": 2790.6,
+    "note": "Measured on RTX 3080, not an RTX 2060 certification or a 60 FPS measurement.",
+    "actual_capture_resolution": [
+      1920,
+      1080
+    ]
+  },
+  "limitations": [
+    "RTX 2060 FPS not certified",
+    "Generated speech regression does not certify physical microphone/speaker hardware",
+    "Linux microphone capture; Windows typed fallback only",
+    "Full arrest/custody/escort, procedural content library and production hardening remain later Parts"
+  ]
+}

@@ -309,7 +309,7 @@ impl PhysicalWorld {
                 [
                     border_net::vehicle::spec(&v.kind).half_width,
                     0.07,
-                    border_net::vehicle::spec(&v.kind).half_length,
+                    border_net::vehicle::body_half_length(&v.kind),
                 ],
             );
             boxes.extend([

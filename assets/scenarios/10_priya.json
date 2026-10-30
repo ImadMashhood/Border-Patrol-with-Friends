@@ -4,12 +4,13 @@
   "seed": 1010,
   "character": {
     "name": "Priya Das",
-    "biography": "Priya Das is a fictional food blogger crossing at San Ignacio. Witty, curious; turns absurd questions back on the officer.",
+    "biography": "Priya writes about food and is making a trip to review three restaurants. She is curious, witty and quick to turn an absurd question into a question of her own. She dislikes being treated as foolish and can become cutting while remaining honest about the declared snack packets. She will stand by a truthful account rather than accept a demanded false denial.",
     "occupation": "Food blogger",
     "speech_style": "Witty, curious; turns absurd questions back on the officer.",
     "emotion_baseline": "cooperative",
     "authority_response": "principled",
-    "compliance_bounds": "Witty and willing to cooperate with reasonable requests, but resists falsifying factual declarations. May ask why the officer wants a lie; does not automatically obey a denial just to get admitted. Banter is allowed without inventing criminal guilt."
+    "compliance_bounds": "Witty and willing to cooperate with reasonable requests, but resists falsifying factual declarations. May ask why the officer wants a lie; does not automatically obey a denial just to get admitted. Banter is allowed without inventing criminal guilt.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Review three restaurants for my food blog.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Three restaurant bookings match itinerary; declaration lists two sealed snack packets.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Bag inspection: phone, notebook and two sealed snacks matching declaration.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Priya Das. Table bookings Saturday noon, Saturday 19:00 and Sunday 12:00; return Sunday.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: A phone, notebook and two declared sealed snack packets.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "Same three bookings. I could rank them for you while we wait.",
     "irrelevant": "Would you like to be quoted asking me that in the review?",
     "confront": "The snacks are sealed and declared. My only undeclared item is a strong opinion about soup."
+  },
+  "metadata": {
+    "role": "food_blogger",
+    "reason": "work",
+    "cargo_kind": "food_review_equipment",
+    "document_holder": "Priya Das",
+    "document_purpose": "Review three restaurants for my food blog.",
+    "document_itinerary": "Table bookings Saturday noon, Saturday 19:00 and Sunday 12:00; return Sunday.",
+    "document_cargo": "A phone, notebook and two declared sealed snack packets."
   }
 }

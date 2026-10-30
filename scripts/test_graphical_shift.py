@@ -93,6 +93,8 @@ def main():
                 head = next(v for v in world['vehicles'] if v['vehicle_id']==i)
                 assert head['kind'] == ('sedan' if i==1 else 'truck')
                 assert 'cargo' in head['inspected_points'], (i,head)
+                assert 'container' in head['searched_compartments'], (i,head)
+                assert any(e['location']=='container' for e in head['observed_evidence'])
                 assert (output / f'cargo-peer-{i}.png').exists()
             print('PASS: physical sedan trunk and truck tailgate inspections from both real clients')
         print('PASS: two real graphical clients; shared office; timed ready door; host-owned live countdown; shared players/vehicles; ' + ('projectile combat and vehicle destruction' if combat else 'interview plus inspection'))

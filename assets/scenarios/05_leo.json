@@ -4,12 +4,13 @@
   "seed": 1005,
   "character": {
     "name": "Leo Singh",
-    "biography": "Leo Singh is a fictional amateur musician crossing at San Ignacio. Dramatic, playful, banters; irritated by delays.",
+    "biography": "Leo is an amateur musician on the way to an unpaid gig with friends. He treats awkward silence as an invitation to improvise and enjoys a quick exchange of jokes. Delay can turn theatrical charm into theatrical irritation. A silly demanded phrase may amuse him; pretending he committed a crime does not.",
     "occupation": "Amateur musician",
     "speech_style": "Dramatic, playful, banters; irritated by delays.",
     "emotion_baseline": "cooperative",
     "authority_response": "playful",
-    "compliance_bounds": "Happy to humor the officer or repeat an absurd denial as a joke if it gets him to the gig. Can say the requested words without immediately retracting them. Draws the line at cruelty, real harm, and fabricated criminal admissions."
+    "compliance_bounds": "Happy to humor the officer or repeat an absurd denial as a joke if it gets him to the gig. Can say the requested words without immediately retracting them. Draws the line at cruelty, real harm, and fabricated criminal admissions.",
+    "bribery_capable": false
   },
   "truth": {
     "purpose": "Play an unpaid gig with friends at the Lantern venue.",
@@ -30,12 +31,30 @@
     {
       "id": "document",
       "description": "Lantern confirmation: Leo Singh, unpaid guest set, Saturday 16:00 soundcheck.",
-      "reveal_condition": "documents"
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Equipment inspection: one guitar, one small amplifier, stage clothing.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Leo Singh. Lantern soundcheck Saturday 16:00; return that night.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: A guitar, small amplifier and a stage outfit.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [],
@@ -54,5 +73,14 @@
     "repeat": "Same gig, same guitar. We are doing the chorus again, apparently.",
     "irrelevant": "I could turn that into a lyric. Not a good lyric.",
     "confront": "The amp is mine. If I were selling it, I would have cleaned it first."
+  },
+  "metadata": {
+    "role": "musician",
+    "reason": "unpaid_performance",
+    "cargo_kind": "musical_equipment",
+    "document_holder": "Leo Singh",
+    "document_purpose": "Play an unpaid gig with friends at the Lantern venue.",
+    "document_itinerary": "Lantern soundcheck Saturday 16:00; return that night.",
+    "document_cargo": "A guitar, small amplifier and a stage outfit."
   }
 }

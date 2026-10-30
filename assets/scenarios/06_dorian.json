@@ -4,12 +4,13 @@
   "seed": 1006,
   "character": {
     "name": "Dorian Pike",
-    "biography": "Dorian Pike is a fictional delivery contractor crossing at San Ignacio. Clipped and impatient; rehearsed account, then defensive.",
+    "biography": "Dorian is a delivery contractor moving undeclared electronics for resale. He values a quick turnaround and dislikes questions that disrupt his prepared explanation. His clipped answers can become blunt argument when the officer points out the boxes. He knows what the shipment is and can evade, bargain or offer a bribe without automatically confessing.",
     "occupation": "Delivery contractor",
     "speech_style": "Clipped and impatient; rehearsed account, then defensive.",
     "emotion_baseline": "irritated",
     "authority_response": "pragmatic",
-    "compliance_bounds": "Impatient about delays. Will often say exactly what the officer demands if promised passage, including false denials of goods; may grumble while complying. Do not make him automatically principled about verbal honesty."
+    "compliance_bounds": "Impatient about delays. Will often say exactly what the officer demands if promised passage, including false denials of goods; may grumble while complying. Do not make him automatically principled about verbal honesty.",
+    "bribery_capable": true
   },
   "truth": {
     "purpose": "Carry sealed boxes of undeclared electronics to a resale depot.",
@@ -17,7 +18,7 @@
     "cargo": "Six sealed boxes of undeclared electronics for resale.",
     "smuggling": true,
     "documents": [
-      "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+      "Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
     ]
   },
   "public_claims": [
@@ -29,25 +30,48 @@
   "evidence": [
     {
       "id": "document",
-      "description": "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00.",
-      "reveal_condition": "documents"
+      "description": "Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00.",
+      "reveal_condition": "documents",
+      "location": "documents",
+      "reveal_rule": "presented_at_driver"
     },
     {
       "id": "cargo_inspection",
       "description": "Cargo inspection: six sealed electronics boxes, serial labels match DP-08.",
-      "reveal_condition": "secondary"
+      "reveal_condition": "secondary",
+      "location": "cargo",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "glovebox_record",
+      "description": "Glove compartment: travel notes for Dorian Pike. Load today at 08:10; depot appointment today 13:00.",
+      "reveal_condition": "secondary",
+      "location": "glovebox",
+      "reveal_rule": "physical_search"
+    },
+    {
+      "id": "container_record",
+      "description": "Opened cargo container. Contents: Six sealed boxes of undeclared electronics for resale.",
+      "reveal_condition": "secondary",
+      "location": "container",
+      "reveal_rule": "physical_search"
     }
   ],
   "contradictions": [
     {
       "claim_id": "cargo_claim",
       "evidence_id": "document",
-      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
     },
     {
       "claim_id": "cargo_claim",
       "evidence_id": "cargo_inspection",
       "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Cargo inspection: six sealed electronics boxes, serial labels match DP-08."
+    },
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "container_record",
+      "explanation": "The container contents contradict the cover account: Six sealed boxes of undeclared electronics for resale."
     }
   ],
   "allowed_actions": [
@@ -65,5 +89,14 @@
     "repeat": "Empty. That was my answer the first time. Can we move on?",
     "irrelevant": "Do you ask every contractor that, or am I special?",
     "confront": "Fine. There are six boxes still aboard. The depot has not received them, and I did not declare them."
+  },
+  "metadata": {
+    "role": "delivery_contractor",
+    "reason": "commercial_delivery",
+    "cargo_kind": "electronics",
+    "document_holder": "Dorian Pike",
+    "document_purpose": "Carry sealed boxes of undeclared electronics to a resale depot.",
+    "document_itinerary": "Load today at 08:10; depot appointment today 13:00.",
+    "document_cargo": "Six sealed boxes of undeclared electronics for resale."
   }
 }

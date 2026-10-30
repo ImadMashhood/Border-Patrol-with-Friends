@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 5;
+pub const PROTOCOL_VERSION: u16 = 6;
 pub const READY_HOLD_MS: u64 = 2000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod combat;
@@ -100,6 +100,13 @@ pub enum ClientCommand {
         vehicle_id: u64,
         point: vehicle::VehiclePoint,
     },
+    RequestSecondary {
+        vehicle_id: u64,
+    },
+    SearchCompartment {
+        vehicle_id: u64,
+        location: border_scenarios::EvidenceLocation,
+    },
     InspectEvidence {
         vehicle_id: u64,
         evidence_id: String,
@@ -184,6 +191,9 @@ pub struct LaneView {
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceView {
+    pub location: border_scenarios::EvidenceLocation,
+    pub reveal_rule: String,
+    pub contradicts: Vec<String>,
     pub id: String,
     pub description: String,
     pub reveal_condition: border_scenarios::RevealCondition,
@@ -205,6 +215,8 @@ pub struct VehicleView {
     pub history: Vec<border_caller::Turn>,
     pub outcome: Option<border_scenarios::Reveal>,
     pub secondary_inspected: bool,
+    pub secondary_requested: bool,
+    pub searched_compartments: Vec<border_scenarios::EvidenceLocation>,
     pub inspected_points: Vec<vehicle::VehiclePoint>,
     pub physics: combat::VehiclePhysics,
 }

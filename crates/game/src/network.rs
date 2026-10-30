@@ -13,6 +13,7 @@ pub enum NetEvent {
     Evidence(Vec<Evidence>),
     Decision(Reveal),
     Error(String),
+    TurnFailed { message: String, question: String },
     Microphone(border_speech::VoiceEvent),
     SpeechFinished(Option<String>),
 }
@@ -23,6 +24,7 @@ impl Network {
         path: &str,
         body: T,
         map: impl FnOnce(R) -> NetEvent + Send + 'static,
+        retry_question: Option<String>,
     ) {
         let url = format!("{}{path}", self.base);
         let token = self.token.clone();
@@ -47,7 +49,13 @@ impl Network {
             })();
             let event = match result {
                 Ok(v) => map(v),
-                Err(e) => NetEvent::Error(e),
+                Err(message) => {
+                    if let Some(question) = retry_question {
+                        NetEvent::TurnFailed { message, question }
+                    } else {
+                        NetEvent::Error(message)
+                    }
+                }
             };
             let _ = tx.send((generation, event));
         });
@@ -58,10 +66,12 @@ impl Network {
             "/start",
             border_caller::SessionRequest { session_id: id },
             NetEvent::Started,
+            None,
         );
     }
     pub fn turn(&self, g: u64, id: String, q: String) {
         let question = q.clone();
+        let retry_question = Some(q.clone());
         self.request(
             g,
             "/turn",
@@ -70,6 +80,7 @@ impl Network {
                 utterance: q,
             },
             move |r| NetEvent::Reply(question, r),
+            retry_question,
         );
     }
     pub fn inspect(&self, g: u64, id: String) {
@@ -78,6 +89,7 @@ impl Network {
             "/inspect",
             border_caller::SessionRequest { session_id: id },
             NetEvent::Evidence,
+            None,
         );
     }
     pub fn decide(&self, g: u64, id: String, d: border_scenarios::Decision) {
@@ -89,6 +101,7 @@ impl Network {
                 decision: d,
             },
             |r: border_caller::DecisionResponse| NetEvent::Decision(r.reveal),
+            None,
         );
     }
     pub fn microphone(
@@ -103,13 +116,21 @@ impl Network {
         })
         .map_err(|e| e.to_string())
     }
-    pub fn speak(&self, g: u64, text: String, scenario_id: String) {
+    pub fn speak(
+        &self,
+        g: u64,
+        text: String,
+        scenario_id: String,
+    ) -> border_speech::SpeechPlayback {
+        let handle = border_speech::SpeechPlayback::default();
+        let cancel = handle.token();
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let error = border_speech::speak(&text, &scenario_id)
+            let error = border_speech::speak_cancellable(&text, &scenario_id, &cancel)
                 .err()
                 .map(|e| e.to_string());
             let _ = tx.send((g, NetEvent::SpeechFinished(error)));
         });
+        handle
     }
 }

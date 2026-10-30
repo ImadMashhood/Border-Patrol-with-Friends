@@ -4,7 +4,10 @@ use std::{
     io::Write,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
-    sync::atomic::{AtomicU64, Ordering},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 mod open_mic;
@@ -146,19 +149,65 @@ pub fn synthesize_to_file(text: &str, path: &Path, alternate: bool) -> Result<()
     );
     Ok(())
 }
-/// Runs on a worker thread. Microphone stays paused until synthesis and playback finish.
+/// Dropping a case's playback handle silences stale audio without blocking rendering.
+pub struct SpeechPlayback {
+    cancel: Arc<AtomicBool>,
+}
+impl Default for SpeechPlayback {
+    fn default() -> Self {
+        Self {
+            cancel: Arc::new(AtomicBool::new(false)),
+        }
+    }
+}
+impl SpeechPlayback {
+    pub fn token(&self) -> Arc<AtomicBool> {
+        self.cancel.clone()
+    }
+}
+impl Drop for SpeechPlayback {
+    fn drop(&mut self) {
+        self.cancel.store(true, Ordering::Relaxed);
+    }
+}
 pub fn speak(text: &str, scenario_id: &str) -> Result<()> {
+    speak_cancellable(text, scenario_id, &AtomicBool::new(false))
+}
+/// Synthesis and playback run off the render thread. Cancellation suppresses audio
+/// even if a model inference already in progress cannot be interrupted.
+pub fn speak_cancellable(text: &str, scenario_id: &str, cancel: &AtomicBool) -> Result<()> {
+    if cancel.load(Ordering::Relaxed) {
+        return Ok(());
+    }
     let path = temp("speech", "wav");
     let result = (|| {
         synthesize_to_file(text, &path, alternate_voice(scenario_id))?;
-        let player = Command::new("ffplay")
+        if cancel.load(Ordering::Relaxed) {
+            return Ok(());
+        }
+        let mut player = Command::new("ffplay")
             .args(["-nodisp", "-autoexit", "-loglevel", "quiet"])
             .arg(&path)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()
             .context("Neural voice playback needs ffplay")?;
-        wait_success(player, Duration::from_secs(40))
+        let start = Instant::now();
+        loop {
+            if cancel.load(Ordering::Relaxed) || start.elapsed() > Duration::from_secs(40) {
+                let _ = player.kill();
+                let _ = player.wait();
+                if cancel.load(Ordering::Relaxed) {
+                    return Ok(());
+                }
+                bail!("Voice playback timed out");
+            }
+            if let Some(status) = player.try_wait()? {
+                ensure!(status.success(), "Voice playback failed");
+                return Ok(());
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
     })();
     let _ = std::fs::remove_file(path);
     result
@@ -170,5 +219,21 @@ mod tests {
     #[test]
     fn temporary_paths_are_unique() {
         assert_ne!(temp("test", "wav"), temp("test", "wav"));
+    }
+    #[test]
+    fn leaving_one_case_cancels_its_audio_without_touching_another_client() {
+        let a = SpeechPlayback::default();
+        let token_a = a.token();
+        let b = SpeechPlayback::default();
+        let token_b = b.token();
+        drop(a);
+        assert!(token_a.load(Ordering::Relaxed));
+        assert!(!token_b.load(Ordering::Relaxed));
+        speak_cancellable(
+            "This cancelled case must not launch models or playback",
+            "09_cal",
+            &token_a,
+        )
+        .unwrap();
     }
 }

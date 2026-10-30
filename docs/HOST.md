@@ -45,11 +45,11 @@ The public snapshot contains officers/loadouts/positions, readiness, door state,
 
 ## Interview bridge
 
-The host's peer-facing `/start`, `/turn`, `/inspect` and `/decide` routes use the existing caller DTOs; the session string identifies a host vehicle. The host checks physical driver range and lane ownership/assistance. The game requests a real vehicle, rather than choosing a scenario or supplying an outcome. Both officers see the same transcript and evidence.
+The host's peer-facing `/start`, `/turn`, `/inspect` and `/decide` routes use the existing caller DTOs; the session string identifies a host vehicle. Protocol 6 checks physical driver range for interviews/decisions and cargo range for `/inspect`, plus lane ownership/assistance. `search_compartment` validates its own physical location and opening conditions. `request_secondary` only marks a search request. The game requests a real vehicle, rather than choosing a scenario or supplying an outcome. Both officers see the same transcript and evidence.
 
 For a turn, the host calls the local provider gateway's `/host-turn`. The gateway retrieves private `/actor-context` using its service credential, constructs the ordered prompt/history, validates the response and forwards `/actor`. The host validates it again against its case epoch and turn index. The only AI action currently allowed is `none`; a model cannot open barriers, change truth, purchase or award money. One request per traveler may be pending, and histories are limited to 128 turns. Cancelled requests clean up their pending guard. Old responses cannot cross shift resets.
 
-The trusted `/operator` route remains available for debugging damage, incidents and purchases. Model output and peer tokens cannot invoke it. Prototype settlement constants remain +100 correct admit, +200 correct deny, +250 correct detain, −400 admitting a smuggler and −150 wrong deny/detain; final balancing/review is Part 12–14. The debug document-scanner proposal costs 300 and requires operator approval.
+The trusted `/operator` route remains available for debugging damage, incidents and purchases. Model output and peer tokens cannot invoke it. Prototype settlement constants remain +100 correct admit, +200 supported correct deny (zero for an unsupported guess), +250 evidence-supported correct detain, −400 admitting a smuggler and −150 wrong deny/detain; final balancing/review is Part 12–14. The debug document-scanner proposal costs 300 and requires operator approval.
 
 ## Crates and map
 
@@ -78,3 +78,5 @@ Part 6 adds physical `inspect_vehicle_point` commands, shared inspected-panel st
 Protocol 4 adds authoritative pistol/projectile state, door/window commands, physical traveler exit/return, damage and disabled-vehicle recovery. See [combat and vehicle mechanics](COMBAT.md).
 
 Protocol 5 adds the six vehicle kinds, `pull_body`, per-bone ragdoll transforms and bounded physical shard snapshots. Rapier runs on the host at fixed 60 Hz. Readiness requires two seconds; graphical movement predicts with shared collision rules and reconciles against 20 Hz host snapshots. See [physics details](PHYSICS.md).
+
+Protocol 6 adds compartment observations, locations, reveal rules, contradiction links, secondary requests and a distinct detain outcome. See [Parts 7–10](PARTS_7_10.md). Old clients must rebuild with their host.

@@ -203,7 +203,7 @@ pub fn draw(
                 if ui.button("Apply settings / retry microphone").clicked() {
                     g.mic = None; g.mic_failed = false; g.mic_error.clear(); g.speech_pending = false;
                 }
-                ui.label(egui::RichText::new("Speak normally. A short pause sends your question automatically. Listening pauses while the traveler speaks. Use headphones to reduce echo.").size(11.).color(MUTED));
+                ui.label(egui::RichText::new("Speak normally. A 1.5-second pause sends your question; 20 seconds forces submission. Listening pauses while the traveler speaks. Use headphones to reduce echo.").size(11.).color(MUTED));
             }
             ui.add_space(8.);ui.separator();
             let transcript_height=(ui.available_height()-360.).clamp(80., 250.);
@@ -239,13 +239,17 @@ pub fn draw(
             ui.add_space(7.);ui.separator();ui.add_space(7.);
             ui.add_enabled_ui(!g.pending && !g.speaking && !g.speech_pending && g.case.is_some(),|ui| {
                 if ui.button("View documents").clicked(){g.evidence_open=true;}
-                if ui.button(if g.secondary{"Secondary inspection completed"}else{"Request secondary inspection"}).clicked(){g.pending=true;g.error.clear();net.inspect(g.generation,g.case.as_ref().unwrap().session_id.clone());}
+                if ui.button(if g.secondary{"Review search findings"}else{"Request secondary inspection"}).clicked(){
+                    if let Some(id) = g.vehicle_id { shift.send(border_net::ClientCommand::RequestSecondary{vehicle_id:id}); g.overlay=false;g.looking=true; }
+                    else {g.pending=true;g.error.clear();net.inspect(g.generation,g.case.as_ref().unwrap().session_id.clone());}
+                }
                 ui.add_space(8.);
                 ui.horizontal(|ui| {
                     if ui.add_sized([180.,34.],egui::Button::new("ADMIT").fill(egui::Color32::from_rgb(41,91,68))).clicked(){decide(&mut g,&net,border_scenarios::Decision::Admit);}
                     if ui.add_sized([180.,34.],egui::Button::new("DENY").fill(egui::Color32::from_rgb(116,57,43))).clicked(){decide(&mut g,&net,border_scenarios::Decision::Deny);}
                 });
             });
+            if ui.add_enabled(!g.pending && !g.speaking, egui::Button::new("DETAIN — REQUIRES RECORDED EVIDENCE")).clicked() { decide(&mut g,&net,border_scenarios::Decision::Detain); }
             ui.add_space(8.);tag(ui,"FINAL DECISIONS CANNOT BE REVERSED");
         });
     }
@@ -253,8 +257,11 @@ pub fn draw(
         let mut open = true;
         egui::Window::new("EVIDENCE FILE").open(&mut open).default_width(470.).default_pos([45.,150.]).show(ctx,|ui| {
             tag(ui,if g.secondary{"DOCUMENTS & PHYSICAL CARGO"}else{"DOCUMENTS — CARGO NOT YET INSPECTED"});ui.add_space(10.);
-            for e in &g.evidence {ui.label(egui::RichText::new(e.id.replace('_'," ").to_uppercase()).color(GOLD).strong());ui.label(&e.description);ui.add_space(14.);}
-            if !g.secondary {ui.label("Request secondary inspection to compare physical cargo with the traveler's claims.");}
+            if let Some(case) = &g.case { tag(ui,"RECORDED DECLARATION"); for claim in &case.declared_claims { ui.label(&claim.text); } ui.separator(); }
+            for e in &g.evidence {ui.label(egui::RichText::new(e.id.replace('_'," ").to_uppercase()).color(GOLD).strong());ui.label(e.location.label());ui.label(&e.description);
+                if let Some(id)=g.vehicle_id && let Some(v)=shift.world.as_ref().and_then(|w|w.vehicles.iter().find(|v|v.vehicle_id==id)) && let Some(observed)=v.observed_evidence.iter().find(|o|o.id==e.id) && !observed.contradicts.is_empty() { let statements:Vec<_>=observed.contradicts.iter().filter_map(|id|g.case.as_ref()?.declared_claims.iter().find(|c|c.id==*id)).map(|c|c.text.as_str()).collect(); ui.colored_label(GOLD,format!("Conflicts with declaration: {}",statements.join("; "))); }
+                ui.add_space(14.);}
+            if !g.secondary {ui.label("Walk to the passenger door or rear cargo area and press E to inspect. Open the glove compartment or cargo container there; return to the driver to continue questioning or decide.");}
         });
         g.evidence_open = open;
     }
@@ -281,7 +288,7 @@ pub fn draw(
                     tag(ui,"FACTUAL ACCOUNT");ui.label(&r.truth.purpose);ui.label(&r.truth.itinerary);ui.label(&r.truth.cargo);ui.add_space(12.);
                     tag(ui,"KEY EVIDENCE");if r.clues.is_empty(){ui.label("Documents and physical cargo support the traveler's account. Anxiety, humor and fatigue were not evidence of smuggling.");}
                     for clue in &r.clues {ui.label(clue);ui.add_space(8.);}
-                    if !r.missed_clues.is_empty(){tag(ui,"MISSED PHYSICAL CHECK");for clue in &r.missed_clues{ui.label(clue);}}
+                    if !r.missed_clues.is_empty(){tag(ui,"MISSED CHECKS");for clue in &r.missed_clues{ui.label(clue);}}
                 });
             }
             ui.add_space(12.);if primary(ui,"CLOSE FILE & CALL NEXT CAR"){if let Some(id)=g.vehicle_id{shift.send(border_net::ClientCommand::ReleaseVehicle{vehicle_id:id});}g.phase=Phase::Departing;g.overlay=false;g.looking=true;}
