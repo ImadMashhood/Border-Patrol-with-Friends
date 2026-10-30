@@ -103,10 +103,12 @@ impl Network {
         })
         .map_err(|e| e.to_string())
     }
-    pub fn speak(&self, g: u64, text: String) {
+    pub fn speak(&self, g: u64, text: String, scenario_id: String) {
         let tx = self.tx.clone();
         std::thread::spawn(move || {
-            let error = border_speech::speak(&text).err().map(|e| e.to_string());
+            let error = border_speech::speak(&text, &scenario_id)
+                .err()
+                .map(|e| e.to_string());
             let _ = tx.send((g, NetEvent::SpeechFinished(error)));
         });
     }

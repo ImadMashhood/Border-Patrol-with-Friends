@@ -51,7 +51,7 @@
   "allowed_actions": [
     "none"
   ],
-  "opening_line": "How is it going? Just me and my personal tools. Nothing commercial.",
+  "opening_line": "Evening, officer. Just heading over for the weekend.",
   "resolution_rules": {
     "admit_if": "no_undeclared_commercial_goods",
     "deny_if": "undeclared_commercial_goods"
@@ -60,7 +60,7 @@
     "purpose": "Just a personal trip with my tools.",
     "itinerary": "Back tonight. Just a weekend trip.",
     "cargo": "No commercial goods. Just my personal tools.",
-    "repeat": "Personal tools. Want me to say it in a different gear?",
+    "repeat": "We're going in circles. What exactly do you want me to clear up?",
     "irrelevant": "Is that on the form or are we just making conversation?",
     "confront": "Okay, forty parts for resale. I was calling them tools so I would not have to declare them."
   }

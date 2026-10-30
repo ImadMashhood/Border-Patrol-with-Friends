@@ -8,3 +8,6 @@
 *.bin
 
 /.tools/
+
+__pycache__/
+*.pyc

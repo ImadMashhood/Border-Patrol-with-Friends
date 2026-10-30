@@ -13,6 +13,9 @@ export BORDER_SERVER_ADDR="127.0.0.1:${BORDER_PORT:-3847}"
 export BORDER_SERVER_URL="http://$BORDER_SERVER_ADDR"
 if [[ -x .tools/whisper/build/bin/whisper-cli ]]; then export WHISPER_BIN="$PWD/.tools/whisper/build/bin/whisper-cli"; fi
 if [[ -f .tools/whisper/models/ggml-tiny.en.bin ]]; then export WHISPER_MODEL="$PWD/.tools/whisper/models/ggml-tiny.en.bin"; fi
+if [[ -x .tools/voice-env/bin/piper ]]; then export PIPER_BIN="${PIPER_BIN:-$PWD/.tools/voice-env/bin/piper}"; fi
+if [[ -f .tools/voices/en_US-ryan-medium.onnx ]]; then export PIPER_MODEL="${PIPER_MODEL:-$PWD/.tools/voices/en_US-ryan-medium.onnx}"; fi
+if [[ -f .tools/voices/en_US-lessac-medium.onnx ]]; then export PIPER_MODEL_ALTERNATE="${PIPER_MODEL_ALTERNATE:-$PWD/.tools/voices/en_US-lessac-medium.onnx}"; fi
 cargo build --locked -p border-caller-server -p border-game
 mkdir -p output
 ./target/debug/border-caller-server >output/caller-server.log 2>&1 &

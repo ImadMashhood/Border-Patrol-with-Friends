@@ -18,7 +18,7 @@ Truth is immutable. Smugglers have false public claims contradicted by specific,
 
 CarPresent → PlayerNearCar → ConversationActive → DecisionPending (secondary evidence) → DecisionCommitted → Reveal → NextCar. E opens/resumes only when the camera ray intersects the car within 3m. Esc releases focus; mouse capture can be toggled while interviewing. Decisions require an active session, no pending reply, and are committed once. The barrier/car animate before the next case. One shift uses all ten cases exactly once in a seeded order.
 
-JSON actor output: dialogue (1–1000 chars), emotion enum, action `none`, known and disclosed fact_ids, end_conversation=false. Prompts carry scenario knowledge, visible evidence, prior turns and the current utterance. One repair attempt is permitted; errors are shown, never converted into outcomes. Server keeps at most 30 exchanges, 40 turn attempts per case, 1024 output tokens per request. A process-wide attempt cap includes failed/repair requests. Logs report latency and token usage; dollar cost is configurable by model rates rather than guessed.
+JSON actor output: dialogue (1–1000 chars), emotion enum, action `none`, known and disclosed fact_ids, end_conversation=false. Prompts carry scenario knowledge, visible evidence, prior turns and the current utterance. One repair attempt is permitted; errors are shown, never converted into outcomes. Server keeps all successful exchanges within its 40-attempt budget, 40 turn attempts per case, 1024 output tokens per request. A process-wide attempt cap includes failed/repair requests. Logs report latency and token usage; dollar cost is configurable by model rates rather than guessed.
 
 ## Milestones and acceptance
 
@@ -29,3 +29,7 @@ JSON actor output: dialogue (1–1000 chars), emotion enum, action `none`, known
 5. P1E: headless integration tests plus real graphical/voice/provider playtesting. Report untested hardware and paid-provider paths explicitly.
 
 See README for commands, requirements and current acceptance evidence. Later co-op can place the existing authoritative session service behind authenticated networking; synchronization is not implemented here.
+
+## Intent and speech revision
+
+Live conversation now includes the opening and alternating user/assistant messages. Facts are system context; canned actor reactions are excluded. Smugglers can invent verbal excuses and partially admit or argue without modifying evidence or ground truth. No confession is required for a correct disposition. Piper neural voices replace the robotic speech fallback, with two locally installed profiles assigned per authored traveler. See INTENT_BENCHMARK.md for the controlled model comparison.

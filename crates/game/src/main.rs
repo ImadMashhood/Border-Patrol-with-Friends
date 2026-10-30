@@ -300,7 +300,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>) {
                 g.subtitle = case.opening_line.clone();
                 if !g.muted {
                     g.speaking = true;
-                    net.speak(g.generation, case.opening_line.clone());
+                    net.speak(
+                        g.generation,
+                        case.opening_line.clone(),
+                        case.scenario_id.clone(),
+                    );
                 }
                 g.evidence = case.evidence.clone();
                 g.case = Some(case);
@@ -320,7 +324,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>) {
                 g.request_focus = true;
                 if !g.muted {
                     g.speaking = true;
-                    net.speak(g.generation, r.dialogue);
+                    net.speak(
+                        g.generation,
+                        r.dialogue,
+                        g.case.as_ref().unwrap().scenario_id.clone(),
+                    );
                 }
             }
             NetEvent::Evidence(e) => {

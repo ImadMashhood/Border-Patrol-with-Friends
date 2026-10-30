@@ -3,7 +3,8 @@ set -euo pipefail
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 # Local opt-in tools. No sudo or global Python package changes.
 if [[ -x .tools/whisper/build/bin/whisper-cli && -f .tools/whisper/models/ggml-tiny.en.bin ]]; then
-  echo "Local voice recognition is already installed. Run ./play.sh."
+  ./scripts/setup-tts.sh
+  echo "Local speech recognition and neural voices are ready. Run ./play.sh."
   exit 0
 fi
 if ! command -v "${CXX:-g++}" >/dev/null; then
@@ -17,4 +18,5 @@ python3 -m venv .tools/voice-env
 .tools/voice-env/bin/cmake -S .tools/whisper -B .tools/whisper/build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF -DWHISPER_BUILD_TESTS=OFF
 .tools/voice-env/bin/cmake --build .tools/whisper/build --config Release -j 4
 bash .tools/whisper/models/download-ggml-model.sh tiny.en
+./scripts/setup-tts.sh
 printf '\nVoice recognition installed locally. Run ./play.sh; press E on the car, then speak normally.\n'

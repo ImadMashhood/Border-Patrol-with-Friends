@@ -85,10 +85,7 @@ impl Provider for OpenRouter {
     ) -> ProviderFuture<'a> {
         Box::pin(async move {
             let started = Instant::now();
-            let mut messages = vec![
-                json!({"role":"system","content":SYSTEM_PROMPT}),
-                json!({"role":"user","content":prompt(s,secondary,h,q).to_string()}),
-            ];
+            let mut messages = conversation_messages(s, secondary, h, q);
             for attempt in 0..2 {
                 anyhow::ensure!(
                     self.attempts.fetch_add(1, Ordering::Relaxed) < self.max_attempts,
@@ -124,7 +121,7 @@ impl Provider for OpenRouter {
                     Ok(r) => return Ok(r),
                     Err(e) if attempt == 0 => {
                         messages.push(json!({"role":"assistant","content":raw}));
-                        messages.push(json!({"role":"user","content":format!("Contract validation failed: {e}. Repair the JSON only. Do not change scenario facts.")}));
+                        messages.push(json!({"role":"user","content":format!("Contract validation failed: {e}. Rewrite the response to fix this issue, answer the latest officer question, and preserve immutable scenario facts. Return only the required JSON.")}));
                     }
                     Err(_) => anyhow::bail!(
                         "Provider returned invalid dialogue after repair. Retry the question."
@@ -260,9 +257,6 @@ async fn turn(
         traveler: reply.dialogue.clone(),
         emotion: reply.emotion.clone(),
     });
-    if live.history.len() > 30 {
-        live.history.remove(0);
-    }
     Ok(Json(reply))
 }
 async fn inspect(
