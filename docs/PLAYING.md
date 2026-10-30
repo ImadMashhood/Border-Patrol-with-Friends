@@ -68,7 +68,7 @@ Install local speech recognition once:
 ./scripts/setup-voice.sh
 ```
 
-The default installed profile now uses **GPU Whisper Large-v3 Turbo** for recognition and **Kokoro-82M** for more natural speech. Both stay loaded in a local service. The engineering reference is **6 CPU cores, 16 GB RAM and an RTX 2060 with 6 GB VRAM**; the speech VRAM target is at most 3 GB, leaving headroom for the game. See [setup, measured results and hardware limits](SPEECH_MODELS.md).
+The default installed profile now uses **Whisper Small** for recognition and **Qwen3-TTS 1.7B CustomVoice** for expressive character speech. Both stay loaded in a local service. The engineering reference is **6 CPU cores, 16 GB RAM and an RTX 2060 with 6 GB VRAM**; the expressive speech VRAM target is at most 4.5 GiB, leaving headroom for the game. See [current acting/voice setup, latency and hardware limits](CHARACTER_ACTING.md), plus [historical speech results](SPEECH_MODELS.md).
 
 Installation creates an isolated Python 3.11/CUDA environment and downloads the models once. It needs NVIDIA drivers, Python 3 venv, curl, `arecord` (Fedora `alsa-utils`) and `ffplay` (FFmpeg). It does not change system Python or require a C++ compiler for the default profile. The launcher discovers the installed service, waits for warm-up and cleans it up when the game closes.
 

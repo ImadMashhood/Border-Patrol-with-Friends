@@ -17,8 +17,9 @@ def free_port():
         return sock.getsockname()[1]
 
 def main():
+    repairs = '--repairs' in __import__('sys').argv
     interface = '--ui' in __import__('sys').argv
-    casual = interface or '--casual' in __import__('sys').argv
+    casual = repairs or interface or '--casual' in __import__('sys').argv
     lifecycle = casual or '--lifecycle' in __import__('sys').argv
     physics = '--physics' in __import__('sys').argv
     combat = physics or '--combat' in __import__('sys').argv
@@ -51,8 +52,8 @@ def main():
                 time.sleep(.05)
         else:
             raise RuntimeError('host services failed to start')
-        a = start('border-game', ['--name=Officer-A', '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
-        b = start('border-game', ['--name=Officer-B', '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
+        a = start('border-game', ['--name=Officer-A', '--smoke-repairs' if repairs else '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-interview'], 'part5-client-a.log')
+        b = start('border-game', ['--name=Officer-B', '--smoke-repairs' if repairs else '--smoke-ui' if interface else '--smoke-casual' if casual else '--smoke-physics' if physics else '--smoke-combat' if combat else '--smoke-lifecycle' if lifecycle else '--smoke-shift'], 'part5-client-b.log')
         deadline = time.monotonic() + 75
         while time.monotonic() < deadline and (a.poll() is None or b.poll() is None):
             time.sleep(.1)
@@ -93,6 +94,11 @@ def main():
                 assert len({v['kind'] for v in worlds[0]['vehicles']})==6
                 print('PASS: real Rapier cabin ragdoll, extraction through open door, rigid glass shards, six vehicle kinds and right-button aiming capture')
             print('PASS: two graphical clients; raised windows shot out; seated and exited NPC projectile deaths; replicated gun/ammunition and door states')
+        if repairs:
+            for i in (1,2):
+                m=json.loads((output/f'repairs-metrics-peer-{i}.json').read_text());assert m['stage']==7 and m['finding'],m
+                for name in ['container-closed','cargo-closed','cargo-reopened']:assert (output/f'repairs-{name}-peer-{i}.png').exists()
+            print('PASS: actual animated container/lid targeting, close and reopen, persistent cargo findings on both sedan and pickup')
         if interface:
             for i,world in enumerate(worlds,1):
                 m=json.loads((output/f'ui-metrics-peer-{i}.json').read_text())

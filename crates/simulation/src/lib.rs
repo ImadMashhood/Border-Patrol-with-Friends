@@ -13,6 +13,7 @@ mod interactions;
 mod interactions_tests;
 #[cfg(test)]
 mod lifecycle_tests;
+mod navigation;
 mod physics;
 mod shift;
 
@@ -60,6 +61,7 @@ pub struct Simulation {
     epoch: u64,
     next_projectile: u64,
     next_impact: u64,
+    walkers: HashMap<navigation::Walker, navigation::Route>,
     physics: physics::PhysicalWorld,
 }
 impl Simulation {
@@ -80,6 +82,7 @@ impl Simulation {
             epoch: 0,
             next_projectile: 1,
             next_impact: 1,
+            walkers: HashMap::new(),
             physics: physics::PhysicalWorld::new(),
             world: WorldSnapshot {
                 protocol_version: PROTOCOL_VERSION,
@@ -344,11 +347,22 @@ impl Simulation {
             "peer incapacitated"
         );
         match &e.command {
+            ClientCommand::ToggleCompartment {
+                vehicle_id,
+                location,
+            } => {
+                self.toggle_compartment(peer, *vehicle_id, *location)?;
+            }
             ClientCommand::TogglePanel { vehicle_id, point } => {
                 let i = self.inspection_access(peer, *vehicle_id)?;
                 self.require_point(peer, i, *point)?;
                 if self.world.vehicles[i].open_panels.contains(point) {
                     self.world.vehicles[i].open_panels.retain(|p| p != point);
+                    if *point == vehicle::VehiclePoint::Cargo {
+                        self.world.vehicles[i]
+                            .open_compartments
+                            .retain(|l| *l != border_scenarios::EvidenceLocation::Container);
+                    }
                 } else {
                     self.inspect_point(peer, *vehicle_id, *point)?;
                 }
@@ -606,6 +620,7 @@ impl Simulation {
                     searched_compartments: vec![],
                     inspected_points: vec![],
                     open_panels: vec![],
+                    open_compartments: vec![],
                     physics: border_net::combat::VehiclePhysics::default(),
                 });
                 self.cases.insert(

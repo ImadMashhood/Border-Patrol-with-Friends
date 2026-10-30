@@ -1,5 +1,8 @@
 # Speech profile and reference hardware
 
+**Current profile:** See [character acting and voice](CHARACTER_ACTING.md). The default is now Whisper Small plus expressive Qwen3-TTS with CPU text lookup/audio decoding. The measurements below describe the earlier Turbo/Kokoro implementation; they do not describe the heavier expressive voice's latency or memory. Kokoro remains an explicit faster option.
+
+
 The user-selected reference is **six physical CPU cores, 16 GB RAM, and an NVIDIA RTX 2060 with 6 GB VRAM**. The target rendering workload is 1080p / 60 FPS. This is an engineering target, not a published or certified minimum specification. Available measurements use an RTX 3080 and Ryzen 5 3600; the CPU has the reference six physical cores, while the GPU is faster and has more memory.
 
 ## Default reference profile

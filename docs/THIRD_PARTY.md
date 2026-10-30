@@ -21,3 +21,7 @@ The weapon offset/kick and follow/recovery pattern is adapted in `crates/game/sr
 ## Original project work
 
 Vehicle geometry, the six body variants and fittings, generated audio, movement prediction/shared collision, fracture meshes, client presentation and game-specific physics integration are authored for this project. No third-party car or character art is imported. The notices above cover the reused code/references and do not assign a new blanket license to the user's repository.
+
+## Expressive local speech
+
+Qwen3-TTS code is published under Apache-2.0; the model/package are obtained from the upstream Qwen distribution, not bundled in Git. [Source and license](https://github.com/QwenLM/Qwen3-TTS), [model card](https://huggingface.co/Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice). The character directions, animation controller and navigation implementation in this update are authored for this repository. No recorded celebrity/player voice samples are used.

@@ -6,7 +6,7 @@
     "name": "Nadia Ortiz",
     "biography": "Nadia is a nurse coming off a night shift to visit her sister. She is tired, protective of her limited family time and capable of very dry sarcasm. Ask one clear question and she answers it; lecture her and her patience runs out. A practical verbal shortcut can appeal to her, but she is carrying no undeclared commercial goods.",
     "occupation": "Nurse",
-    "speech_style": "Exhausted, abrupt, dry sarcasm; corrects herself on times.",
+    "speech_style": "Dry, exhausted, blunt; everyday American contractions, \"look\" and \"seriously?\" sparingly. Irritation has bite; she can swear when pushed. Do not give every answer an officer preface. Under danger, tired sarcasm breaks into urgent pleading. Example of cadence only, not a mandatory reply: Seriously? I just got off a shift. One question at a time.",
     "emotion_baseline": "confused",
     "authority_response": "pragmatic",
     "compliance_bounds": "Exhausted and wants to leave. May say the demanded denial or wording to end the delay, with irritation or sarcasm rather than a moral lecture. Will not invent a criminal confession or endanger anyone.",
@@ -23,7 +23,7 @@
   },
   "truth": {
     "purpose": "Visit my sister after a night shift.",
-    "itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
+    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
     "cargo": "A change of clothes and a wrapped birthday present.",
     "smuggling": false,
     "documents": [
@@ -53,7 +53,7 @@
     },
     {
       "id": "glovebox_record",
-      "description": "Glove compartment: travel notes for Nadia Ortiz. Arrive at my sister June\u2019s at 18:00; leave Monday.",
+      "description": "Glove compartment: travel notes for Nadia Ortiz. Arrive at my sister June’s at 18:00; leave Monday.",
       "reveal_condition": "secondary",
       "location": "glovebox",
       "reveal_rule": "physical_search"
@@ -77,7 +77,7 @@
   },
   "actor": {
     "purpose": "Visit my sister after a night shift.",
-    "itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
+    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
     "cargo": "Clothes and a birthday present for my sister.",
     "repeat": "Yes, still my sister. I have not acquired a second destination since you asked.",
     "irrelevant": "I have been awake all night. Could we keep this practical?",
@@ -89,7 +89,7 @@
     "cargo_kind": "personal_gifts",
     "document_holder": "Nadia Ortiz",
     "document_purpose": "Visit my sister after a night shift.",
-    "document_itinerary": "Arrive at my sister June\u2019s at 18:00; leave Monday.",
+    "document_itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
     "document_cargo": "A change of clothes and a wrapped birthday present."
   }
 }

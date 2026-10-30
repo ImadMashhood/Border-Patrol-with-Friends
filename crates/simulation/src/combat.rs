@@ -256,12 +256,6 @@ impl Simulation {
                     v.physics.npc.position = seated_position(v);
                     v.physics.npc.yaw = v.yaw;
                 }
-                NpcMode::Fleeing => {
-                    v.physics.npc.position = add(
-                        v.physics.npc.position,
-                        rotate([0., 0., -dt * 3.5], v.physics.npc.yaw),
-                    );
-                }
                 NpcMode::Exiting | NpcMode::Entering => {
                     let entering = v.physics.npc.mode == NpcMode::Entering;
                     if v.physics.door_angles[0] > 0.8 {

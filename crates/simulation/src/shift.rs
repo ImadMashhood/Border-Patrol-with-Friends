@@ -147,6 +147,7 @@ impl Simulation {
         }
         self.tick_interactions(dt);
         self.tick_combat(dt);
+        self.tick_fleeing(dt);
         self.tick_porters(dt);
         self.physics.advance(&mut self.world, dt);
         if elapsed > 0 {
@@ -459,6 +460,36 @@ impl Simulation {
         }
         Ok(())
     }
+    pub(crate) fn toggle_compartment(
+        &mut self,
+        peer: u64,
+        id: u64,
+        location: border_scenarios::EvidenceLocation,
+    ) -> Result<()> {
+        let i = self.inspection_access(peer, id)?;
+        let point = if location == border_scenarios::EvidenceLocation::Glovebox {
+            vehicle::VehiclePoint::Passenger
+        } else {
+            vehicle::VehiclePoint::Cargo
+        };
+        self.require_point(peer, i, point)?;
+        ensure!(
+            matches!(
+                location,
+                border_scenarios::EvidenceLocation::Container
+                    | border_scenarios::EvidenceLocation::Glovebox
+            ),
+            "not a hinged compartment"
+        );
+        if self.world.vehicles[i].open_compartments.contains(&location) {
+            self.world.vehicles[i]
+                .open_compartments
+                .retain(|l| *l != location);
+            Ok(())
+        } else {
+            self.search_compartment(peer, id, location)
+        }
+    }
     pub fn search_compartment(
         &mut self,
         peer: u64,
@@ -489,6 +520,9 @@ impl Simulation {
             location != L::Glovebox || self.world.vehicles[i].physics.door_open[1],
             "open the passenger door before searching the glove compartment"
         );
+        if !self.world.vehicles[i].open_compartments.contains(&location) {
+            self.world.vehicles[i].open_compartments.push(location);
+        }
         if self.world.vehicles[i]
             .searched_compartments
             .contains(&location)
@@ -755,6 +789,7 @@ impl Simulation {
         self.world.queues_active = false;
         self.world.events_active = false;
         self.world.vehicles.clear();
+        self.walkers.clear();
         for p in &mut self.world.porters {
             p.position = porter_chair(p.lane_id);
             p.phase = PorterPhase::Seated;

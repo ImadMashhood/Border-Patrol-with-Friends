@@ -1,3 +1,4 @@
+mod animation;
 mod equipment;
 mod hud;
 mod interactions;
@@ -150,6 +151,9 @@ struct Solid {
 #[derive(Resource)]
 struct SmokeTest {
     interface: bool,
+    repairs: bool,
+    repair_stage: u8,
+    aim_target: Option<Vec3>,
     ui_step: u8,
     casual: bool,
     saw_outline: bool,
@@ -208,8 +212,9 @@ fn main() {
     };
     let physics_smoke = std::env::args().any(|a| a == "--smoke-physics");
     let combat_smoke = physics_smoke || std::env::args().any(|a| a == "--smoke-combat");
+    let repairs = std::env::args().any(|a| a == "--smoke-repairs");
     let interface = std::env::args().any(|a| a == "--smoke-ui");
-    let casual = interface || std::env::args().any(|a| a == "--smoke-casual");
+    let casual = repairs || interface || std::env::args().any(|a| a == "--smoke-casual");
     let lifecycle = casual || std::env::args().any(|a| a == "--smoke-lifecycle");
     let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
     let robot = combat_smoke || interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
@@ -222,6 +227,7 @@ fn main() {
         .init_resource::<traffic::Traffic>()
         .init_resource::<weapon::WeaponUi>()
         .init_resource::<equipment::Equipment>()
+        .init_resource::<animation::Actors>()
         .init_resource::<hud::Hud>()
         .init_resource::<interactions::Focus>()
         .init_resource::<vehicle_physics::Effects>()
@@ -272,6 +278,8 @@ fn main() {
                 weapon::render,
                 porter::render,
                 equipment::render,
+                animation::officers,
+                animation::faces,
                 interactions::outlines,
             )
                 .chain()
@@ -288,6 +296,9 @@ fn main() {
         }
         app.insert_resource(SmokeTest {
             interface,
+            repairs,
+            repair_stage: 0,
+            aim_target: None,
             ui_step: 0,
             casual,
             saw_outline: false,
@@ -438,7 +449,7 @@ fn controls(
                     })
                     .unwrap_or(Vec3::new(0., 1.25, 0.))
             };
-            t.look_at(target, Vec3::Y);
+            t.look_at(smoke.aim_target.unwrap_or(target), Vec3::Y);
             let (yaw, pitch, _) = t.rotation.to_euler(EulerRot::YXZ);
             p.yaw = yaw;
             p.pitch = pitch;
@@ -682,10 +693,11 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>, shift: Option<Res<shift::Sh
                 g.request_focus = true;
                 if !g.muted {
                     g.speaking = true;
-                    g.playback = Some(net.speak(
+                    g.playback = Some(net.speak_emotional(
                         g.generation,
                         r.dialogue,
                         g.case.as_ref().unwrap().scenario_id.clone(),
+                        g.emotion.clone(),
                     ));
                 }
             }
@@ -863,6 +875,7 @@ fn smoke_test(
     focus: Res<interactions::Focus>,
     mut equipment: ResMut<equipment::Equipment>,
     hud: Res<hud::Hud>,
+    panels: Query<(&vehicles::Panel, &GlobalTransform), Without<Player>>,
 ) {
     smoke.saw_outline |= focus.target.is_some();
     if smoke.casual && g.case.is_some() && !g.overlay && smoke.robot_step >= 6 {
@@ -1317,6 +1330,84 @@ fn smoke_test(
                 },
             ));
     }
+    if smoke.repairs
+        && smoke.step >= 6
+        && let Some(w) = &shift.world
+        && let Some(v) = w.vehicles.iter().find(|v| v.vehicle_id == shift.peer_id)
+    {
+        use border_net::vehicle::VehiclePoint;
+        use border_scenarios::EvidenceLocation;
+        use interactions::Action;
+        let container = smoke.repair_stage < 4;
+        if let Some((p, t)) = panels.iter().find(|(p, _)| {
+            1 + p.lane as u64 + p.ordinal as u64 * 2 == v.vehicle_id
+                && p.point == VehiclePoint::Cargo
+                && p.compartment
+                    == if container {
+                        Some(EvidenceLocation::Container)
+                    } else {
+                        None
+                    }
+        }) {
+            smoke.aim_target = Some(t.transform_point(p.offset));
+        }
+        let desired = if container {
+            Action::Compartment(EvidenceLocation::Container)
+        } else {
+            Action::Panel(VehiclePoint::Cargo)
+        };
+        let focused = focus
+            .target
+            .is_some_and(|t| t.vehicle == v.vehicle_id && t.action == desired);
+        let opened = if container {
+            v.open_compartments.contains(&EvidenceLocation::Container)
+        } else {
+            v.open_panels.contains(&VehiclePoint::Cargo)
+        };
+        match smoke.repair_stage {
+            0 => smoke.repair_stage = 1,
+            1 | 4 if focused && opened => {
+                interactions::activate(focus.target.unwrap(), &mut g, &shift, &net);
+                smoke.repair_stage += 1;
+            }
+            2 | 5 if focused && !opened => {
+                let name = if container {
+                    "container-closed"
+                } else {
+                    "cargo-closed"
+                };
+                commands
+                    .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                    .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                        "output/repairs-{name}-peer-{}.png",
+                        shift.peer_id
+                    )));
+                interactions::activate(focus.target.unwrap(), &mut g, &shift, &net);
+                smoke.repair_stage += 1;
+            }
+            3 if opened => smoke.repair_stage = 4,
+            6 if opened => {
+                assert!(
+                    v.searched_compartments
+                        .contains(&EvidenceLocation::Container)
+                );
+                assert!(
+                    v.observed_evidence
+                        .iter()
+                        .any(|f| f.location == EvidenceLocation::Cargo)
+                );
+                assert!(hud.drew_finding);
+                smoke.repair_stage = 7;
+                commands
+                    .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                    .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                        "output/repairs-cargo-reopened-peer-{}.png",
+                        shift.peer_id
+                    )));
+            }
+            _ => {}
+        }
+    }
     if smoke.interface {
         let now = smoke.elapsed;
         let shot = match smoke.ui_step {
@@ -1396,7 +1487,7 @@ fn smoke_test(
         }
     }
     if smoke.elapsed
-        > if smoke.interface {
+        > if smoke.interface || smoke.repairs {
             43.
         } else if smoke.physics {
             50.
@@ -1415,6 +1506,19 @@ fn smoke_test(
                 serde_json::to_string_pretty(world).unwrap(),
             )
             .ok();
+        }
+        if smoke.repairs {
+            assert_eq!(
+                smoke.repair_stage, 7,
+                "cargo interaction repair smoke failed; focus={:?}",
+                focus.target
+            );
+            std::fs::write(
+                format!("output/repairs-metrics-peer-{}.json", shift.peer_id),
+                serde_json::json!({"stage":smoke.repair_stage,"finding":hud.drew_finding})
+                    .to_string(),
+            )
+            .unwrap();
         }
         if smoke.interface {
             assert!(

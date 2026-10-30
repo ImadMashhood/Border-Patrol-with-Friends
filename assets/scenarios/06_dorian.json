@@ -6,7 +6,7 @@
     "name": "Dorian Pike",
     "biography": "Dorian is a delivery contractor moving undeclared electronics for resale. He values a quick turnaround and dislikes questions that disrupt his prepared explanation. His clipped answers can become blunt argument when the officer points out the boxes. He knows what the shipment is and can evade, bargain or offer a bribe without automatically confessing.",
     "occupation": "Delivery contractor",
-    "speech_style": "Clipped and impatient; rehearsed account, then defensive.",
+    "speech_style": "Rough, clipped and impatient. Short fragments, mild swearing, sarcasm and \"man\" when annoyed. Treat threats as danger, not an invitation to moralize. He can snap, yell, bargain or decide to get away. Example of cadence only, not a mandatory reply: Man, I am trying to get somewhere. What do you need?",
     "emotion_baseline": "irritated",
     "authority_response": "pragmatic",
     "compliance_bounds": "Impatient about delays. Will often say exactly what the officer demands if promised passage, including false denials of goods; may grumble while complying. Do not make him automatically principled about verbal honesty.",
@@ -27,7 +27,7 @@
     "cargo": "Six sealed boxes of undeclared electronics for resale.",
     "smuggling": true,
     "documents": [
-      "Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+      "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
     ]
   },
   "public_claims": [
@@ -39,7 +39,7 @@
   "evidence": [
     {
       "id": "document",
-      "description": "Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00.",
+      "description": "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00.",
       "reveal_condition": "documents",
       "location": "documents",
       "reveal_rule": "presented_at_driver"
@@ -70,7 +70,7 @@
     {
       "claim_id": "cargo_claim",
       "evidence_id": "document",
-      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Today\u2019s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
     },
     {
       "claim_id": "cargo_claim",

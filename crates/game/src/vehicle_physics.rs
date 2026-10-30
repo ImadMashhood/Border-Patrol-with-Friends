@@ -265,7 +265,7 @@ fn npc(
         extremities(commands, meshes, e, bone, skin.clone(), dark.clone());
     }
 }
-fn extremities(
+pub(super) fn extremities(
     commands: &mut Commands,
     meshes: &mut Assets<Mesh>,
     root: Entity,
@@ -283,7 +283,7 @@ fn extremities(
             dark.clone(),
         );
         for x in [-0.065, 0.065] {
-            block(
+            let eye = block(
                 commands,
                 meshes,
                 root,
@@ -291,6 +291,10 @@ fn extremities(
                 Vec3::new(x, 0.03, -0.14),
                 dark.clone(),
             );
+            commands.entity(eye).insert(animation::FacePart {
+                mouth: false,
+                phase: x * 4.,
+            });
         }
         block(
             commands,
@@ -300,6 +304,18 @@ fn extremities(
             Vec3::new(0., -0.015, -0.145),
             skin,
         );
+        let mouth = block(
+            commands,
+            meshes,
+            root,
+            Vec3::new(0.055, 0.012, 0.012),
+            Vec3::new(0., -0.07, -0.15),
+            dark.clone(),
+        );
+        commands.entity(mouth).insert(animation::FacePart {
+            mouth: true,
+            phase: 0.,
+        });
     } else if matches!(bone, 4 | 6) {
         block(
             commands,
@@ -407,6 +423,9 @@ fn crack_mesh(impacts: &[GlassImpact]) -> Mesh {
 pub fn sync(
     shift: Res<shift::Shift>,
     time: Res<Time>,
+    mut actors: ResMut<animation::Actors>,
+    net: Res<Network>,
+    patrol: Res<Patrol>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -713,23 +732,44 @@ pub fn sync(
             }
         }
     }
+    let energy = net.spatial.lock().unwrap().energy;
+    let animated: std::collections::HashMap<_, _> = world
+        .vehicles
+        .iter()
+        .filter(|v| v.physics.npc.health > 0)
+        .map(|v| {
+            let n = &v.physics.npc;
+            let speaking = if patrol.vehicle_id == Some(v.vehicle_id) {
+                energy
+            } else {
+                0.
+            };
+            let emotion = v
+                .history
+                .last()
+                .map(|t| format!("{:?}", t.emotion).to_lowercase())
+                .unwrap_or_default();
+            (
+                v.vehicle_id,
+                actors.pose(
+                    (0, v.vehicle_id),
+                    Vec3::from_array(n.position),
+                    n.mode == NpcMode::Seated,
+                    speaking,
+                    &emotion,
+                    time.elapsed_secs(),
+                    time.delta_secs(),
+                ),
+            )
+        })
+        .collect();
     for (part, parent, mut t) in &mut parts {
         let Ok((_, d, ..)) = details.get(parent.parent()) else {
             continue;
         };
-        let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == d.vehicle) else {
-            continue;
-        };
-        let n = &v.physics.npc;
-        let seated = n.mode == NpcMode::Seated || n.mode == NpcMode::Dead && n.died_seated;
-        let rig = if n.mode == NpcMode::Fleeing {
-            border_net::rig::walking(time.elapsed_secs() * 11.)
-        } else {
-            border_net::rig::skeleton(seated)
-        };
-        let bone = rig.bones[part.bone];
-        t.translation = Vec3::from_array(bone.center);
-        t.rotation = Quat::from_rotation_x(bone.angle);
+        if let Some(pose) = animated.get(&d.vehicle) {
+            *t = pose[part.bone];
+        }
     }
 }
 #[allow(clippy::too_many_arguments)]

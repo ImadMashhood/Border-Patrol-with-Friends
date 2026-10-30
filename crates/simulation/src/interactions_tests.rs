@@ -142,6 +142,8 @@ fn porter_removes_a_seated_body_drives_the_vehicle_and_returns_to_his_chair() {
     assert_eq!(s.world.vehicles[0].stage, VehicleStage::Detained);
     assert!(!s.world.lanes[0].queue.contains(&1));
     assert_eq!(s.world.porters[0].phase, PorterPhase::Seated);
+    assert_eq!(s.world.porters[0].yaw, 0.);
+    assert_eq!(s.world.porters[0].position, porter_chair(1));
     assert!(s.world.vehicles[0].physics.npc.extracted);
     assert_eq!(s.world.vehicles[0].physics.npc.ragdoll.len(), 11);
 }
@@ -230,4 +232,114 @@ fn repeated_threats_can_make_a_bold_aggressive_traveler_physically_flee() {
         )) > 3.
     );
     assert_eq!(s.world.money, -300);
+}
+
+#[test]
+fn cargo_and_container_close_reopen_and_keep_recorded_findings_on_every_vehicle() {
+    for kind in vehicle::KINDS {
+        let mut s = active();
+        s.world.vehicles[0].kind = kind.into();
+        let v = &s.world.vehicles[0];
+        s.world.peers[0].position =
+            vehicle::spec(kind).world_point(v.position, v.yaw, vehicle::VehiclePoint::Cargo);
+        let command = |s: &mut Simulation, cmd| {
+            let sequence = s.peers[&1].next_sequence;
+            s.command(
+                1,
+                CommandEnvelope {
+                    protocol_version: PROTOCOL_VERSION,
+                    session_id: "casual".into(),
+                    request_id: sequence.to_string(),
+                    sequence,
+                    expected_revision: None,
+                    command: cmd,
+                },
+                s.world.server_time_ms,
+            )
+            .unwrap();
+        };
+        let toggle = ClientCommand::TogglePanel {
+            vehicle_id: 1,
+            point: vehicle::VehiclePoint::Cargo,
+        };
+        command(&mut s, toggle.clone());
+        let count = s.world.vehicles[0].observed_evidence.len();
+        assert!(count > 0);
+        s.toggle_compartment(1, 1, border_scenarios::EvidenceLocation::Container)
+            .unwrap();
+        assert!(
+            s.world.vehicles[0]
+                .open_compartments
+                .contains(&border_scenarios::EvidenceLocation::Container)
+        );
+        let found = s.world.vehicles[0].observed_evidence.len();
+        command(&mut s, toggle.clone());
+        assert!(
+            !s.world.vehicles[0]
+                .open_panels
+                .contains(&vehicle::VehiclePoint::Cargo)
+        );
+        assert!(
+            !s.world.vehicles[0]
+                .open_compartments
+                .contains(&border_scenarios::EvidenceLocation::Container)
+        );
+        assert_eq!(s.world.vehicles[0].observed_evidence.len(), found);
+        command(&mut s, toggle);
+        s.toggle_compartment(1, 1, border_scenarios::EvidenceLocation::Container)
+            .unwrap();
+        s.toggle_compartment(1, 1, border_scenarios::EvidenceLocation::Container)
+            .unwrap();
+        assert!(
+            !s.world.vehicles[0]
+                .open_compartments
+                .contains(&border_scenarios::EvidenceLocation::Container)
+        );
+        assert_eq!(s.world.vehicles[0].observed_evidence.len(), found);
+    }
+}
+
+#[test]
+fn walking_agents_replan_around_a_moving_rotated_vehicle_without_crossing_it() {
+    let mut s = active();
+    s.world.vehicles.truncate(1);
+    s.world.peers.clear();
+    s.world.porters.clear();
+    s.collision.clear();
+    for l in &mut s.world.lanes {
+        l.entry_barrier_open = true;
+        l.barrier_open = true;
+    }
+    s.world.vehicles[0].position = [0.; 3];
+    s.world.vehicles[0].yaw = 0.7;
+    let mut p = [-5., 0., 0.];
+    let mut yaw = 0.;
+    let goal = [5., 0., 0.];
+    let mut arrived = false;
+    for frame in 0..600 {
+        if frame == 10 {
+            s.world.vehicles[0].position = [1.5, 0., 0.];
+        }
+        let before = p;
+        arrived = s.walk_actor(
+            navigation::Walker::Traveler(99),
+            &mut p,
+            &mut yaw,
+            goal,
+            3.5,
+            0.05,
+        );
+        assert!(border_net::combat::length(border_net::combat::sub(p, before)) <= 0.176);
+        let v = &s.world.vehicles[0];
+        let local = border_net::combat::local(v, p);
+        let spec = vehicle::spec(&v.kind);
+        let dx = (local[0].abs() - spec.half_width).max(0.);
+        let dz = (local[2].abs() - spec.half_length).max(0.);
+        assert!(dx.hypot(dz) >= 0.269, "agent crossed vehicle at {p:?}");
+        if arrived {
+            break;
+        }
+        s.world.server_time_ms += 50;
+    }
+    assert!(arrived, "agent did not find a route around the car: {p:?}");
 }

@@ -442,31 +442,34 @@ pub fn sync(
                     RemoteOfficer(p.peer_id),
                 ))
                 .id();
-            for (size, pos, color) in [
-                (
-                    Vec3::new(0.5, 0.8, 0.3),
-                    Vec3::new(0., 1.1, 0.),
-                    Color::srgb(0.17, 0.29, 0.23),
-                ),
-                (
-                    Vec3::new(0.32, 0.35, 0.3),
-                    Vec3::new(0., 1.67, 0.),
-                    Color::srgb(0.68, 0.48, 0.34),
-                ),
-                (
-                    Vec3::new(0.48, 0.65, 0.28),
-                    Vec3::new(0., 0.4, 0.),
-                    Color::srgb(0.17, 0.20, 0.17),
-                ),
-            ] {
+            let skin = materials.add(Color::srgb(0.68, 0.48, 0.34));
+            let shirt = materials.add(Color::srgb(0.17, 0.29, 0.23));
+            let pants = materials.add(Color::srgb(0.12, 0.17, 0.15));
+            for bone in 0..11 {
+                let material = if bone == 2 || matches!(bone, 4 | 6) {
+                    skin.clone()
+                } else if bone == 0 || bone >= 7 {
+                    pants.clone()
+                } else {
+                    shirt.clone()
+                };
                 let part = commands
                     .spawn((
-                        Mesh3d(meshes.add(Cuboid::from_size(size))),
-                        MeshMaterial3d(materials.add(color)),
-                        Transform::from_translation(pos),
+                        Mesh3d(vehicle_physics::bone_mesh(&mut meshes, bone)),
+                        MeshMaterial3d(material),
+                        Transform::default(),
+                        vehicle_physics::BodyPart { bone },
                     ))
                     .id();
                 commands.entity(root).add_child(part);
+                vehicle_physics::extremities(
+                    &mut commands,
+                    &mut meshes,
+                    part,
+                    bone,
+                    skin.clone(),
+                    pants.clone(),
+                );
             }
         }
     }

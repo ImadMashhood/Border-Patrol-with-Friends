@@ -129,16 +129,30 @@ impl Network {
         text: String,
         scenario_id: String,
     ) -> border_speech::SpeechPlayback {
+        self.speak_emotional(g, text, scenario_id, "cooperative".into())
+    }
+    pub fn speak_emotional(
+        &self,
+        g: u64,
+        text: String,
+        scenario_id: String,
+        emotion: String,
+    ) -> border_speech::SpeechPlayback {
         let handle = border_speech::SpeechPlayback::default();
         let cancel = handle.token();
         let tx = self.tx.clone();
         let spatial = self.spatial.clone();
         std::thread::spawn(move || {
             let fallback = text == "Excuse me?";
-            let error =
-                border_speech::speak_spatial_cancellable(&text, &scenario_id, &cancel, &spatial)
-                    .err()
-                    .map(|e| e.to_string());
+            let error = border_speech::speak_spatial_expressive(
+                &text,
+                &scenario_id,
+                &emotion,
+                &cancel,
+                &spatial,
+            )
+            .err()
+            .map(|e| e.to_string());
             let _ = tx.send((g, NetEvent::SpeechFinished { error, fallback }));
         });
         handle

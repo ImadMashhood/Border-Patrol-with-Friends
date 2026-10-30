@@ -317,26 +317,13 @@ impl Simulation {
         Ok(())
     }
     pub(crate) fn tick_porters(&mut self, dt: f32) {
-        fn walk(p: &mut PorterView, target: [f32; 3], speed: f32, dt: f32) -> bool {
-            let d = c::sub(target, p.position);
-            let len = d[0].hypot(d[2]);
-            if len < 0.12 {
-                return true;
-            }
-            p.yaw = (-d[0]).atan2(-d[2]);
-            p.position = c::add(
-                p.position,
-                c::mul([d[0], 0., d[2]], (speed * dt).min(len) / len),
-            );
-            false
-        }
         for k in 0..self.world.porters.len() {
             let mut worker = self.world.porters[k].clone();
             let chair = porter_chair(worker.lane_id);
             if let Some(id) = worker.vehicle_id
                 && let Some(i) = self.world.vehicles.iter().position(|v| v.vehicle_id == id)
             {
-                let v = &self.world.vehicles[i];
+                let v = self.world.vehicles[i].clone();
                 let door = vehicle::spec(&v.kind).world_point(
                     v.position,
                     v.yaw,
@@ -347,9 +334,16 @@ impl Simulation {
                         let target = if worker.progress < 1. {
                             [door[0], 0., -vehicle::body_half_length(&v.kind) - 0.9]
                         } else {
-                            [door[0], 0., door[2]]
+                            c::add(door, c::rotate([-0.85, -door[1], -1.2], v.yaw))
                         };
-                        if walk(&mut worker, target, 3.5, dt) {
+                        if self.walk_actor(
+                            navigation::Walker::Porter(worker.lane_id),
+                            &mut worker.position,
+                            &mut worker.yaw,
+                            target,
+                            3.5,
+                            dt,
+                        ) {
                             if worker.progress < 1. {
                                 worker.progress = 1.;
                             } else {
@@ -449,10 +443,21 @@ impl Simulation {
                     PorterPhase::Returning => {
                         let path = [[-35., 0., -18.], [-4., 0., -18.], [-4., 0., -7.], chair];
                         let target = path[(worker.progress as usize).min(3)];
-                        if walk(&mut worker, target, 3.5, dt) {
+                        if self.walk_actor(
+                            navigation::Walker::Porter(worker.lane_id),
+                            &mut worker.position,
+                            &mut worker.yaw,
+                            target,
+                            3.5,
+                            dt,
+                        ) {
                             worker.progress += 1.;
                             if worker.progress >= 4. {
                                 worker.phase = PorterPhase::Seated;
+                                worker.position = chair;
+                                worker.yaw = 0.;
+                                self.walkers
+                                    .remove(&navigation::Walker::Porter(worker.lane_id));
                                 worker.vehicle_id = None;
                                 worker.progress = 0.;
                             }

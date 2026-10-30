@@ -3,13 +3,19 @@
   "system_ram_gib": 16,
   "gpu": "NVIDIA GeForce RTX 2060",
   "gpu_vram_gib": 6,
-  "render_resolution": [1920, 1080],
+  "render_resolution": [
+    1920,
+    1080
+  ],
   "render_target_fps": 60,
-  "speech_vram_budget_mib": 3072,
+  "speech_vram_budget_mib": 4608,
   "speech_cpu_threads": 4,
-  "stt_model": "large-v3-turbo",
+  "stt_model": "small",
   "stt_compute_type": "int8_float16",
   "stt_beam_size": 3,
-  "tts_model": "hexgrad/Kokoro-82M",
-  "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600."
+  "tts_model": "Qwen/Qwen3-TTS-12Hz-1.7B-CustomVoice",
+  "note": "User-selected design and acceptance target, not a measured minimum specification. Benchmark hardware remains RTX 3080 / Ryzen 5 3600.",
+  "tts_engine": "qwen",
+  "tts_quantization": "fp16_with_cpu_text_embeddings_and_audio_decoder",
+  "stt_device": "cuda"
 }

@@ -13,7 +13,7 @@ use std::{
 mod open_mic;
 mod spatial;
 pub use open_mic::{OpenMicrophone, VoiceEvent};
-pub use spatial::{SpatialVoice, speak_spatial_cancellable};
+pub use spatial::{SpatialVoice, speak_spatial_cancellable, speak_spatial_expressive};
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);
 fn temp(stem: &str, ext: &str) -> PathBuf {
@@ -51,7 +51,7 @@ fn gpu_service() -> Result<Option<(reqwest::blocking::Client, String, String)>> 
     let token =
         std::env::var("BORDER_SPEECH_TOKEN").context("Local speech session token missing")?;
     let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(30))
+        .timeout(Duration::from_secs(120))
         .build()?;
     Ok(Some((client, base, token)))
 }
@@ -172,7 +172,25 @@ impl Drop for SpeechPlayback {
         self.cancel.store(true, Ordering::Relaxed);
     }
 }
-fn voice_file(text: &str, path: &Path, scenario_id: &str) -> Result<()> {
+pub fn synthesize_character_to_file(
+    text: &str,
+    path: &Path,
+    scenario_id: &str,
+    emotion: &str,
+) -> Result<()> {
+    if let Some((client, base, token)) = gpu_service()? {
+        let bytes=client.post(format!("{base}/tts")).bearer_auth(token).json(&serde_json::json!({"text":text.replace(['*','_','`'],""),"scenario_id":scenario_id,"emotion":emotion,"alternate":alternate_voice(scenario_id)})).send()?.error_for_status()?.bytes()?;
+        ensure!(
+            bytes.len() > 44 && &bytes[..4] == b"RIFF",
+            "Invalid character speech"
+        );
+        std::fs::write(path, bytes)?;
+        Ok(())
+    } else {
+        synthesize_to_file(text, path, alternate_voice(scenario_id))
+    }
+}
+fn voice_file(text: &str, path: &Path, scenario_id: &str, emotion: &str) -> Result<()> {
     let cached = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../assets/audio")
         .join(if alternate_voice(scenario_id) {
@@ -183,7 +201,7 @@ fn voice_file(text: &str, path: &Path, scenario_id: &str) -> Result<()> {
     if text.trim().eq_ignore_ascii_case("Excuse me?") && cached.exists() {
         std::fs::copy(cached, path)?;
     } else {
-        synthesize_to_file(text, path, alternate_voice(scenario_id))?;
+        synthesize_character_to_file(text, path, scenario_id, emotion)?;
     }
     Ok(())
 }
@@ -198,7 +216,7 @@ pub fn speak_cancellable(text: &str, scenario_id: &str, cancel: &AtomicBool) -> 
     }
     let path = temp("speech", "wav");
     let result = (|| {
-        voice_file(text, &path, scenario_id)?;
+        voice_file(text, &path, scenario_id, "cooperative")?;
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }

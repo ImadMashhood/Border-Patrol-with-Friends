@@ -14,6 +14,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 PROFILE = json.loads((ROOT/'assets/settings/reference_hardware.json').read_text())
+VOICES = json.loads((ROOT/'assets/settings/traveler_voices.json').read_text())
 MAX_AUDIO = 2_000_000
 
 class Speech:
@@ -22,7 +23,6 @@ class Speech:
         import numpy as np
         import soundfile as sf
         from faster_whisper import WhisperModel
-        from kokoro import KPipeline
         if not torch.cuda.is_available():
             raise RuntimeError('CUDA GPU unavailable. GPU speech requires a compatible NVIDIA driver; use the lightweight speech profile otherwise.')
         torch.set_num_threads(PROFILE['speech_cpu_threads'])
@@ -32,18 +32,42 @@ class Speech:
         self.before_used = torch.cuda.mem_get_info()[1]-torch.cuda.mem_get_info()[0]
         self.peak_delta = 0
         self.stt_name = os.environ.get('BORDER_STT_MODEL', PROFILE['stt_model'])
-        print('Loading quantized Whisper Large-v3 Turbo…',file=sys.stderr,flush=True)
-        self.asr = WhisperModel(self.stt_name, device='cuda', compute_type='int8_float16', cpu_threads=4, num_workers=1)
-        print('Loading Kokoro neural voice model…',file=sys.stderr,flush=True)
-        self.tts = KPipeline(lang_code='a', repo_id=PROFILE['tts_model'], device='cuda')
-        self.voices = {False: os.environ.get('BORDER_TTS_VOICE','am_michael'), True: os.environ.get('BORDER_TTS_VOICE_ALTERNATE','af_heart')}
-        for voice in self.voices.values():
-            self.tts.load_voice(voice)
+        print('Loading Whisper '+self.stt_name+'…',file=sys.stderr,flush=True)
+        self.stt_device=os.environ.get('BORDER_STT_DEVICE',PROFILE.get('stt_device','cpu'))
+        self.stt_compute='int8_float16' if self.stt_device=='cuda' else 'int8'
+        self.asr = WhisperModel(self.stt_name,device=self.stt_device,compute_type=self.stt_compute,cpu_threads=4,num_workers=1)
+        self.engine=os.environ.get('BORDER_TTS_ENGINE',PROFILE.get('tts_engine','kokoro'))
+        if self.engine=='qwen':
+            from qwen_tts import Qwen3TTSModel
+            print('Loading expressive Qwen3-TTS with CPU text embeddings and audio decoder…',file=sys.stderr,flush=True)
+            self.tts_name=PROFILE['tts_model']
+            self.tts=Qwen3TTSModel.from_pretrained(self.tts_name,device_map='cuda:0',dtype=torch.float16,attn_implementation='sdpa')
+            # Keep full-precision acoustic weights. Only text lookup and final waveform
+            # decoding use CPU; this saves GPU memory without lossy weight compression.
+            class CPUTextEmbedding(torch.nn.Module):
+                def __init__(self,embedding):
+                    super().__init__()
+                    self.register_buffer('weight',embedding.weight.detach().cpu())
+                def forward(self,ids):
+                    return torch.nn.functional.embedding(ids.cpu(),self.weight).to(ids.device)
+            self.tts.model.talker.model.text_embedding=CPUTextEmbedding(self.tts.model.talker.model.text_embedding)
+            tokenizer=self.tts.model.speech_tokenizer
+            tokenizer.model.to('cpu',dtype=torch.float32)
+            tokenizer.device=torch.device('cpu')
+            torch.cuda.empty_cache()
+        elif self.engine=='kokoro':
+            from kokoro import KPipeline
+            self.tts_name='hexgrad/Kokoro-82M'
+            self.tts=KPipeline(lang_code='a',repo_id=self.tts_name,device='cuda')
+            self.voices={False:os.environ.get('BORDER_TTS_VOICE','am_michael'),True:os.environ.get('BORDER_TTS_VOICE_ALTERNATE','af_heart')}
+            for voice in self.voices.values():self.tts.load_voice(voice)
+        else:raise ValueError('BORDER_TTS_ENGINE must be qwen or kokoro')
         print('Warming speech models…',file=sys.stderr,flush=True)
         # Initialize kernels before the first real interview.
         self.synthesize('Good evening, officer.',False)
         self.synthesize('Hello. How can I help you?',True)
         silence = io.BytesIO(); sf.write(silence,np.zeros(16000,dtype=np.float32),16000,format='WAV'); self.transcribe(silence.getvalue())
+        self.torch.cuda.empty_cache()
         self.measure()
         self.ready = True
 
@@ -65,7 +89,7 @@ class Speech:
             gpu_process_mib = next(float(row.split(',')[1].strip()) for row in rows if int(row.split(',')[0].strip()) == os.getpid())
         except (OSError,ValueError,StopIteration,subprocess.SubprocessError):
             pass
-        return dict(ok=True,gpu_process_mib=gpu_process_mib,stt=self.stt_name,compute_type='int8_float16',tts=PROFILE['tts_model'],device=self.torch.cuda.get_device_name(),speech_vram_delta_mib=self.measure(),observed_peak_delta_mib=round(self.peak_delta/1024**2,1),rss_mib=round(rss,1) if rss else None,reference=PROFILE)
+        return dict(ok=True,gpu_process_mib=gpu_process_mib,stt=self.stt_name,compute_type=self.stt_compute,stt_device=self.stt_device,tts=self.tts_name,tts_engine=self.engine,voice_profiles=len(VOICES),device=self.torch.cuda.get_device_name(),speech_vram_delta_mib=self.measure(),observed_peak_delta_mib=round(self.peak_delta/1024**2,1),rss_mib=round(rss,1) if rss else None,reference=PROFILE)
 
     def transcribe(self,data):
         started=time.monotonic()
@@ -84,16 +108,46 @@ class Speech:
             self.measure()
         return dict(text=text,latency_ms=round((time.monotonic()-started)*1000))
 
-    def synthesize(self,text,alternate):
+    def synthesize(self,text,alternate=False,scenario_id=None,emotion='cooperative'):
         if not isinstance(text,str) or not text.strip() or len(text)>1000:
             raise ValueError('Speech text must contain 1–1000 characters')
-        with self.lock, self.torch.inference_mode():
-            chunks=[audio.detach().cpu().numpy() for _,_,audio in self.tts(text,voice=self.voices[bool(alternate)],speed=1.0,split_pattern=r'\n+') if audio is not None]
-            if not chunks: raise ValueError('No speech generated')
-            audio=self.np.concatenate(chunks)
-            output=io.BytesIO();self.sf.write(output,audio,24000,format='WAV',subtype='PCM_16')
+        acting={
+            'cooperative':'Natural conversational expression. Warmth, dry humor or sarcasm follows the character.',
+            'confused':'Hesitant, puzzled, small pauses and questioning inflection.',
+            'suspicious':'Wary, guarded, probing and skeptical.',
+            'irritated':'Impatient, clipped, audibly annoyed; bite on stressed words.',
+            'defensive':'Defensive and tense, quick explanations and stressed denials.',
+            'angry':'An angry raised voice, forceful sharp bursts; shout the emphatic words.',
+            'disengaged':'Tired and dismissive, low effort without sounding robotic.',
+            'afraid':'Frightened, shaky breath, urgent pleading, trying to stay composed.',
+            'panicked':'Frightened, urgent, raised voice. Pronounce every word clearly.',
+            'desperate':'Desperate, urgent pleading with emotional stress; keep every word clear.',
+        }
+        if emotion not in acting:raise ValueError('Unsupported speech emotion')
+        profile=VOICES.get(scenario_id or '',VOICES['01_mara' if alternate else '09_cal'])
+        started=time.monotonic()
+        with self.lock,self.torch.inference_mode():
+            if self.engine=='qwen':
+                self.torch.manual_seed(profile['seed'])
+                cry=text.strip().upper() in ('AAAH!','AAAAH!','AHHH!','AAAH','AAAAH','AHHH')
+                instruction=profile['description']+' '+acting[emotion]+(' A real alarmed scream, not the spelled letters.' if cry else '')+' Speak only the given words, at a conversational pace with short pauses and no prolonged silences.'
+                waves,sr=self.tts.generate_custom_voice(text=text,language='English',speaker=profile['speaker'],instruct=instruction,max_new_tokens=min(900,max(64,len(text.split())*6+24)),temperature=0.7,top_p=0.9,repetition_penalty=1.05)
+                audio=waves[0]
+            else:
+                chunks=[a.detach().cpu().numpy() for _,_,a in self.tts(text,voice=self.voices[bool(alternate)],speed=1.0,split_pattern=r'\n+') if a is not None]
+                if not chunks:raise ValueError('No speech generated')
+                audio=self.np.concatenate(chunks);sr=24000
+            # Remove only long leading/trailing silence; preserve expressive internal pauses.
+            audio=self.np.asarray(audio,dtype=self.np.float32)
+            audible=self.np.flatnonzero(self.np.abs(audio)>0.006)
+            if len(audible):audio=audio[max(0,audible[0]-int(sr*.08)):min(len(audio),audible[-1]+int(sr*.16))]
+            peak=float(self.np.max(self.np.abs(audio))) if len(audio) else 0
+            if peak>0.98:audio=audio*(0.98/peak)
+            output=io.BytesIO();self.sf.write(output,audio,sr,format='WAV',subtype='PCM_16')
+            self.torch.cuda.empty_cache()
             self.measure()
-            return output.getvalue()
+        print(json.dumps(dict(event='tts',engine=self.engine,scenario=scenario_id,emotion=emotion,latency_s=round(time.monotonic()-started,3),audio_s=round(len(audio)/sr,3))),file=sys.stderr,flush=True)
+        return output.getvalue()
 
 def create_server(backend,port,token):
     class Handler(BaseHTTPRequestHandler):
@@ -113,7 +167,7 @@ def create_server(backend,port,token):
                 body=self.rfile.read(length)
                 if self.path=='/stt':self.send(200,backend.transcribe(body))
                 elif self.path=='/tts':
-                    req=json.loads(body);self.send(200,backend.synthesize(req['text'],req.get('alternate',False)),'audio/wav')
+                    req=json.loads(body);self.send(200,backend.synthesize(req['text'],req.get('alternate',False),scenario_id=req.get('scenario_id'),emotion=req.get('emotion','cooperative')),'audio/wav')
                 else:self.send(404,{'error':'Unknown endpoint'})
             except (ValueError,KeyError) as exc:self.send(400,{'error':str(exc)})
             except Exception as exc:
@@ -134,7 +188,7 @@ if __name__=='__main__':
         print(json.dumps(report),flush=True)
         used=report['gpu_process_mib'] or report['observed_peak_delta_mib']+512
         if used > PROFILE['speech_vram_budget_mib']:
-            raise SystemExit('Speech exceeded the 3 GiB reference budget; keep the lightweight profile until tuned.')
+            raise SystemExit('Speech exceeded the configured reference budget; use BORDER_TTS_ENGINE=kokoro or the lightweight profile.')
         (ROOT/'.tools/gpu-speech-ready.json').write_text(json.dumps(report,indent=2))
     else:
         token=os.environ.get('BORDER_SPEECH_TOKEN')

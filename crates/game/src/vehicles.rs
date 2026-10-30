@@ -18,6 +18,8 @@ pub struct Panel {
     pub ordinal: usize,
     pub point: VehiclePoint,
     pub base: Quat,
+    pub half: Vec3,
+    pub offset: Vec3,
     pub truck_tailgate: bool,
     pub compartment: Option<border_scenarios::EvidenceLocation>,
 }
@@ -229,6 +231,8 @@ fn panel(
                 ordinal,
                 point,
                 base: Quat::IDENTITY,
+                half: size * 0.5,
+                offset,
                 compartment: None,
                 truck_tailgate: point == VehiclePoint::Cargo && size.z < 0.2,
             },
@@ -322,9 +326,14 @@ pub fn animate(
         let open = shift.world.as_ref().is_some_and(|w| {
             w.vehicles.iter().any(|v| {
                 v.vehicle_id == id
-                    && v.stage == VehicleStage::Stopped
+                    && matches!(
+                        v.stage,
+                        VehicleStage::Stopped | VehicleStage::Resolved | VehicleStage::Disabled
+                    )
                     && if let Some(location) = p.compartment {
-                        v.searched_compartments.contains(&location)
+                        v.open_compartments.contains(&location)
+                            && (location != border_scenarios::EvidenceLocation::Container
+                                || v.open_panels.contains(&VehiclePoint::Cargo))
                     } else {
                         v.open_panels.contains(&p.point)
                     }
@@ -336,6 +345,9 @@ pub fn animate(
                     Quat::from_rotation_x(if p.truck_tailgate { 1.2 } else { -1.0 })
                 }
                 VehiclePoint::Hood => Quat::from_rotation_x(1.0),
+                _ if p.compartment == Some(border_scenarios::EvidenceLocation::Container) => {
+                    Quat::from_rotation_x(-1.1)
+                }
                 _ if p.compartment.is_some() => Quat::from_rotation_x(1.1),
                 _ => Quat::from_rotation_y(1.0),
             }
@@ -465,6 +477,8 @@ pub fn dressing(
                     ordinal,
                     point,
                     base: Quat::IDENTITY,
+                    half: size * 0.5,
+                    offset,
                     truck_tailgate: false,
                     compartment: Some(location),
                 },

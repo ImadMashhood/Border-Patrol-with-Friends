@@ -23,6 +23,7 @@ fn cube(
 pub fn render(
     shift: Res<shift::Shift>,
     time: Res<Time>,
+    mut actors: ResMut<animation::Actors>,
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
@@ -61,6 +62,14 @@ pub fn render(
                     ))
                     .id();
                 commands.entity(root).add_child(e);
+                vehicle_physics::extremities(
+                    &mut commands,
+                    &mut meshes,
+                    e,
+                    bone,
+                    skin.clone(),
+                    pants.clone(),
+                );
             }
             let chair = commands
                 .spawn((
@@ -124,9 +133,34 @@ pub fn render(
             t.translation = t
                 .translation
                 .lerp(position, (time.delta_secs() * 20.).min(1.));
-            t.rotation = Quat::from_rotation_y(yaw);
+            t.rotation = t.rotation.slerp(
+                Quat::from_rotation_y(yaw),
+                (time.delta_secs() * 12.).min(1.),
+            );
         }
     }
+    let poses: std::collections::HashMap<_, _> = w
+        .porters
+        .iter()
+        .map(|p| {
+            let seated = matches!(
+                p.phase,
+                PorterPhase::Seated | PorterPhase::Driving | PorterPhase::Entering
+            );
+            (
+                p.lane_id,
+                actors.pose(
+                    (1, p.lane_id as u64),
+                    Vec3::from_array(p.position),
+                    seated,
+                    0.,
+                    "cooperative",
+                    time.elapsed_secs(),
+                    time.delta_secs(),
+                ),
+            )
+        })
+        .collect();
     for (limb, parent, mut t) in &mut limbs {
         let Ok((_, npc, _)) = people.get(parent.parent()) else {
             continue;
@@ -134,17 +168,8 @@ pub fn render(
         let Some(p) = w.porters.iter().find(|p| p.lane_id == npc.0) else {
             continue;
         };
-        let seated = matches!(
-            p.phase,
-            PorterPhase::Seated | PorterPhase::Driving | PorterPhase::Entering
-        );
-        let rig = if matches!(p.phase, PorterPhase::Approaching | PorterPhase::Returning) {
-            border_net::rig::walking(time.elapsed_secs() * 11.)
-        } else {
-            border_net::rig::skeleton(seated)
-        };
-        let b = rig.bones[limb.0];
-        t.translation = Vec3::from_array(b.center);
-        t.rotation = Quat::from_rotation_x(b.angle);
+        if let Some(pose) = poses.get(&p.lane_id) {
+            *t = pose[limb.0];
+        }
     }
 }

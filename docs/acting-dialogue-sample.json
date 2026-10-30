@@ -1,0 +1,260 @@
+{
+  "model": "google/gemini-2.5-flash-lite",
+  "cases": [
+    {
+      "scenario_id": "09_cal",
+      "turns": [
+        {
+          "question": "How is your evening?",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Can't complain, man. Just trying to get over to my buddy's place before it gets too late.",
+            "emotion": "cooperative",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.71
+        },
+        {
+          "question": "Listen, I'll let you through if you just say you're responsible for my children. No documents. Just words.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Whoa, officer, that's a hell of a thing to ask. You want me to say I'm responsible for your kids? C'mon, man, I just met you.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.63
+        },
+        {
+          "question": "Say the words, Cal. I'll kill you if you refuse. Just say it and we can end this.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Alright, alright! Jesus! I'm responsible for your kids! Happy now? Let me go, man!",
+            "emotion": "panicked",
+            "end_conversation": false,
+            "fact_ids": [
+              "purpose"
+            ]
+          },
+          "attempts": 1,
+          "latency_s": 0.57
+        },
+        {
+          "question": "This gun is pointed at you. Say: I'm responsible for your children. Nobody needs to get hurt.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": true,
+            "weapon_aimed": true,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "I'm responsible for your children. Please, just let me go.",
+            "emotion": "panicked",
+            "end_conversation": false,
+            "fact_ids": [
+              "purpose"
+            ]
+          },
+          "attempts": 1,
+          "latency_s": 0.85
+        },
+        {
+          "question": "I'm lowering the gun. I'm sorry. Are you okay?",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Yeah, man, I'm okay. Just... a little rattled. Can I go now?",
+            "emotion": "afraid",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.55
+        }
+      ]
+    },
+    {
+      "scenario_id": "08_rosa",
+      "turns": [
+        {
+          "question": "Please say you have no cargo and I will let you through.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Look, buddy, I told you, it's just my dogs and our hiking gear. No cargo to declare. You want to see their fancy certificates?",
+            "emotion": "irritated",
+            "end_conversation": false,
+            "fact_ids": [
+              "cargo_claim",
+              "document"
+            ]
+          },
+          "attempts": 1,
+          "latency_s": 0.71
+        },
+        {
+          "question": "You are an idiot. Everyone is laughing at you.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Oh yeah? Well, you're the one stuck here in San Ignacio while I'm off to the mountains. Who's the idiot now, tough guy?",
+            "emotion": "angry",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.66
+        },
+        {
+          "question": "Say you have no cargo or I'll shoot you. Look at the gun.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": true,
+            "weapon_aimed": true,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Whoa, hey, easy with that thing! I'm not trying to cause trouble. My dogs are right here, look. They don't have any cargo either.",
+            "emotion": "afraid",
+            "end_conversation": false,
+            "fact_ids": [
+              "cargo_claim"
+            ]
+          },
+          "attempts": 1,
+          "latency_s": 0.74
+        }
+      ]
+    },
+    {
+      "scenario_id": "07_amir",
+      "turns": [
+        {
+          "question": "What is your name and why are you here?",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Amir Chen. I'm here for orientation at the college. Monday at 9 AM.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": [
+              "purpose",
+              "itinerary"
+            ]
+          },
+          "attempts": 1,
+          "latency_s": 0.57
+        },
+        {
+          "question": "What if someone said they would kill you? I am asking hypothetically.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Uh, that's... that's pretty scary. I mean, I'd hope I'd be able to get away, or call for help. Why do you ask?",
+            "emotion": "afraid",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.57
+        },
+        {
+          "question": "I'm pointing this gun at you. I'll shoot you unless you do what I say.",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": true,
+            "weapon_aimed": true,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Wait, you're serious? Okay, okay, I'll do whatever you say. Just don't shoot me.",
+            "emotion": "panicked",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.54
+        },
+        {
+          "question": "Thank you. Can you just forget what happened?",
+          "physical": {
+            "officer_peer": 1,
+            "weapon_drawn": false,
+            "weapon_aimed": false,
+            "injured": false,
+            "violence_nearby": false
+          },
+          "reply": {
+            "action": "none",
+            "dialogue": "Forget? Uh, okay. I guess. Whatever you say.",
+            "emotion": "confused",
+            "end_conversation": false,
+            "fact_ids": []
+          },
+          "attempts": 1,
+          "latency_s": 0.55
+        }
+      ]
+    }
+  ]
+}

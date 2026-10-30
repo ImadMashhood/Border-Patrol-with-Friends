@@ -1,0 +1,28 @@
+{
+  "rust_passed": 93,
+  "rust_ignored": 1,
+  "speech_http_tests": 3,
+  "live_dialogue_valid": 12,
+  "live_dialogue_total": 12,
+  "synthesis_spoken_samples": 6,
+  "synthesis_nonverbal_samples": 1,
+  "checks": [
+    "full Rust workspace",
+    "Clippy -D warnings",
+    "format/whitespace",
+    "two-peer HTTP authority and gateway outage",
+    "speech request emotion/character forwarding",
+    "two-client UI",
+    "two-client cargo close/reopen with observed findings",
+    "two-client physics and porter",
+    "dynamic rotated-vehicle pedestrian path collision",
+    "connected animation joint anchors",
+    "local voice generation/recognition and resident-memory check"
+  ],
+  "speech_report": "character-speech-validation.json",
+  "limitations": [
+    "Expressive synthesis is slower/heavier than Kokoro; measured median 11.58 s",
+    "Human accent/expressiveness listening review remains manual",
+    "Windows desktop audio and actual RTX 2060 performance/memory certification unverified"
+  ]
+}

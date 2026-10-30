@@ -8,6 +8,7 @@ pub struct SpatialVoice {
     pub listener: [f32; 3],
     pub right: [f32; 3],
     pub active: bool,
+    pub energy: f32,
 }
 impl Default for SpatialVoice {
     fn default() -> Self {
@@ -16,6 +17,7 @@ impl Default for SpatialVoice {
             listener: [0.; 3],
             right: [1., 0., 0.],
             active: false,
+            energy: 0.,
         }
     }
 }
@@ -104,12 +106,21 @@ pub fn speak_spatial_cancellable(
     cancel: &AtomicBool,
     spatial: &Mutex<SpatialVoice>,
 ) -> Result<()> {
+    speak_spatial_expressive(text, scenario, "cooperative", cancel, spatial)
+}
+pub fn speak_spatial_expressive(
+    text: &str,
+    scenario: &str,
+    emotion: &str,
+    cancel: &AtomicBool,
+    spatial: &Mutex<SpatialVoice>,
+) -> Result<()> {
     if cancel.load(Ordering::Relaxed) {
         return Ok(());
     }
     let path = temp("spatial-voice", "wav");
     let result = (|| {
-        voice_file(text, &path, scenario)?;
+        voice_file(text, &path, scenario, emotion)?;
         if cancel.load(Ordering::Relaxed) {
             return Ok(());
         }
@@ -161,7 +172,18 @@ pub fn speak_spatial_cancellable(
                 if cancel.load(Ordering::Relaxed) {
                     return Ok(());
                 }
-                let next = spatial.lock().unwrap().gains();
+                let next = {
+                    let mut voice = spatial.lock().unwrap();
+                    voice.energy = (samples
+                        .iter()
+                        .map(|s| (*s as f32 / 32768.).powi(2))
+                        .sum::<f32>()
+                        / samples.len() as f32)
+                        .sqrt()
+                        .mul_add(6., 0.)
+                        .clamp(0., 1.);
+                    voice.gains()
+                };
                 let mut stereo = Vec::with_capacity(samples.len() * 4);
                 for (i, &sample) in samples.iter().enumerate() {
                     let mix = (i + 1) as f32 / samples.len() as f32;
@@ -200,6 +222,7 @@ pub fn speak_spatial_cancellable(
             std::thread::sleep(Duration::from_millis(10));
         }
     })();
+    spatial.lock().unwrap().energy = 0.;
     let _ = std::fs::remove_file(path);
     result
 }

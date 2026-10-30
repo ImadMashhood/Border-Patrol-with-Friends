@@ -49,6 +49,7 @@ pub fn select(
     shift: Res<shift::Shift>,
     g: Res<Patrol>,
     camera: Query<&Transform, With<Player>>,
+    panels: Query<(&vehicles::Panel, &GlobalTransform)>,
     mut focus: ResMut<Focus>,
 ) {
     focus.target = None;
@@ -174,78 +175,54 @@ pub fn select(
         if !shift.permits(v.lane_id) {
             continue;
         }
-        for point_id in [VehiclePoint::Hood, VehiclePoint::Cargo] {
-            let rear = point_id == VehiclePoint::Cargo;
-            let lift = vehicle::cab_lift(&v.kind);
-            let y = if vehicle::pickup(&v.kind) {
-                if rear { 1.3 } else { 1.13 }
-            } else {
-                0.96 + lift
+        // Hit the displayed hinge transform, including its current animation angle.
+        for (panel, transform) in &panels {
+            if 1 + panel.lane as u64 + panel.ordinal as u64 * 2 != v.vehicle_id {
+                continue;
+            }
+            let accessible = match panel.compartment {
+                Some(border_scenarios::EvidenceLocation::Container) => {
+                    v.open_panels.contains(&VehiclePoint::Cargo)
+                }
+                Some(border_scenarios::EvidenceLocation::Glovebox) => {
+                    v.physics.door_angles[1] > 0.7
+                }
+                _ => true,
             };
-            let z = if rear {
-                vehicle::rear_glass_z(&v.kind)
-            } else {
-                -1.05
-            };
-            let len = if rear {
-                (vehicle::body_half_length(&v.kind) - z).max(0.3)
-            } else {
-                vehicle::body_half_length(&v.kind) - 1.05
-            };
-            let open = v.open_panels.contains(&point_id);
-            let rx = if open {
-                if rear { -1.0 } else { 1.0 }
-            } else {
-                0.
-            };
-            let r = Quat::from_rotation_x(rx);
-            let pivot = Vec3::new(0., y, z);
-            let center = pivot + r * Vec3::new(0., 0., if rear { len * 0.5 } else { -len * 0.5 });
+            if !accessible {
+                continue;
+            }
+            let (scale, rotation, _) = transform.to_scale_rotation_translation();
             offer(
                 Target {
                     vehicle: v.vehicle_id,
-                    action: Action::Panel(point_id),
+                    action: panel
+                        .compartment
+                        .map_or(Action::Panel(panel.point), Action::Compartment),
                 },
-                point(center.to_array()),
-                Vec3::new(vehicle::spec(&v.kind).half_width - 0.02, 0.07, len * 0.5),
-                rot * r,
+                transform.transform_point(panel.offset),
+                panel.half * scale.abs() + Vec3::splat(0.035),
+                rotation,
             );
         }
-        if v.open_panels.contains(&VehiclePoint::Cargo) {
-            let pickup = vehicle::pickup(&v.kind);
-            offer(
-                Target {
-                    vehicle: v.vehicle_id,
-                    action: Action::Compartment(border_scenarios::EvidenceLocation::Container),
+        // The rear latch remains reachable while the lid/tailgate is raised.
+        offer(
+            Target {
+                vehicle: v.vehicle_id,
+                action: Action::Panel(VehiclePoint::Cargo),
+            },
+            point([
+                0.,
+                if vehicle::pickup(&v.kind) {
+                    1.24
+                } else {
+                    0.83 + vehicle::cab_lift(&v.kind)
                 },
-                point([
-                    0.,
-                    if pickup { 1.3 } else { 0.78 },
-                    if pickup { 1.6 } else { 1.7 },
-                ]),
-                Vec3::new(0.42, 0.20, 0.32),
-                rot,
-            );
-        }
-        if v.physics.door_angles[1] > 0.7 {
-            offer(
-                Target {
-                    vehicle: v.vehicle_id,
-                    action: Action::Compartment(border_scenarios::EvidenceLocation::Glovebox),
-                },
-                point([
-                    0.48,
-                    1.01 + if vehicle::pickup(&v.kind) {
-                        0.35
-                    } else {
-                        vehicle::cab_lift(&v.kind)
-                    },
-                    vehicle::spec(&v.kind).window_z - 0.385,
-                ]),
-                Vec3::new(0.22, 0.13, 0.06),
-                rot,
-            );
-        }
+                vehicle::body_half_length(&v.kind) + 0.02,
+            ]),
+            Vec3::new(0.28, 0.14, 0.07),
+            rot,
+        );
         if v.kind == "utility_truck" {
             offer(
                 Target {
@@ -330,6 +307,10 @@ pub fn input(
     if !keys.just_pressed(KeyCode::KeyE) && !automatic {
         return;
     }
+    activate(target, &mut g, &shift, &net);
+}
+pub fn activate(target: Target, g: &mut Patrol, shift: &shift::Shift, net: &Network) {
+    let id = target.vehicle;
     match target.action {
         Action::Talk => {
             if g.vehicle_id == Some(id) && g.case.is_some() {
@@ -356,7 +337,7 @@ pub fn input(
             vehicle_id: id,
             point,
         }),
-        Action::Compartment(location) => shift.send(Cmd::SearchCompartment {
+        Action::Compartment(location) => shift.send(Cmd::ToggleCompartment {
             vehicle_id: id,
             location,
         }),

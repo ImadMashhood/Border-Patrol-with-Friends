@@ -2,7 +2,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 7;
+pub const PROTOCOL_VERSION: u16 = 8;
 pub const READY_HOLD_MS: u64 = 2000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod combat;
@@ -51,6 +51,10 @@ pub struct CommandEnvelope {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ClientCommand {
+    ToggleCompartment {
+        vehicle_id: u64,
+        location: border_scenarios::EvidenceLocation,
+    },
     TogglePanel {
         vehicle_id: u64,
         point: vehicle::VehiclePoint,
@@ -238,6 +242,8 @@ pub struct VehicleView {
     pub searched_compartments: Vec<border_scenarios::EvidenceLocation>,
     pub inspected_points: Vec<vehicle::VehiclePoint>,
     pub open_panels: Vec<vehicle::VehiclePoint>,
+    #[serde(default)]
+    pub open_compartments: Vec<border_scenarios::EvidenceLocation>,
     pub physics: combat::VehiclePhysics,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -2,7 +2,7 @@
 use super::*;
 use bevy_egui::egui;
 use border_net::{VehicleStage, combat::Side};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 struct Caption {
     speaker: String,
     text: String,
@@ -14,6 +14,9 @@ struct Caption {
 pub struct Hud {
     captions: VecDeque<Caption>,
     seen: HashMap<u64, usize>,
+    findings_seen: HashSet<(u64, String)>,
+    finding: Option<(String, String, f32)>,
+    pub drew_finding: bool,
     pub cases: HashMap<u64, PublicCase>,
     last_subtitle: (Option<u64>, String),
     pub drew_hud: bool,
@@ -57,9 +60,30 @@ pub fn update(mut h: ResMut<Hud>, g: Res<Patrol>, shift: Res<shift::Shift>, time
     {
         h.captions.clear();
         h.seen.clear();
+        h.findings_seen.clear();
+        h.finding = None;
         h.cases.clear();
         h.last_subtitle = (None, String::new());
         return;
+    }
+    if let Some(world) = &shift.world {
+        for v in &world.vehicles {
+            for finding in &v.observed_evidence {
+                let fresh = h.findings_seen.insert((v.vehicle_id, finding.id.clone()));
+                if fresh
+                    && finding.location != border_scenarios::EvidenceLocation::Documents
+                    && shift.me().is_some_and(|p| {
+                        (p.position[0] - v.position[0]).hypot(p.position[2] - v.position[2]) < 7.
+                    })
+                {
+                    h.finding = Some((
+                        format!("{} · {}", v.traveler_name, finding.location.label()),
+                        finding.description.clone(),
+                        now + 10.,
+                    ));
+                }
+            }
+        }
     }
     if let (Some(id), Some(case)) = (g.vehicle_id, &g.case) {
         h.cases.insert(id, case.clone());
@@ -164,7 +188,15 @@ pub fn hint(target: interactions::Target, g: &Patrol, shift: &shift::Shift) -> S
                 .trim()
                 .to_lowercase()
         ),
-        Action::Compartment(location) => format!("[E] Search {}", location.label().to_lowercase()),
+        Action::Compartment(location) => format!(
+            "[E] {} {}",
+            if v.is_some_and(|v| v.open_compartments.contains(&location)) {
+                "Close"
+            } else {
+                "Open / search"
+            },
+            location.label().to_lowercase()
+        ),
         Action::Body(_) => "[HOLD E] Grab body · release to drop".into(),
         Action::Porter(_) => "[E] Ask porter to clear vehicle".into(),
         Action::Ready => "[HOLD E · 2s] Start shift".into(),
@@ -288,6 +320,66 @@ pub fn draw(
                 .interactable(false)
                 .show(ctx, |ui| {
                     ui.small("HOLD E · Carrying body     Release E to drop");
+                });
+        }
+        let aimed_finding = focus.target.and_then(|target| {
+            let v = shift
+                .world
+                .as_ref()?
+                .vehicles
+                .iter()
+                .find(|v| v.vehicle_id == target.vehicle)?;
+            let location = match target.action {
+                interactions::Action::Panel(border_net::vehicle::VehiclePoint::Cargo)
+                    if v.open_panels
+                        .contains(&border_net::vehicle::VehiclePoint::Cargo) =>
+                {
+                    border_scenarios::EvidenceLocation::Cargo
+                }
+                interactions::Action::Compartment(l) if v.open_compartments.contains(&l) => l,
+                _ => return None,
+            };
+            let details = v
+                .observed_evidence
+                .iter()
+                .filter(|f| f.location == location)
+                .map(|f| f.description.as_str())
+                .collect::<Vec<_>>()
+                .join("\n");
+            if details.is_empty() {
+                None
+            } else {
+                Some((
+                    format!("{} · {}", v.traveler_name, location.label()),
+                    details,
+                    1.,
+                ))
+            }
+        });
+        let finding = aimed_finding.or_else(|| {
+            h.finding
+                .as_ref()
+                .filter(|(_, _, until)| *until > now)
+                .map(|(title, text, until)| {
+                    (
+                        title.clone(),
+                        text.clone(),
+                        ((*until - now) / 1.2).clamp(0., 1.),
+                    )
+                })
+        });
+        if let Some((title, details, opacity)) = finding {
+            h.drew_finding = true;
+            egui::Area::new("physical-search-finding".into())
+                .anchor(egui::Align2::CENTER_BOTTOM, [0., -115.])
+                .interactable(false)
+                .show(ctx, |ui| {
+                    ui.set_width((ctx.viewport_rect().width() * 0.42).clamp(280., 560.));
+                    ui.set_opacity(opacity);
+                    frame().show(ui, |ui| {
+                        ui.label(egui::RichText::new(title).size(11.).color(ui::GOLD));
+                        ui.label(egui::RichText::new(details).size(14.));
+                    });
                 });
         }
         if !h.captions.is_empty() {

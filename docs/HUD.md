@@ -33,7 +33,7 @@ Use the vehicle selector to review a record. **Details & documents** shows vehic
 
 ## Face-positioned speech
 
-Traveler voice now uses the actual rendered head bone's face position after transform propagation, including seat/vehicle transforms and exit/walking animation. The camera supplies listener position and right-ear direction. Mono Kokoro/Piper output becomes stereo with equal-power directional panning and smooth distance attenuation, fading to silence by 18 metres. The output updates gains every 10 milliseconds and interpolates between gains to avoid clicks as the officer moves or turns. It streams through the existing ffplay adapter and does not require additional native audio development packages.
+Traveler voice now uses the actual rendered head bone's face position after transform propagation, including seat/vehicle transforms and exit/walking animation. The camera supplies listener position and right-ear direction. Mono character voice output becomes stereo with equal-power directional panning and smooth distance attenuation, fading to silence by 18 metres. The output updates gains every 10 milliseconds and interpolates between gains to avoid clicks as the officer moves or turns. It streams through the existing ffplay adapter and does not require additional native audio development packages.
 
 Playback cancellation, microphone pausing, generation checks and the bundled “Excuse me?” clips are preserved. The source follows the face rather than the camera or screen center. This is stereo spatial placement with distance rolloff; it does not add HRTF processing, wall occlusion or voice chat between players. As before, each client's traveler playback belongs to that client's active conversation.
 
@@ -57,3 +57,5 @@ python3 scripts/test_graphical_shift.py --ui
 SDL_AUDIODRIVER=dummy cargo run --locked -p border-speech --example spatial_smoke
 target/debug/border-game --scene-view=service-road --smoke-test
 ```
+
+The [character acting and inspection update](CHARACTER_ACTING.md) adds expressive voices, live cargo finding cards, repeatable lid/compartment closing and obstacle-aware pedestrian paths.
