@@ -18,7 +18,12 @@ fn primary(ui: &mut egui::Ui, label: &str) -> bool {
     )
     .clicked()
 }
-pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>) -> Result {
+pub fn draw(
+    mut contexts: EguiContexts,
+    mut g: ResMut<Patrol>,
+    net: Res<Network>,
+    player: Query<&Transform, With<Player>>,
+) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mut visuals = egui::Visuals::dark();
     visuals.panel_fill = egui::Color32::from_rgb(17, 30, 29);
@@ -51,7 +56,7 @@ pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>
             });
         });
     egui::TopBottomPanel::bottom("footer").frame(egui::Frame::new().fill(egui::Color32::from_rgb(17,30,29)).inner_margin(egui::Margin::symmetric(25,12))).show(ctx,|ui| {
-        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE     MOUSE  LOOK     E  INTERVIEW     TAB  LOOK / TYPE     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
+        ui.horizontal(|ui| {tag(ui,"W A S D  MOVE   SHIFT  JOG   M  MAP     MOUSE  LOOK     E  INTERVIEW     TAB  LOOK / TYPE     ESC  RELEASE");ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{tag(ui,&format!("{} CORRECT",g.score));
             if g.phase == Phase::Interview {
                 tag(ui, if !g.mic_enabled {"MIC OFF"} else if g.mic_failed {"MIC UNAVAILABLE"} else if g.pending || g.speaking || g.speech_pending {"MIC PAUSED"} else {"MIC LISTENING"});
             }});});
@@ -91,10 +96,20 @@ pub fn draw(mut contexts: EguiContexts, mut g: ResMut<Patrol>, net: Res<Network>
                 });
         }
     }
-    if g.phase == Phase::Approach && !g.looking && !g.overlay {
+    if g.map_open {
+        site_map(
+            ctx,
+            player.single().map(|p| p.translation).unwrap_or_default(),
+        );
+    }
+    if g.phase == Phase::Approach
+        && !g.looking
+        && !g.overlay
+        && !std::env::args().any(|a| a.starts_with("--scene-view="))
+    {
         egui::Window::new("FIRST WATCH").anchor(egui::Align2::LEFT_BOTTOM,[28.,-75.]).resizable(false).collapsible(false).default_width(340.).show(ctx,|ui| {
             ui.add_space(6.);ui.label(egui::RichText::new("Every story has a crossing.").size(23.).color(GOLD));
-            ui.add_space(10.);ui.label("Walk to the teal sedan. Aim at it and press E to begin an interview.");ui.add_space(8.);
+            ui.add_space(10.);ui.label("Explore the office, holding yard and river bridge. Press M for the site map. Walk to the teal sedan. Aim at it and press E to begin an interview.");ui.add_space(8.);
             ui.label("Ask about their trip, compare the documents, and request secondary inspection when needed. Decide from evidence.");ui.add_space(12.);
             if primary(ui,"BEGIN PATROL") {g.looking=true;}
             ui.add_space(6.);tag(ui,"10 TRAVELERS · TEXT ALWAYS AVAILABLE");
@@ -245,4 +260,168 @@ fn decide(g: &mut Patrol, net: &Network, d: border_scenarios::Decision) {
     g.pending = true;
     g.error.clear();
     net.decide(g.generation, g.case.as_ref().unwrap().session_id.clone(), d);
+}
+
+/// Project location signs into the world without external font or texture assets.
+pub fn landmarks(
+    mut contexts: EguiContexts,
+    signs: Res<scene::Landmarks>,
+    camera: Query<(&Camera, &GlobalTransform), With<Player>>,
+    patrol: Res<Patrol>,
+    solids: Query<(&Transform, &Solid), Without<Player>>,
+) -> Result {
+    if patrol.overlay {
+        return Ok(());
+    }
+    let ctx = contexts.ctx_mut()?;
+    let Ok((camera, transform)) = camera.single() else {
+        return Ok(());
+    };
+    let viewport = ctx.viewport_rect();
+    for (i, (label, position)) in signs.0.iter().enumerate() {
+        let distance = transform.translation().distance(*position);
+        if distance > 44. {
+            continue;
+        }
+        let origin = transform.translation();
+        let direction = (*position - origin).normalize_or_zero();
+        if solids.iter().any(|(t, s)| {
+            ray_box(
+                origin,
+                direction,
+                t.translation - s.half,
+                t.translation + s.half,
+            )
+            .is_some_and(|hit| hit < distance - 0.4)
+        }) {
+            continue;
+        }
+        let Ok(point) = camera.world_to_viewport(transform, *position) else {
+            continue;
+        };
+        if point.x < 20.
+            || point.y < 115.
+            || point.x > viewport.width() - 20.
+            || point.y > viewport.height() - 75.
+        {
+            continue;
+        }
+        egui::Area::new(egui::Id::new(("world_sign", i)))
+            .order(egui::Order::Background)
+            .interactable(false)
+            .pivot(egui::Align2::CENTER_CENTER)
+            .fixed_pos(egui::pos2(point.x, point.y))
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(20, 38, 32, 220))
+                    .inner_margin(5.)
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(*label)
+                                .size(if distance < 15. { 13. } else { 11. })
+                                .strong()
+                                .color(GOLD),
+                        );
+                    });
+            });
+    }
+    Ok(())
+}
+
+fn site_map(ctx: &egui::Context, position: Vec3) {
+    egui::Window::new("SAN IGNACIO / SITE MAP")
+        .anchor(egui::Align2::RIGHT_BOTTOM, [-25., -80.])
+        .resizable(false)
+        .collapsible(false)
+        .show(ctx, |ui| {
+            let (rect, _) = ui.allocate_exact_size(egui::vec2(300., 360.), egui::Sense::hover());
+            let painter = ui.painter_at(rect);
+            let point = |x: f32, z: f32| {
+                egui::pos2(
+                    rect.left() + (x + 30.) / 60. * rect.width(),
+                    rect.top() + (z + 36.) / 116. * rect.height(),
+                )
+            };
+            let area = |a: (f32, f32), b: (f32, f32)| {
+                egui::Rect::from_two_pos(point(a.0, a.1), point(b.0, b.1))
+            };
+            painter.rect_filled(rect, 2., egui::Color32::from_rgb(171, 137, 91));
+            painter.rect_filled(
+                area((-30., 36.), (30., 65.)),
+                0.,
+                egui::Color32::from_rgb(55, 113, 112),
+            );
+            painter.rect_filled(
+                area((-3.5, -34.), (10.5, 79.)),
+                0.,
+                egui::Color32::from_rgb(62, 69, 64),
+            );
+            for (name, a, b) in [
+                ("OFFICE", (-17., -12.5), (-7., -3.5)),
+                ("STORAGE", (-25.5, -12.), (-18.5, -4.)),
+                ("HOLDING", (-20., -28.), (-8., -18.)),
+                ("SEARCH", (13., -11.), (23., 9.)),
+            ] {
+                let r = area(a, b);
+                painter.rect_filled(r, 1., egui::Color32::from_rgb(33, 63, 51));
+                painter.text(
+                    r.center(),
+                    egui::Align2::CENTER_CENTER,
+                    name,
+                    egui::FontId::monospace(9.),
+                    egui::Color32::WHITE,
+                );
+            }
+            for (a, b) in [((-30., 32.), (-3.7, 32.)), ((10.7, 32.), (30., 32.))] {
+                painter.line_segment(
+                    [point(a.0, a.1), point(b.0, b.1)],
+                    egui::Stroke::new(3., egui::Color32::from_rgb(92, 51, 35)),
+                );
+            }
+            for x in [-3.35, 10.35] {
+                painter.line_segment([point(x, 35.), point(x, 66.)], egui::Stroke::new(2., GOLD));
+            }
+            painter.text(
+                point(3.5, 50.),
+                egui::Align2::CENTER_CENTER,
+                "BRIDGE",
+                egui::FontId::monospace(10.),
+                GOLD,
+            );
+            painter.text(
+                point(3.5, 0.),
+                egui::Align2::CENTER_CENTER,
+                "1   2",
+                egui::FontId::monospace(12.),
+                GOLD,
+            );
+            painter.text(
+                point(-20., 1.),
+                egui::Align2::CENTER_CENTER,
+                "TEXAS",
+                egui::FontId::monospace(11.),
+                egui::Color32::WHITE,
+            );
+            painter.text(
+                point(22., 49.),
+                egui::Align2::CENTER_CENTER,
+                "RIVER",
+                egui::FontId::monospace(10.),
+                egui::Color32::WHITE,
+            );
+            painter.circle_filled(point(position.x, position.z), 4., egui::Color32::WHITE);
+            ui.label(
+                egui::RichText::new("N ↑  •  White dot: you  •  M: close")
+                    .size(11.)
+                    .color(GOLD),
+            );
+            ui.label(
+                egui::RichText::new(
+                    "Fenced yard + bridge are walkable.
+Desert and future lanes are scenery.",
+                )
+                .size(11.)
+                .color(MUTED),
+            );
+        });
 }

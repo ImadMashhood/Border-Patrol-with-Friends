@@ -58,6 +58,7 @@ struct Patrol {
     speech_pending: bool,
     request_focus: bool,
     settings_open: bool,
+    map_open: bool,
 }
 impl Patrol {
     fn new(ids: Vec<String>, seed: u64) -> Self {
@@ -95,6 +96,7 @@ impl Patrol {
             speech_pending: false,
             request_focus: false,
             settings_open: false,
+            map_open: std::env::args().any(|a| a == "--show-map"),
         }
     }
     fn reset_case(&mut self) {
@@ -160,7 +162,7 @@ fn main() {
     let interview_smoke = std::env::args().any(|a| a == "--smoke-interview");
     let smoke = interview_smoke || std::env::args().any(|a| a == "--smoke-test");
     let mut app = App::new();
-    app.insert_resource(ClearColor(Color::srgb(0.62, 0.76, 0.78)))
+    app.insert_resource(ClearColor(Color::srgb(0.73, 0.79, 0.79)))
         .insert_resource(Patrol::new(ids, seed))
         .insert_resource(net)
         .add_plugins(DefaultPlugins.set(WindowPlugin {
@@ -178,7 +180,8 @@ fn main() {
         .add_plugins(EguiPlugin::default())
         .add_systems(Startup, scene::setup)
         .add_systems(Update, (controls, receive, progress, voice).chain())
-        .add_systems(EguiPrimaryContextPass, ui::draw);
+        .add_systems(Update, scene::atmosphere)
+        .add_systems(EguiPrimaryContextPass, (ui::landmarks, ui::draw).chain());
     if smoke {
         // Rendering smoke checks never record the room or play spoken audio.
         let mut patrol = app.world_mut().resource_mut::<Patrol>();
@@ -211,6 +214,9 @@ fn controls(
         g.looking = false;
         g.settings_open = false;
     }
+    if keys.just_pressed(KeyCode::KeyM) && !g.overlay && !g.settings_open {
+        g.map_open = !g.map_open;
+    }
     if keys.just_pressed(KeyCode::Tab) {
         g.looking = !g.looking;
     }
@@ -237,19 +243,23 @@ fn controls(
             (keys.pressed(KeyCode::KeyW) as i32 - keys.pressed(KeyCode::KeyS) as i32) as f32,
         )
         .normalize_or_zero();
-        let delta = (r * axis.x + f * axis.y) * time.delta_secs().min(0.05) * 3.2;
+        let delta = (r * axis.x + f * axis.y)
+            * time.delta_secs().min(0.05)
+            * if keys.pressed(KeyCode::ShiftLeft) {
+                5.8
+            } else {
+                3.2
+            };
         for movement in [Vec3::new(delta.x, 0., 0.), Vec3::new(0., 0., delta.z)] {
             let candidate = t.translation + movement;
             let blocked = solids.iter().any(|(s, b)| {
                 (candidate.x - s.translation.x).abs() < b.half.x + 0.22
                     && (candidate.z - s.translation.z).abs() < b.half.z + 0.22
             });
-            if !blocked {
+            if !blocked && scene::walkable(candidate) {
                 t.translation = candidate;
             }
         }
-        t.translation.x = t.translation.x.clamp(-11., 11.);
-        t.translation.z = t.translation.z.clamp(-12., 12.);
     }
     let direction = *t.forward();
     g.aiming = matches!(g.phase, Phase::Approach | Phase::Interview)
@@ -518,10 +528,14 @@ fn smoke_test(
         commands
             .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
             .observe(bevy::render::view::screenshot::save_to_disk(
-                if smoke.interview {
-                    "output/interview.png"
+                if let Some(view) = std::env::args()
+                    .find_map(|a| a.strip_prefix("--scene-view=").map(str::to_owned))
+                {
+                    format!("output/scene-{view}.png")
+                } else if smoke.interview {
+                    "output/interview.png".to_owned()
                 } else {
-                    "output/checkpoint.png"
+                    "output/checkpoint.png".to_owned()
                 },
             ));
     }

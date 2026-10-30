@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Foundation status:** Parts 1–3 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. The graphical co-op loop is delivered in later Parts.
+**Build status:** Parts 1–4 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. The graphical co-op loop is delivered in later Parts.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -68,12 +68,16 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 **Technical deliverable:** Build the initial office and two-lane scene, inspection areas, navigable bounds and placeholder art. Reserve space for later perimeter and six-lane expansion without building the whole world yet.
 
-- [ ] Establish a stylized, low-poly, chaotic and comedic tone rather than a realistic policy simulation.
-- [ ] Include car queues, barriers and inspection bays.
-- [ ] Include a detention area, administration office and equipment storage.
-- [ ] Use distant mountains, dunes, dust, haze and simplified scenery to make the fence appear to extend for miles without simulating miles of terrain.
-- [ ] Keep the surrounding landscape mostly as set dressing and make actual navigable bounds explicit.
-- [ ] Use intentionally low-poly art with good lighting, cohesive materials and readable silhouettes.
+- [x] Establish a stylized, low-poly, chaotic and comedic tone rather than a realistic policy simulation.
+- [x] Include car queues, barriers and inspection bays.
+- [x] Include a detention area, administration office and equipment storage.
+- [x] Use distant mountains, dunes, dust, haze and simplified scenery to make the fence appear to extend for miles without simulating miles of terrain.
+- [x] Keep the surrounding landscape mostly as set dressing and make actual navigable bounds explicit.
+- [x] Use intentionally low-poly art with good lighting, cohesive materials and readable silhouettes.
+- [x] Span the river with a supported road bridge and place the long border fence on the Texas bank, with a checkpoint entrance at the bridge.
+- [x] Add branching cacti, desert bushes, rocks, riverbank detail and navigable exploration routes through the checkpoint and bridge.
+
+**Validation:** [Scene inventory, controls, screenshots and checks](docs/SCENE.md). Queue activation, the ready door and replicated gameplay remain in their later Parts.
 
 **Exit gate:** The compact scene loads with clear lane, office, inspection and detention spaces; the art and map boundaries are readable.
 

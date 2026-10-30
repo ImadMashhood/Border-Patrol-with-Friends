@@ -4,7 +4,9 @@ Run terminal commands in this guide from the repository root. This guide describ
 
 A Rust / Bevy first-person checkpoint prototype. Interview ten fictional travelers at **San Ignacio, a fictional border crossing in Texas**, compare their accounts with documents and cargo, and decide who crosses. Exactly seven honest travelers and three smugglers. Built from primitive meshes; no art downloads required.
 
-![San Ignacio checkpoint](checkpoint.png)
+![San Ignacio river checkpoint](san-ignacio-overview.webp)
+
+The expanded [Part 4 scene](SCENE.md) includes a river bridge, Texas-bank fence, two lanes, an enterable office, storage, holding yard and secondary bay. Press **M** for the site map; hold **left Shift** to jog.
 
 ## Launch from a terminal
 
