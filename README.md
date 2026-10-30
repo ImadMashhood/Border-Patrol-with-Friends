@@ -71,13 +71,15 @@ Every checklist detail from the unabridged design is retained, including repeate
 - [x] Establish a stylized, low-poly, chaotic and comedic tone rather than a realistic policy simulation.
 - [x] Include car queues, barriers and inspection bays.
 - [x] Include a detention area, administration office and equipment storage.
-- [x] Use distant mountains, dunes, dust, haze and simplified scenery to make the fence appear to extend for miles without simulating miles of terrain.
+- [x] Use distant rocky ridges and outcrops, dust, haze and simplified scenery to make the fence appear to extend for miles without simulating miles of terrain.
 - [x] Keep the surrounding landscape mostly as set dressing and make actual navigable bounds explicit.
 - [x] Use intentionally low-poly art with good lighting, cohesive materials and readable silhouettes.
 - [x] Span the river with a supported road bridge and place the long border fence on the Texas bank, with a checkpoint entrance at the bridge.
 - [x] Add branching cacti, desert bushes, rocks, riverbank detail and navigable exploration routes through the checkpoint and bridge.
 
-**Validation:** [Scene inventory, controls, screenshots and checks](docs/SCENE.md). Queue activation, the ready door and replicated gameplay remain in their later Parts.
+**Art direction update:** Keep the compound open with no enclosure fences; retain only the riverbank border wall and bridge guardrails. Use a clean textured cinderblock office and clean automotive paint. The latest direction supersedes the original dunes: use rough sandy terrain, chipped rocks, dry trees/scrub, weathered surfaces and detailed clouds. Roads continue beyond the site and bend into distant haze.
+
+**Validation:** [Scene inventory, timed solo traffic, controls, screenshots and checks](docs/SCENE.md). The ready door and replicated gameplay remain in their later Parts.
 
 **Exit gate:** The compact scene loads with clear lane, office, inspection and detention spaces; the art and map boundaries are readable.
 
@@ -100,6 +102,8 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Exit gate:** The host or ready majority can start a shift through the three-second door interaction, and both clients agree on the ten-minute clock.
 
 ## Part 6 — Implement lane and vehicle lifecycle systems
+
+**Prototype progress:** Timed solo arrivals, braking, queue gaps, two animated barriers, departures and next-case handoff are now visible in `./play.sh`. The checks below still require the complete host-integrated lifecycle, vehicle types and interactions.
 
 **Depends on:** Parts 3–5.
 

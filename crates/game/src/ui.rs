@@ -23,6 +23,8 @@ pub fn draw(
     mut g: ResMut<Patrol>,
     net: Res<Network>,
     player: Query<&Transform, With<Player>>,
+    vehicles: Query<&traffic::Vehicle>,
+    mut traffic_state: ResMut<traffic::Traffic>,
 ) -> Result {
     let ctx = contexts.ctx_mut()?;
     let mut visuals = egui::Visuals::dark();
@@ -96,6 +98,36 @@ pub fn draw(
                 });
         }
     }
+    if g.phase == Phase::Approach
+        && !g.overlay
+        && let Some(v) = vehicles
+            .iter()
+            .find(|v| v.lane == 0 && v.ordinal == g.position)
+    {
+        egui::Area::new("arrival_status".into())
+            .anchor(egui::Align2::CENTER_TOP, [0., 95.])
+            .interactable(false)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(egui::Color32::from_rgba_unmultiplied(17, 30, 29, 225))
+                    .inner_margin(8.)
+                    .show(ui, |ui| {
+                        ui.label(
+                            egui::RichText::new(if v.distance > 0. {
+                                format!(
+                                    "NEXT TRAVELER APPROACHING  ·  {:.0} m TO STOP",
+                                    v.distance.ceil()
+                                )
+                            } else {
+                                "LANE 1  ·  READY FOR INTERVIEW".into()
+                            })
+                            .monospace()
+                            .size(12.)
+                            .color(GOLD),
+                        );
+                    });
+            });
+    }
     if g.map_open {
         site_map(
             ctx,
@@ -109,7 +141,7 @@ pub fn draw(
     {
         egui::Window::new("FIRST WATCH").anchor(egui::Align2::LEFT_BOTTOM,[28.,-75.]).resizable(false).collapsible(false).default_width(340.).show(ctx,|ui| {
             ui.add_space(6.);ui.label(egui::RichText::new("Every story has a crossing.").size(23.).color(GOLD));
-            ui.add_space(10.);ui.label("Explore the office, holding yard and river bridge. Press M for the site map. Walk to the teal sedan. Aim at it and press E to begin an interview.");ui.add_space(8.);
+            ui.add_space(10.);ui.label("Explore the office, holding yard and river bridge. Press M for the site map. Wait for the next car to stop at Lane 1. Walk to its driver window. Aim at it and press E to begin an interview.");ui.add_space(8.);
             ui.label("Ask about their trip, compare the documents, and request secondary inspection when needed. Decide from evidence.");ui.add_space(12.);
             if primary(ui,"BEGIN PATROL") {g.looking=true;}
             ui.add_space(6.);tag(ui,"10 TRAVELERS · TEXT ALWAYS AVAILABLE");
@@ -211,7 +243,7 @@ pub fn draw(
                     if !r.missed_clues.is_empty(){tag(ui,"MISSED PHYSICAL CHECK");for clue in &r.missed_clues{ui.label(clue);}}
                 });
             }
-            ui.add_space(12.);if primary(ui,"CLOSE FILE & CALL NEXT CAR"){g.phase=Phase::Departing;g.overlay=false;g.departure=0.;g.looking=true;}
+            ui.add_space(12.);if primary(ui,"CLOSE FILE & CALL NEXT CAR"){g.phase=Phase::Departing;g.overlay=false;g.looking=true;}
         });
     }
     if g.phase == Phase::Complete {
@@ -233,6 +265,7 @@ pub fn draw(
                 );
                 ui.add_space(18.);
                 if primary(ui, "START ANOTHER SHIFT") {
+                    traffic_state.restart = true;
                     g.position = 0;
                     g.score = 0;
                     g.reset_case();
@@ -338,7 +371,7 @@ fn site_map(ctx: &egui::Context, position: Vec3) {
             let painter = ui.painter_at(rect);
             let point = |x: f32, z: f32| {
                 egui::pos2(
-                    rect.left() + (x + 30.) / 60. * rect.width(),
+                    rect.left() + (x + 36.) / 72. * rect.width(),
                     rect.top() + (z + 36.) / 116. * rect.height(),
                 )
             };
@@ -417,7 +450,7 @@ fn site_map(ctx: &egui::Context, position: Vec3) {
             );
             ui.label(
                 egui::RichText::new(
-                    "Fenced yard + bridge are walkable.
+                    "Checkpoint grounds + bridge are walkable.
 Desert and future lanes are scenery.",
                 )
                 .size(11.)

@@ -1,5 +1,7 @@
 mod network;
 mod scene;
+mod surfaces;
+mod traffic;
 mod ui;
 use bevy::{
     input::mouse::AccumulatedMouseMotion,
@@ -44,7 +46,6 @@ struct Patrol {
     secondary: bool,
     evidence_open: bool,
     reveal: Option<Reveal>,
-    departure: f32,
     generation: u64,
     muted: bool,
     mic_device: String,
@@ -82,7 +83,6 @@ impl Patrol {
             secondary: false,
             evidence_open: false,
             reveal: None,
-            departure: 0.,
             generation: 0,
             muted: false,
             mic_device: "default".into(),
@@ -111,7 +111,6 @@ impl Patrol {
         self.secondary = false;
         self.evidence_open = false;
         self.reveal = None;
-        self.departure = 0.;
         self.generation += 1;
         self.mic = None;
         self.mic_active = false;
@@ -125,8 +124,6 @@ struct Player {
     yaw: f32,
     pitch: f32,
 }
-#[derive(Component)]
-struct Car;
 #[derive(Component)]
 struct Barrier;
 #[derive(Component)]
@@ -162,9 +159,10 @@ fn main() {
     let interview_smoke = std::env::args().any(|a| a == "--smoke-interview");
     let smoke = interview_smoke || std::env::args().any(|a| a == "--smoke-test");
     let mut app = App::new();
-    app.insert_resource(ClearColor(Color::srgb(0.73, 0.79, 0.79)))
+    app.insert_resource(ClearColor(Color::srgb(0.57, 0.72, 0.82)))
         .insert_resource(Patrol::new(ids, seed))
         .insert_resource(net)
+        .init_resource::<traffic::Traffic>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Border Patrol with Friends • San Ignacio".into(),
@@ -179,7 +177,10 @@ fn main() {
         }))
         .add_plugins(EguiPlugin::default())
         .add_systems(Startup, scene::setup)
-        .add_systems(Update, (controls, receive, progress, voice).chain())
+        .add_systems(
+            Update,
+            (controls, receive, traffic::progress, traffic::dust, voice).chain(),
+        )
         .add_systems(Update, scene::atmosphere)
         .add_systems(EguiPrimaryContextPass, (ui::landmarks, ui::draw).chain());
     if smoke {
@@ -208,7 +209,15 @@ fn controls(
     mut player: Query<(&mut Transform, &mut Player)>,
     solids: Query<(&Transform, &Solid), Without<Player>>,
     mut cursor: Single<&mut CursorOptions>,
+    cars: Query<(&Transform, &traffic::Vehicle), Without<Player>>,
+    smoke: Option<Res<SmokeTest>>,
 ) {
+    if smoke.is_some() {
+        g.looking = false;
+        cursor.visible = true;
+        cursor.grab_mode = CursorGrabMode::None;
+        return;
+    }
     if keys.just_pressed(KeyCode::Escape) {
         g.overlay = false;
         g.looking = false;
@@ -263,13 +272,19 @@ fn controls(
     }
     let direction = *t.forward();
     g.aiming = matches!(g.phase, Phase::Approach | Phase::Interview)
-        && ray_box(
-            t.translation,
-            direction,
-            Vec3::new(-1.05, 0.2, -2.25),
-            Vec3::new(1.05, 1.85, 2.25),
-        )
-        .is_some_and(|d| d <= 3.);
+        && cars
+            .iter()
+            .find(|(_, v)| v.lane == 0 && v.ordinal == g.position)
+            .is_some_and(|(car, v)| {
+                v.distance == 0.
+                    && ray_box(
+                        t.translation,
+                        direction,
+                        car.translation + Vec3::new(-1.05, 0.2, -2.25),
+                        car.translation + Vec3::new(1.05, 1.85, 2.25),
+                    )
+                    .is_some_and(|d| d <= 3.)
+            });
     if keys.just_pressed(KeyCode::KeyE) && g.aiming && !g.pending && (!g.overlay || g.looking) {
         g.overlay = true;
         g.looking = false;
@@ -409,49 +424,6 @@ fn receive(mut g: ResMut<Patrol>, net: Res<Network>) {
         }
     }
 }
-fn progress(
-    time: Res<Time>,
-    mut g: ResMut<Patrol>,
-    mut cars: Query<&mut Transform, (With<Car>, Without<Barrier>)>,
-    mut barriers: Query<&mut Transform, (With<Barrier>, Without<Car>)>,
-) {
-    if g.phase != Phase::Departing {
-        return;
-    }
-    g.departure += time.delta_secs();
-    let admitted = g
-        .reveal
-        .as_ref()
-        .is_some_and(|r| r.decision == border_scenarios::Decision::Admit);
-    for mut t in &mut barriers {
-        t.rotation = Quat::from_rotation_z(if admitted {
-            g.departure.min(1.) * -1.35
-        } else {
-            0.
-        });
-    }
-    for mut t in &mut cars {
-        t.translation.z =
-            if admitted { -1. } else { 1. } * (g.departure - 0.8).max(0.).powi(2) * 5.;
-    }
-    if g.departure > 2.8 {
-        g.position += 1;
-        if g.position == g.ids.len() {
-            g.phase = Phase::Complete;
-            g.overlay = true;
-            g.looking = false;
-        } else {
-            g.reset_case();
-            g.looking = true;
-        }
-        for mut t in &mut cars {
-            t.translation.z = 0.;
-        }
-        for mut t in &mut barriers {
-            t.rotation = Quat::IDENTITY;
-        }
-    }
-}
 fn voice(mut g: ResMut<Patrol>, net: Res<Network>) {
     if g.phase != Phase::Interview || g.case.is_none() || !g.mic_enabled {
         g.mic = None;
@@ -482,10 +454,16 @@ fn smoke_test(
     mut exit: MessageWriter<bevy::app::AppExit>,
     mut g: ResMut<Patrol>,
     net: Res<Network>,
+    cars: Query<&traffic::Vehicle>,
 ) {
     smoke.elapsed += time.delta_secs();
     if smoke.interview {
-        if smoke.elapsed > 1. && smoke.step == 0 {
+        if smoke.elapsed > 1.
+            && smoke.step == 0
+            && cars
+                .iter()
+                .any(|v| v.lane == 0 && v.ordinal == g.position && v.distance == 0.)
+        {
             smoke.step = 1;
             g.pending = true;
             g.overlay = true;
@@ -504,7 +482,7 @@ fn smoke_test(
             g.pending = true;
             smoke.step = 2;
         }
-        if smoke.elapsed > 7.
+        if smoke.elapsed > 13.
             && smoke.step == 2
             && !g.pending
             && let Some(case) = &g.case
@@ -513,7 +491,7 @@ fn smoke_test(
             g.pending = true;
             smoke.step = 3;
         }
-        if smoke.elapsed > 9. && smoke.step == 3 && !g.pending {
+        if smoke.elapsed > 16. && smoke.step == 3 && !g.pending {
             smoke.step = 4;
             commands
                 .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
@@ -522,7 +500,7 @@ fn smoke_test(
                 ));
         }
     }
-    if smoke.elapsed > 6. && !smoke.capture {
+    if smoke.elapsed > if smoke.interview { 11. } else { 6. } && !smoke.capture {
         smoke.capture = true;
         std::fs::create_dir_all("output").ok();
         commands
@@ -539,8 +517,16 @@ fn smoke_test(
                 },
             ));
     }
-    if smoke.elapsed > if smoke.interview { 12. } else { 9. } {
-        exit.write(bevy::app::AppExit::Success);
+    if smoke.elapsed > if smoke.interview { 20. } else { 9. } {
+        if smoke.interview && (smoke.step < 4 || !g.secondary || !g.error.is_empty()) {
+            error!(
+                "Interview smoke failed: step={}, secondary={}, error={}",
+                smoke.step, g.secondary, g.error
+            );
+            exit.write(bevy::app::AppExit::error());
+        } else {
+            exit.write(bevy::app::AppExit::Success);
+        }
     }
 }
 #[cfg(test)]

@@ -6,7 +6,7 @@ A Rust / Bevy first-person checkpoint prototype. Interview ten fictional travele
 
 ![San Ignacio river checkpoint](san-ignacio-overview.webp)
 
-The expanded [Part 4 scene](SCENE.md) includes a river bridge, Texas-bank fence, two lanes, an enterable office, storage, holding yard and secondary bay. Press **M** for the site map; hold **left Shift** to jog.
+The expanded [Part 4 scene](SCENE.md) includes a river bridge, Texas-bank fence, two lanes, an enterable office, storage, holding yard and secondary bay. Cars now approach over time, queue, stop for interview and drive away after processing. The roads bend into a rough, rocky desert with detailed surface textures, scrub, clouds and dust. Press **M** for the site map; hold **left Shift** to jog.
 
 ## Launch from a terminal
 
@@ -85,7 +85,7 @@ python3 scripts/smoke_live.py
 ./play.sh --smoke-test
 ```
 
-The API smoke test starts a temporary offline service on 13847, runs 30 exchanges per case, inspects evidence, commits all ten correct decisions, and tests auth/input/state/budget errors. The graphical smoke mode saves `output/checkpoint.png` then exits. `./play.sh --smoke-interview` also exercises an interview and secondary inspection, saving `output/interview.png` and `output/evidence.png`. It is a rendering smoke check, not a human playthrough. CI is configured for Linux and Windows; an actual Windows run is not yet verified.
+The API smoke test starts a temporary offline service on 13847, runs 30 exchanges per case, inspects evidence, commits all ten correct decisions, and tests auth/input/state/budget errors. The graphical smoke mode saves `output/checkpoint.png` then exits. `./play.sh --smoke-interview` also exercises an interview and secondary inspection, saving `output/interview.png` and `output/evidence.png` after the first car has arrived. It is a rendering smoke check, not a human playthrough. CI is configured for Linux and Windows; an actual Windows run is not yet verified.
 
 Scenario data: `assets/scenarios/*.json`. Each contains personality, coherent immutable truth, initial cover stories for smugglers, document/cargo evidence, contradiction references and offline actor guidance. The live model receives only initial cover facts from the actor fields, not canned repetition/confession lines. The loader rejects malformed packs and requires exactly ten unique scenarios, three smugglers and fixed unique seeds. Unit tests run 300 authored exchanges and check disclosure/ground-truth invariants. See [design](DESIGN.md), [scenario contract](SCENARIO_SCHEMA.md), and [validation results](VALIDATION.md).
 
