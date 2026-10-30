@@ -73,6 +73,10 @@ pub struct NpcState {
     pub yaw: f32,
     pub exit_progress: f32,
     pub died_seated: bool,
+    pub ragdoll: Vec<BonePose>,
+    pub extracted: bool,
+    pub body_pull_active: bool,
+    pub death_impulse: V3,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VehiclePhysics {
@@ -105,6 +109,10 @@ impl Default for VehiclePhysics {
                 yaw: 0.,
                 exit_progress: 0.,
                 died_seated: false,
+                ragdoll: vec![],
+                extracted: false,
+                body_pull_active: false,
+                death_impulse: [0.; 3],
             },
             disabled_at: None,
             tow_until: None,
@@ -188,7 +196,12 @@ pub fn door_pivot(kind: &str, side: Side) -> V3 {
             spec.half_width - 0.04
         },
         0.,
-        spec.window_z - if kind == "truck" { 0.85 } else { 0.65 },
+        spec.window_z
+            - if crate::vehicle::pickup(kind) {
+                0.85
+            } else {
+                0.65
+            },
     ]
 }
 pub fn door_point(kind: &str, side: Side, angle: f32, p: V3) -> V3 {
@@ -210,7 +223,7 @@ pub struct PaneFrame {
     pub half: [f32; 2],
 }
 pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
-    let truck = v.kind == "truck";
+    let truck = crate::vehicle::pickup(&v.kind);
     let state = &v.physics.glass[pane.index()];
     let (mut center, mut u, mut up, half) = match pane {
         Pane::Windshield => (
@@ -275,9 +288,25 @@ pub fn pane_frame(v: &VehicleView, pane: Pane) -> Option<PaneFrame> {
             )
         }
     };
+    let lift = crate::vehicle::cab_lift(&v.kind);
+    center[1] += lift;
+    if pane == Pane::Rear {
+        center[2] = crate::vehicle::rear_glass_z(&v.kind);
+    }
+    if matches!(pane, Pane::DriverRear | Pane::PassengerRear)
+        && matches!(v.kind.as_str(), "suv" | "van")
+    {
+        center[2] = if v.kind == "van" { 1.4 } else { 1.1 };
+    }
     let mut half = half;
+    if matches!(pane, Pane::DriverRear | Pane::PassengerRear)
+        && matches!(v.kind.as_str(), "suv" | "van")
+    {
+        half[0] = if v.kind == "van" { 0.95 } else { 0.70 };
+    }
+
     if let Some(side) = pane.side() {
-        let bottom = if truck { 1.3 } else { 0.96 };
+        let bottom = if truck { 1.3 } else { 0.96 + lift };
         let top = center[1] + half[1] - state.lowered * 0.9;
         let low = (center[1] - half[1] - state.lowered * 0.9).max(bottom);
         if top <= low {
@@ -362,22 +391,34 @@ pub fn seated_position(v: &VehicleView) -> V3 {
         v,
         [
             -0.48,
-            if v.kind == "truck" { 0.35 } else { 0. },
+            if crate::vehicle::pickup(&v.kind) {
+                0.35
+            } else {
+                crate::vehicle::cab_lift(&v.kind)
+            },
             crate::vehicle::spec(&v.kind).window_z,
         ],
     )
 }
 /// Solid vehicle shell pieces leave real openings for glass and door apertures.
 pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
-    let truck = v.kind == "truck";
+    let truck = crate::vehicle::pickup(&v.kind);
     let spec = crate::vehicle::spec(&v.kind);
-    let belt = if truck { 1.05 } else { 0.86 };
+    let belt = if truck {
+        1.05
+    } else {
+        0.86 + crate::vehicle::cab_lift(&v.kind)
+    };
     let mut boxes = vec![
         ([0., 0.45, 0.], [spec.half_width, 0.35, spec.half_length]),
         (
             [
                 0.,
-                if truck { 2.18 } else { 1.65 },
+                if truck {
+                    2.18
+                } else {
+                    1.65 + crate::vehicle::cab_lift(&v.kind)
+                },
                 if truck { -1.05 } else { 0.1 },
             ],
             [
@@ -387,6 +428,11 @@ pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
             ],
         ),
     ];
+    if matches!(v.kind.as_str(), "suv" | "van") {
+        let rear = crate::vehicle::rear_glass_z(&v.kind);
+        boxes[1].0[2] = (rear - 1.1) * 0.5;
+        boxes[1].1[2] = (rear + 1.1) * 0.5;
+    }
     // Hood, trunk/bed and seat backs; do not use a whole-car box above the belt.
     boxes.push((
         [0., belt, if truck { -2.7 } else { -1.6 }],
@@ -405,7 +451,11 @@ pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
             boxes.push((
                 [
                     x * (spec.half_width - 0.16),
-                    if truck { 1.65 } else { 1.28 },
+                    if truck {
+                        1.65
+                    } else {
+                        1.28 + crate::vehicle::cab_lift(&v.kind)
+                    },
                     z,
                 ],
                 [0.055, if truck { 0.52 } else { 0.35 }, 0.055],
@@ -413,4 +463,19 @@ pub fn shell_boxes(v: &VehicleView) -> Vec<(V3, V3)> {
         }
     }
     boxes
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BonePose {
+    pub bone: u8,
+    pub position: V3,
+    pub rotation: [f32; 4],
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ShardPose {
+    pub id: u64,
+    pub position: V3,
+    pub rotation: [f32; 4],
+    pub size: V3,
+    pub born_ms: u64,
 }

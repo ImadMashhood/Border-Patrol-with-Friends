@@ -11,7 +11,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Checkbox convention:** boxes track the deliverable of each technical Part. Part 1 checks the frozen scope contract; Parts 2–3 check executable foundations. Later gameplay acceptance remains unchecked until integrated and tested. They do not imply that no prototype code exists. For the current prototype’s terminal commands, controls, AI/voice setup and validation links, see [Running the current prototype](docs/PLAYING.md).
 
 
-**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. Full multiplayer acceptance/hardening remains Part 15.
+**Build status:** Parts 1–6 complete. See the [slice contract](docs/SCOPE_CONTRACT.md) and [host commands, protocol and validation](docs/HOST.md). Run `python3 scripts/test_host.py` to exercise a real host, two peers and the AI gateway bridge. Part 4 adds the [explorable San Ignacio river checkpoint](docs/SCENE.md) to `./play.sh`. Part 5 connects [shared office spawning, the ready door, clock and two-player lane controls](docs/SHIFT.md). Part 6 adds [mixed sedan/pickup queues, physical inspection points and four barriers](docs/VEHICLES.md). [Projectile combat and interactive vehicle glass/doors](docs/COMBAT.md) are also available. [Smooth movement, aiming, physical glass/ragdolls and six vehicle bodies](docs/PHYSICS.md) extend that prototype. Full multiplayer acceptance/hardening remains Part 15.
 
 ## Part 1 — Freeze the technical scope and acceptance contract
 
@@ -90,18 +90,18 @@ Every checklist detail from the unabridged design is retained, including repeate
 **Technical deliverable:** Connect movement and E/hold-E interactions to the office door, ready votes, spawning and the host-owned shift state machine. Queue/event activation hooks are established here; their content follows later.
 
 - [x] Spawn everyone in the shared office, healed and equipped.
-- [x] Give the exit door a hold-E interaction with a visible three-second progress bar.
+- [x] Give the exit door a hold-E interaction with a visible two-second progress bar.
 - [x] Allow the host to complete the hold, or allow a majority of connected players to register ready.
 - [x] Have the host validate the ready threshold, open the door and start the authoritative ten-minute timer.
 - [x] Activate vehicle queues and random security events when the shift begins.
 - [x] Allow players to choose lanes, swap lanes and assist one another.
 - [x] **M1:** room, lanes, door, movement and simple low-poly environment.
-- [x] One shared administration office and one working three-second hold-E ready-up door.
+- [x] One shared administration office and one working two-second hold-E ready-up door.
 - [x] **M1 — Environment blockout:** office, ready door, two lanes, barriers and basic cars.
 
 **Validation:** [Launch/join, controls, authority rules and two-client checks](docs/SHIFT.md). Random security scheduling currently activates radio/dispatch hooks; its combat/breach content stays in later Parts.
 
-**Exit gate:** The host or ready majority can start a shift through the three-second door interaction, and both clients agree on the ten-minute clock.
+**Exit gate:** The host or ready majority can start a shift through the two-second door interaction, and both clients agree on the ten-minute clock.
 
 ## Part 6 — Implement lane and vehicle lifecycle systems
 
@@ -315,7 +315,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 ### Playthrough summary without developer intervention
 
 - [ ] Have two players join and both spawn in the office.
-- [ ] Have the host or majority hold E for three seconds, open the door and begin the timer.
+- [ ] Have the host or majority hold E for two seconds, open the door and begin the timer.
 - [ ] Bring in cars and have each player interview a driver, search evidence and decide a disposition.
 - [ ] Have the host evaluate outcomes and advance queues while players process multiple cars.
 - [ ] End the shift and let both players review shared results.
@@ -338,7 +338,7 @@ Every checklist detail from the unabridged design is retained, including repeate
 
 - [ ] **Step 1:** two players join a lobby hosted by one player's PC.
 - [ ] **Step 2:** both spawn in the administration office, healed and carrying starting equipment.
-- [ ] **Step 3:** either the host or a majority holds E on the exit door for three seconds.
+- [ ] **Step 3:** either the host or a majority holds E on the exit door for two seconds.
 - [ ] **Step 4:** the door opens and the authoritative ten-minute shift begins.
 - [ ] **Step 5:** both players move to inspection lanes.
 - [ ] **Step 6:** vehicles arrive, queue and stop at inspection positions.

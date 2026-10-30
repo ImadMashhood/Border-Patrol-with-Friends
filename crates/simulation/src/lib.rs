@@ -10,6 +10,7 @@ mod combat;
 mod combat_tests;
 #[cfg(test)]
 mod lifecycle_tests;
+mod physics;
 mod shift;
 
 struct Case {
@@ -51,6 +52,7 @@ pub struct Simulation {
     epoch: u64,
     next_projectile: u64,
     next_impact: u64,
+    physics: physics::PhysicalWorld,
 }
 impl Simulation {
     pub fn new(session_id: String, seed: u64, pack: Vec<Scenario>) -> Result<Self> {
@@ -70,6 +72,7 @@ impl Simulation {
             epoch: 0,
             next_projectile: 1,
             next_impact: 1,
+            physics: physics::PhysicalWorld::new(),
             world: WorldSnapshot {
                 protocol_version: PROTOCOL_VERSION,
                 session_id,
@@ -104,6 +107,7 @@ impl Simulation {
                 notices: vec![],
                 projectiles: vec![],
                 impacts: vec![],
+                shards: vec![],
             },
         })
     }
@@ -343,6 +347,7 @@ impl Simulation {
                 self.toggle_window(peer, *vehicle_id, *pane)?
             }
             ClientCommand::OrderExit { vehicle_id } => self.order_exit(peer, *vehicle_id)?,
+            ClientCommand::PullBody { vehicle_id } => self.pull_body(peer, *vehicle_id)?,
             ClientCommand::OrderEnter { vehicle_id } => self.order_enter(peer, *vehicle_id)?,
             ClientCommand::TowVehicle { vehicle_id } => self.tow_vehicle(peer, *vehicle_id)?,
             ClientCommand::SetReady { ready } => {
@@ -518,7 +523,7 @@ impl Simulation {
             HostCommand::SpawnNextVehicle { lane_id, kind } => {
                 ensure!(self.world.phase == ShiftPhase::Active, "shift inactive");
                 ensure!(
-                    ["car", "sedan", "truck"].contains(&kind.as_str()),
+                    (kind == "car" || vehicle::KINDS.contains(&kind.as_str())),
                     "unknown vehicle kind"
                 );
                 ensure!(self.cursor < self.order.len(), "scenario pack exhausted");

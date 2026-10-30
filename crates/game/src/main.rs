@@ -1,4 +1,5 @@
 mod network;
+mod prediction;
 mod scene;
 mod shift;
 mod surfaces;
@@ -143,6 +144,10 @@ struct SmokeTest {
     interview: bool,
     lifecycle: bool,
     combat: bool,
+    physics: bool,
+    ads_capture: bool,
+    max_shards: usize,
+    fleet_capture: bool,
     last_combat_fire: f32,
     step: u8,
     robot_step: usize,
@@ -183,7 +188,8 @@ fn main() {
         tx,
         rx: Arc::new(Mutex::new(rx)),
     };
-    let combat_smoke = std::env::args().any(|a| a == "--smoke-combat");
+    let physics_smoke = std::env::args().any(|a| a == "--smoke-physics");
+    let combat_smoke = physics_smoke || std::env::args().any(|a| a == "--smoke-combat");
     let lifecycle = std::env::args().any(|a| a == "--smoke-lifecycle");
     let interview_smoke = lifecycle || std::env::args().any(|a| a == "--smoke-interview");
     let robot = combat_smoke || interview_smoke || std::env::args().any(|a| a == "--smoke-shift");
@@ -196,6 +202,7 @@ fn main() {
         .init_resource::<traffic::Traffic>()
         .init_resource::<weapon::WeaponUi>()
         .init_resource::<vehicle_physics::Effects>()
+        .init_resource::<vehicle_physics::ShardAssets>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
                 title: "Border Patrol with Friends • San Ignacio".into(),
@@ -230,10 +237,11 @@ fn main() {
             (
                 vehicle_physics::sync,
                 vehicle_physics::effects,
+                vehicle_physics::physical_shards,
                 weapon::render,
             )
                 .chain()
-                .after(shift::sync),
+                .after(voice),
         )
         .add_systems(EguiPrimaryContextPass, (ui::landmarks, ui::draw).chain());
     if smoke {
@@ -247,6 +255,10 @@ fn main() {
             interview: interview_smoke,
             lifecycle,
             combat: combat_smoke,
+            physics: physics_smoke,
+            ads_capture: false,
+            max_shards: 0,
+            fleet_capture: false,
             last_combat_fire: 0.,
             step: 0,
             robot_step: 0,
@@ -254,7 +266,10 @@ fn main() {
             live_capture: false,
             robot,
         })
-        .add_systems(Update, smoke_test.after(voice));
+        .add_systems(
+            Update,
+            smoke_test.after(voice).before(vehicle_physics::sync),
+        );
     }
     if !app.run().is_success() {
         std::process::exit(1);
@@ -305,6 +320,13 @@ fn controls(
                     })
                     .map(|v| {
                         if smoke.combat {
+                            if smoke.physics
+                                && smoke.step >= 11
+                                && let Some(chest) =
+                                    v.physics.npc.ragdoll.iter().find(|p| p.bone == 1)
+                            {
+                                return Vec3::from_array(chest.position);
+                            }
                             if shift.peer_id == 1
                                 && smoke.step >= 7
                                 && let Some(frame) = border_net::combat::pane_frame(
@@ -315,7 +337,7 @@ fn controls(
                                 let target = if smoke.step >= 9 {
                                     border_net::combat::add(
                                         frame.center,
-                                        border_net::combat::mul(frame.u, 0.4),
+                                        border_net::combat::mul(frame.u, -0.5),
                                     )
                                 } else {
                                     frame.center
@@ -430,7 +452,8 @@ fn controls(
     if keys.just_pressed(KeyCode::Tab) {
         g.looking = !g.looking;
     }
-    if mouse.just_pressed(MouseButton::Left)
+    if (mouse.just_pressed(MouseButton::Left)
+        || mouse.just_pressed(MouseButton::Right) && shift.me().is_some_and(|p| p.weapon.drawn))
         && !g.overlay
         && !gui.ctx_mut().is_ok_and(|ctx| ctx.is_pointer_over_area())
     {
@@ -446,8 +469,14 @@ fn controls(
         return;
     };
     if g.looking {
-        p.yaw -= motion.delta.x * 0.0025;
-        p.pitch = (p.pitch - motion.delta.y * 0.0025).clamp(-1.4, 1.4);
+        let sensitivity =
+            if mouse.pressed(MouseButton::Right) && shift.me().is_some_and(|p| p.weapon.drawn) {
+                0.0014
+            } else {
+                0.0025
+            };
+        p.yaw -= motion.delta.x * sensitivity;
+        p.pitch = (p.pitch - motion.delta.y * sensitivity).clamp(-1.4, 1.4);
         t.rotation = Quat::from_euler(EulerRot::YXZ, p.yaw, p.pitch, 0.);
         let f = Vec3::new(-p.yaw.sin(), 0., -p.yaw.cos());
         let r = Vec3::new(p.yaw.cos(), 0., -p.yaw.sin());
@@ -476,6 +505,23 @@ fn controls(
                 jog: keys.pressed(KeyCode::ShiftLeft),
                 ready: holding,
             };
+            if time.elapsed_secs() - shift.prediction.received_at < 0.25
+                && shift.me().is_some_and(|p| p.health > 0)
+                && let Some(world) = &shift.world
+            {
+                let moved = border_net::movement::step(
+                    t.translation.to_array(),
+                    [(r * axis.x + f * axis.y).x, (r * axis.x + f * axis.y).z],
+                    keys.pressed(KeyCode::ShiftLeft),
+                    time.delta_secs().min(0.05),
+                    &shift.collision,
+                    &world.vehicles,
+                    &world.lanes,
+                    world.door_open,
+                );
+                shift.prediction.position = Vec3::from_array(moved);
+                t.translation = shift.prediction.position;
+            }
         } else {
             for movement in [Vec3::new(delta.x, 0., 0.), Vec3::new(0., 0., delta.z)] {
                 let candidate = t.translation + movement;
@@ -718,7 +764,8 @@ fn voice(mut g: ResMut<Patrol>, net: Res<Network>, shift: Res<shift::Shift>) {
 fn smoke_test(
     time: Res<Time>,
     mut smoke: ResMut<SmokeTest>,
-    camera: Query<&Transform, With<Player>>,
+    mut mouse: ResMut<ButtonInput<MouseButton>>,
+    mut camera: Query<&mut Transform, With<Player>>,
     mut commands: Commands,
     mut exit: MessageWriter<bevy::app::AppExit>,
     mut g: ResMut<Patrol>,
@@ -726,6 +773,27 @@ fn smoke_test(
     mut shift: ResMut<shift::Shift>,
 ) {
     smoke.elapsed += time.delta_secs();
+    if let Some(world) = &shift.world {
+        smoke.max_shards = smoke.max_shards.max(world.shards.len());
+    }
+    if smoke.physics {
+        if smoke.elapsed > 18. && smoke.elapsed < 19.5 {
+            mouse.press(MouseButton::Right);
+            g.looking = true;
+        } else {
+            mouse.release(MouseButton::Right);
+        }
+        if smoke.elapsed > 19. && !smoke.ads_capture {
+            smoke.ads_capture = true;
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(format!(
+                    "output/physics-aim-peer-{}.png",
+                    shift.peer_id
+                )));
+        }
+    }
+
     if smoke.robot
         && shift.connected
         && let Some(world) = &shift.world
@@ -786,9 +854,18 @@ fn smoke_test(
             ];
             if smoke.combat {
                 route.truncate(5);
-                route.extend([[-3.3, -1.2], [-3.3, -4.2], [0., -4.2]]);
+                route.extend([
+                    [-3.3, -1.2],
+                    [-3.3, -4.2],
+                    [0., -4.2],
+                    [-3.3, -4.2],
+                    [-3.3, -0.25],
+                    [-1.6, -0.25],
+                ]);
             }
-            let allowed = if smoke.combat && shift.peer_id == 1 && smoke.step >= 7 {
+            let allowed = if smoke.physics && shift.peer_id == 1 && smoke.step >= 11 {
+                11
+            } else if smoke.combat && shift.peer_id == 1 && smoke.step >= 7 {
                 8
             } else if smoke.lifecycle && smoke.step >= 4 {
                 7
@@ -852,7 +929,7 @@ fn smoke_test(
                 )));
         };
         match smoke.step {
-            0 => {
+            0 if v.stage == border_net::VehicleStage::Stopped => {
                 shift.send(Cmd::SetWeaponDrawn { drawn: true });
                 shift.send(Cmd::ToggleWindow {
                     vehicle_id: id,
@@ -925,6 +1002,14 @@ fn smoke_test(
             10 if shift.peer_id == 1 && v.physics.glass[Pane::Windshield.index()].shattered => {
                 capture(&mut commands, "windshield-shattered");
                 smoke.step = 11;
+            }
+            11 if smoke.physics && shift.peer_id == 1 && smoke.robot_step >= 11 => {
+                shift.send(Cmd::PullBody { vehicle_id: id });
+                smoke.step = 12;
+            }
+            12 if smoke.physics && v.physics.npc.extracted && smoke.elapsed > 42. => {
+                capture(&mut commands, "extracted-ragdoll");
+                smoke.step = 13;
             }
             _ => {}
         }
@@ -1031,6 +1116,21 @@ fn smoke_test(
                 ));
         }
     }
+    if smoke.physics
+        && smoke.elapsed > 48.5
+        && let Ok(mut t) = camera.single_mut()
+    {
+        t.translation = Vec3::new(18., 7., 25.);
+        t.look_at(Vec3::new(3., 1., 16.), Vec3::Y);
+        if !smoke.fleet_capture {
+            smoke.fleet_capture = true;
+            commands
+                .spawn(bevy::render::view::screenshot::Screenshot::primary_window())
+                .observe(bevy::render::view::screenshot::save_to_disk(
+                    "output/physics-fleet.png",
+                ));
+        }
+    }
     if smoke.elapsed > if smoke.interview { 16. } else { 6. } && !smoke.capture {
         smoke.capture = true;
         std::fs::create_dir_all("output").ok();
@@ -1049,7 +1149,9 @@ fn smoke_test(
             ));
     }
     if smoke.elapsed
-        > if smoke.interview || smoke.combat {
+        > if smoke.physics {
+            50.
+        } else if smoke.interview || smoke.combat {
             35.
         } else if smoke.robot {
             20.
@@ -1065,12 +1167,22 @@ fn smoke_test(
             )
             .ok();
         }
+        if smoke.physics {
+            std::fs::write(format!("output/physics-metrics-peer-{}.json",shift.peer_id),serde_json::to_string_pretty(&serde_json::json!({"max_shards":smoke.max_shards,"ads_capture":smoke.ads_capture})).unwrap()).unwrap();
+        }
         if smoke.robot && !smoke.live_capture {
             error!("Ready door smoke did not complete");
             exit.write(bevy::app::AppExit::error());
             return;
         }
-        if smoke.combat && smoke.step < if shift.peer_id == 1 { 11 } else { 7 } {
+        if smoke.combat
+            && smoke.step
+                < if shift.peer_id == 1 {
+                    if smoke.physics { 13 } else { 11 }
+                } else {
+                    7
+                }
+        {
             error!(
                 "Combat smoke incomplete at step {}: {}",
                 smoke.step, shift.error

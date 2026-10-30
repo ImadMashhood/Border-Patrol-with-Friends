@@ -1633,6 +1633,10 @@ pub fn setup(
     let camera = commands
         .spawn((
             Camera3d::default(),
+            Projection::Perspective(PerspectiveProjection {
+                fov: 70_f32.to_radians(),
+                ..default()
+            }),
             transform,
             Player { yaw, pitch },
             bevy::pbr::DistanceFog {
@@ -1644,6 +1648,11 @@ pub fn setup(
                 ..default()
             },
             bevy::core_pipeline::tonemapping::Tonemapping::TonyMcMapface,
+            Msaa::Off,
+            bevy::core_pipeline::oit::OrderIndependentTransparencySettings {
+                layer_count: 16,
+                ..default()
+            },
         ))
         .id();
     let light = commands
@@ -1807,40 +1816,79 @@ fn spawn_fleet(
                 perceptual_roughness: 0.27,
                 ..default()
             });
-            let sedan = commands
-                .spawn((
-                    Transform::default(),
-                    Visibility::default(),
-                    vehicles::Body {
-                        lane,
-                        ordinal,
-                        kind: "sedan",
-                    },
-                ))
-                .id();
-            commands.entity(root).add_child(sedan);
-            for (mesh, material, transform, body) in &template {
-                let part = commands
+            let kind = border_net::vehicle::scheduled_kind(lane as usize + ordinal * 2);
+            if !border_net::vehicle::pickup(kind) {
+                let sedan = commands
                     .spawn((
-                        Mesh3d(mesh.clone()),
-                        MeshMaterial3d(if *body {
-                            paint.clone()
-                        } else {
-                            material.clone()
-                        }),
-                        *transform,
+                        Transform::default(),
+                        Visibility::default(),
+                        vehicles::Body {
+                            lane,
+                            ordinal,
+                            kind,
+                        },
                     ))
                     .id();
-                commands.entity(sedan).add_child(part);
+                commands.entity(root).add_child(sedan);
+                for (mesh, material, transform, body) in &template {
+                    if matches!(kind, "suv" | "van")
+                        && (transform.translation.y - 1.65).abs() < 0.01
+                    {
+                        continue;
+                    }
+                    let mut transform = *transform;
+                    let profile = border_net::vehicle::spec(kind);
+                    if transform.translation.y > 0.95 {
+                        transform.translation.y += border_net::vehicle::cab_lift(kind);
+                    }
+                    if transform.translation.z.abs() > 2.1 {
+                        transform.translation.z = transform.translation.z.signum()
+                            * (profile.half_length + (transform.translation.z.abs() - 2.3));
+                    }
+                    if transform.translation.y < 0.55
+                        && transform.translation.z.abs() < 1.6
+                        && transform.translation.z.abs() > 1.3
+                    {
+                        transform.translation.z *= profile.half_length / 2.3;
+                    }
+                    if (transform.translation.y - 0.5).abs() < 0.01 {
+                        transform.scale.z *= profile.half_length / 2.3;
+                        transform.scale.x *= profile.half_width / 1.08;
+                    }
+                    let part = commands
+                        .spawn((
+                            Mesh3d(mesh.clone()),
+                            MeshMaterial3d(if *body {
+                                paint.clone()
+                            } else {
+                                material.clone()
+                            }),
+                            transform,
+                        ))
+                        .id();
+                    commands.entity(sedan).add_child(part);
+                }
+                vehicles::sedan_panels(commands, meshes, sedan, paint.clone(), lane, ordinal, kind);
+            } else {
+                vehicles::truck(
+                    commands,
+                    meshes,
+                    materials,
+                    root,
+                    lane,
+                    ordinal,
+                    paint.clone(),
+                    kind,
+                );
             }
-            vehicles::sedan_panels(commands, meshes, sedan, paint.clone(), lane, ordinal);
-            vehicles::truck(
+            vehicles::dressing(
                 commands,
                 meshes,
                 materials,
                 root,
                 lane,
                 ordinal,
+                kind,
                 paint.clone(),
             );
         }

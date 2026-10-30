@@ -59,3 +59,5 @@ The Linux graphical check starts two actual Bevy clients with a local offline AI
 ![Pickup cargo inspection from the second live client](truck-inspection.webp)
 
 The subsequent [combat/vehicle interaction update](COMBAT.md) adds functioning front doors and side windows, transparent/destructible glazing, physical driver exit/return/death, pistol projectiles and recovery. Its current controls supersede the original cosmetic panel behavior described above.
+
+The [subsequent vehicle/physics pass](PHYSICS.md) expands the catalog to sedan, pickup, SUV, van, hatchback and utility pickup, with more close-up fittings, shared predicted movement and real rigid-body occupants/glass.

@@ -42,7 +42,7 @@ Set the same environment variables in PowerShell for Windows. The development tr
 ## Ready up and work
 
 1. Click the scene to look, then use WASD to approach the office exit. Left Shift jogs.
-2. Hold **E** near the closed door. The visible bar measures three seconds of fresh, continuous input validated by the host. Releasing early, walking away or losing communication cancels an incomplete hold.
+2. Hold **E** near the closed door. The visible bar measures two seconds of fresh, continuous input validated by the host. Releasing early, walking away or losing communication cancels an incomplete hold.
 3. The host completing the hold starts the shift. Alternatively, a strict majority of connected officers may register ready. With two officers, a lone guest vote is insufficient. A completed guest vote persists until withdrawn.
 4. The door opens for everyone, the host starts the **600,000 ms** countdown, and the queues and security-event scheduler activate together. Both screens show time from host snapshots; changing focus or releasing the mouse does not pause the shift.
 5. Claim a free lane with **1** or **2**, or use the duty roster after pressing Tab to release the mouse. Claiming a free lane releases your previous one. Both are assigned automatically on shift start if still free.
@@ -56,8 +56,8 @@ At zero, the clock stays at zero, fresh arrivals pause, and already stopped driv
 
 ## What is authoritative
 
-- The protocol is now **version 4**. Clients send movement direction, looking yaw, jogging intent and a held-ready input flag; they cannot submit coordinates, hold duration, elapsed shift time, readiness completion or rewards.
-- The host measures time using its own monotonic clock, checks doorway range and input freshness, applies the three-second threshold, validates the host/majority rule and publishes the shared transition.
+- The protocol is now **version 5**. Clients send movement direction, looking yaw, jogging intent and a held-ready input flag; they cannot submit coordinates, hold duration, elapsed shift time, readiness completion or rewards.
+- The host measures time using its own monotonic clock, checks doorway range and input freshness, applies the two-second threshold, validates the host/majority rule and publishes the shared transition.
 - Input frames are monotonic and stay replay-protected across shift resets. Timed-out commands retry the same request identity; snapshots also acknowledge the accepted command sequence.
 - Static collision comes from the committed scene export, plus the host's dynamic ready-door/vehicle rules. A regression test compares the bake with the actual rendered scene. Positions freeze when communication is lost.
 - Both lanes' vehicles, interview history, evidence, decisions and ledger are host-owned. The graphical client no longer loads scenario truth for normal play. The gateway gets private case context through a separate service credential and validates replies before host delivery.

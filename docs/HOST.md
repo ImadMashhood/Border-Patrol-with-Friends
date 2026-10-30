@@ -29,11 +29,11 @@ Defaults: `127.0.0.1:8090`, seed 42, scenario pack `assets/scenarios`. Override 
 
 Normal host time advances automatically. Only explicitly setting `BORDER_HOST_MANUAL_CLOCK=1` enables trusted operator `advance_world` requests for deterministic debugging. Launchers force real-time mode. Public game clients cannot advance the clock.
 
-## Wire contract, version 4
+## Wire contract, version 5
 
 `POST /join` requires `protocol_version`, invite code and display name. It returns a room UUID, peer ID, random bearer token, next command sequence and public snapshot. Exactly two live peers may join in the lobby; active-shift reconnect is deferred.
 
-`POST /input` accepts an `InputFrame` with version/session, increasing frame ID, normalized movement intent, finite yaw, jogging intent and `ready_held`. The host owns positions, speed/collision, input freshness, ready duration and the countdown. Unknown fields such as `position`, `held_ms`, `remaining_ms` or rewards are rejected. A snapshot is returned; the graphical worker sends input at ten Hz, while the host ticks at twenty Hz.
+`POST /input` accepts an `InputFrame` with version/session, increasing frame ID, normalized movement intent, finite yaw, jogging intent and `ready_held`. The host owns positions, speed/collision, input freshness, ready duration and the countdown. Unknown fields such as `position`, `held_ms`, `remaining_ms` or rewards are rejected. A snapshot is returned; the graphical worker sends input at twenty Hz, while the host ticks at twenty Hz.
 
 `POST /command` uses the versioned session/request/sequence envelope. Commands express intent: claim/release a lane, assist, request/accept a swap, release a committed vehicle, request a new shift or propose an upgrade. `SetReady(true)` is rejected; readiness must be earned through the door hold. `SetReady(false)` withdraws a completed vote. Client-supplied guilt, rewards, prices, arbitrary world positions and privileged host commands are not accepted.
 
@@ -76,3 +76,5 @@ Rust/Bevy pins remain Rust 1.94.0, Bevy 0.17.3 and bevy_egui 0.38.1 with the com
 Part 6 adds physical `inspect_vehicle_point` commands, shared inspected-panel state, a vehicle-size catalog and separate entry/exit gate state. See [vehicle lifecycle and controls](VEHICLES.md).
 
 Protocol 4 adds authoritative pistol/projectile state, door/window commands, physical traveler exit/return, damage and disabled-vehicle recovery. See [combat and vehicle mechanics](COMBAT.md).
+
+Protocol 5 adds the six vehicle kinds, `pull_body`, per-bone ragdoll transforms and bounded physical shard snapshots. Rapier runs on the host at fixed 60 Hz. Readiness requires two seconds; graphical movement predicts with shared collision rules and reconciles against 20 Hz host snapshots. See [physics details](PHYSICS.md).

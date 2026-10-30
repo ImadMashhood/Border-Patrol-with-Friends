@@ -15,7 +15,7 @@ Each condition has an observable pass/fail test and an implementation home in th
 | Gate | Required observation | Build Parts |
 | --- | --- | --- |
 | Environment | Both players can navigate the office and two lanes, reach inspection areas, and interact with vehicle and cargo points. | 4, 6 |
-| Shift | The host or ready majority holds E at the exit door for three seconds; both clients show the same ten-minute clock. | 5, 15 |
+| Shift | The host or ready majority holds E at the exit door for two seconds; both clients show the same ten-minute clock. | 5, 15 |
 | Cases | Ten valid authored cases load; a fixed seed produces the same order. Hidden truth is absent from peer snapshots. | 2, 3, 7 |
 | Conversation | Travelers answer the actual question, remember earlier exchanges, maintain personalities and disclose only permitted information. Model output cannot award money or decide a case. | 3, 8 |
 | Voice | Each player has independent continuous local speech recognition and natural speech playback. Pauses shorter than 1.5 seconds retain the turn; 20 seconds forces submission. | 9, 15 |

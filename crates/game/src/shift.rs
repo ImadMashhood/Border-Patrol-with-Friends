@@ -17,6 +17,8 @@ pub struct Shift {
     pub interaction: Option<(u64, vehicle::VehiclePoint)>,
     pub inspection: Option<(u64, vehicle::VehiclePoint)>,
     pub connected: bool,
+    pub prediction: prediction::Prediction,
+    pub collision: Vec<map::Aabb>,
     pub controls: Arc<Mutex<Controls>>,
     pub commands: mpsc::Sender<ClientCommand>,
     updates: Mutex<mpsc::Receiver<Result<WorldSnapshot, String>>>,
@@ -42,6 +44,8 @@ impl Shift {
             interaction: None,
             inspection: None,
             connected: false,
+            prediction: prediction::Prediction::default(),
+            collision: map::collision().solids,
             controls: Arc::new(Mutex::new(Controls::default())),
             commands,
             updates: Mutex::new(updates),
@@ -173,7 +177,7 @@ impl Shift {
                         let _=tx.send(Err("Host connection lost — movement is frozen until communication recovers".into()));
                     }
                 }
-                let delay = Duration::from_millis(100).saturating_sub(started.elapsed());
+                let delay = Duration::from_millis(50).saturating_sub(started.elapsed());
                 std::thread::sleep(delay);
             }
             let _ = client
@@ -193,6 +197,8 @@ impl Shift {
                 interaction: None,
                 inspection: None,
                 connected: true,
+                prediction: prediction::Prediction::default(),
+                collision: map::collision().solids,
                 controls,
                 commands,
                 updates: Mutex::new(updates),
@@ -233,6 +239,7 @@ pub fn sync(
     mut commands: Commands,
     mut shift: ResMut<Shift>,
     mut g: ResMut<Patrol>,
+    smoke: Option<Res<SmokeTest>>,
     mut players: Query<
         (&mut Transform, &mut Player),
         (
@@ -291,9 +298,11 @@ pub fn sync(
     }
     let updates: Vec<_> = shift.updates.lock().unwrap().try_iter().collect();
     let previous = shift.world.as_ref().map(|w| w.phase.clone());
+    let mut received = false;
     for update in updates {
         match update {
             Ok(world) => {
+                received = true;
                 shift.world = Some(world);
                 if shift.error.starts_with("Host connection") {
                     shift.error.clear();
@@ -311,6 +320,27 @@ pub fn sync(
         shift.inspection = None;
         shift.interaction = None;
     }
+    let reset = previous.as_ref().is_some_and(|p| *p != ShiftPhase::Lobby)
+        && shift
+            .world
+            .as_ref()
+            .is_some_and(|w| w.phase == ShiftPhase::Lobby);
+    if smoke.is_none() {
+        if (received || !shift.prediction.initialized)
+            && let Some(me) = shift.me()
+        {
+            let position = Vec3::from_array(me.position);
+            let controls = shift.controls.lock().unwrap().clone();
+            let speed = if controls.jog { 5.8 } else { 3.2 };
+            shift.prediction.reconcile(
+                position,
+                Vec3::new(controls.movement[0], 0., controls.movement[1]) * speed,
+                time.elapsed_secs(),
+                reset,
+            );
+        }
+        shift.prediction.correct(time.delta_secs().min(0.05));
+    }
     let Some(world) = &shift.world else {
         return;
     };
@@ -321,7 +351,9 @@ pub fn sync(
         let target = Vec3::from_array(me.position);
         let reset =
             previous.is_some_and(|p| p != ShiftPhase::Lobby) && world.phase == ShiftPhase::Lobby;
-        if reset || t.translation.distance(target) > 3. {
+        if smoke.is_none() {
+            t.translation = shift.prediction.position;
+        } else if reset || t.translation.distance(target) > 3. {
             t.translation = target;
         } else {
             t.translation = t
@@ -350,8 +382,17 @@ pub fn sync(
             } else {
                 Visibility::Visible
             };
-            t.translation = Vec3::from_array(v.position);
-            t.rotation = Quat::from_rotation_y(v.yaw);
+            let target = Vec3::from_array(v.position);
+            t.translation = if t.translation.distance(target) > 4. {
+                target
+            } else {
+                t.translation
+                    .lerp(target, (time.delta_secs() * 20.).min(1.))
+            };
+            t.rotation = t.rotation.slerp(
+                Quat::from_rotation_y(v.yaw),
+                (time.delta_secs() * 20.).min(1.),
+            );
             solid.half = Vec3::from_array(vehicle::spec(&v.kind).aabb(v.position, v.yaw).half);
             solid.half.y = vehicle::spec(&v.kind).height;
             car.distance = v.distance_to_stop;
@@ -381,8 +422,14 @@ pub fn sync(
         .filter(|p| p.connected && p.peer_id != shift.peer_id)
     {
         if let Some((_, mut t, _)) = officers.iter_mut().find(|(_, _, o)| o.0 == p.peer_id) {
-            t.translation = Vec3::new(p.position[0], 0., p.position[2]);
-            t.rotation = Quat::from_rotation_y(p.yaw);
+            t.translation = t.translation.lerp(
+                Vec3::new(p.position[0], 0., p.position[2]),
+                (time.delta_secs() * 18.).min(1.),
+            );
+            t.rotation = t.rotation.slerp(
+                Quat::from_rotation_y(p.yaw),
+                (time.delta_secs() * 18.).min(1.),
+            );
         } else {
             let root = commands
                 .spawn((
@@ -615,6 +662,19 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
             {
                 shift.send(ClientCommand::RequestLaneSwap);
             }
+            if let Some((id, _)) = weapon::nearby(shift, Vec3::from_array(me.position))
+                && let Some(v) = world.vehicles.iter().find(|v| v.vehicle_id == id)
+                && v.physics.npc.health == 0
+            {
+                if v.physics.npc.body_pull_active {
+                    ui.label("Pulling body clear of the seat…");
+                } else if v.physics.npc.died_seated
+                    && !v.physics.npc.extracted
+                    && ui.button("Pull body out [Y]").clicked()
+                {
+                    shift.send(ClientCommand::PullBody { vehicle_id: id });
+                }
+            }
             ui.small("Tab releases the mouse for roster controls.");
             if world.phase == ShiftPhase::Grace
                 && world.host_peer_id == Some(me.peer_id)
@@ -638,7 +698,7 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
             .collapsible(false)
             .show(ctx, |ui| {
                 ui.heading("Start at the office exit");
-                ui.label("Click to look, walk to the door, then hold E for 3 seconds.");
+                ui.label("Click to look, walk to the door, then hold E for 2 seconds.");
                 ui.label("The host can start the shift, or a strict majority can register ready.");
                 ui.label(format!(
                     "Ready: {} / {} officers",
@@ -656,7 +716,7 @@ pub fn draw(ctx: &bevy_egui::egui::Context, shift: &mut Shift) {
                             .text(if me.ready {
                                 "READY — WAITING FOR HOST / MAJORITY".into()
                             } else {
-                                format!("HOLD E  ·  {:.1} / 3.0 s", me.hold_ms as f32 / 1000.)
+                                format!("HOLD E  ·  {:.1} / 2.0 s", me.hold_ms as f32 / 1000.)
                             }),
                     );
                 }

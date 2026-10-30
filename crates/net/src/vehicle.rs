@@ -21,7 +21,7 @@ impl VehiclePoint {
             Self::Driver => "Driver window · talk",
             Self::Passenger => "Passenger door · inspect",
             Self::Hood => "Hood · inspect",
-            Self::Cargo if kind == "truck" => "Truck tailgate · inspect cargo",
+            Self::Cargo if pickup(kind) => "Truck tailgate · inspect cargo",
             Self::Cargo => "Trunk · inspect cargo",
         }
     }
@@ -34,38 +34,71 @@ pub struct VehicleSpec {
     pub height: f32,
     pub window_z: f32,
 }
-pub fn spec(kind: &str) -> VehicleSpec {
-    if kind == "truck" {
-        VehicleSpec {
-            kind: "truck",
-            half_width: 1.17,
-            half_length: 3.3,
-            height: 2.35,
-            window_z: -1.2,
-        }
-    } else {
-        VehicleSpec {
-            kind: "sedan",
-            half_width: 1.08,
-            half_length: 2.3,
-            height: 1.85,
-            window_z: -0.25,
-        }
+pub const KINDS: [&str; 6] = ["sedan", "truck", "suv", "van", "hatchback", "utility_truck"];
+pub fn pickup(kind: &str) -> bool {
+    matches!(kind, "truck" | "utility_truck")
+}
+pub fn cab_lift(kind: &str) -> f32 {
+    match kind {
+        "suv" => 0.22,
+        "van" => 0.55,
+        _ => 0.,
     }
 }
-/// Both lanes receive both types; the first pair demonstrates a sedan and a pickup.
-pub fn scheduled_kind(index: usize) -> &'static str {
-    if matches!(index % 4, 1 | 2) {
-        "truck"
-    } else {
-        "sedan"
+pub fn rear_glass_z(kind: &str) -> f32 {
+    match kind {
+        "suv" => 1.9,
+        "van" => 2.45,
+        k if pickup(k) => 0.03,
+        _ => 1.16,
     }
+}
+pub fn spec(kind: &str) -> VehicleSpec {
+    let (kind, w, l, h, z) = match kind {
+        "truck" => ("truck", 1.17, 3.3, 2.35, -1.2),
+        "utility_truck" => ("utility_truck", 1.17, 3.3, 2.55, -1.2),
+        "suv" => ("suv", 1.14, 2.55, 2.15, -0.25),
+        "van" => ("van", 1.14, 2.9, 2.55, -0.25),
+        "hatchback" => ("hatchback", 1.02, 2.1, 1.85, -0.25),
+        _ => ("sedan", 1.08, 2.3, 1.85, -0.25),
+    };
+    VehicleSpec {
+        kind,
+        half_width: w,
+        half_length: l,
+        height: h,
+        window_z: z,
+    }
+}
+/// Six bodies distributed across both lanes; appearance never encodes guilt.
+pub fn scheduled_kind(index: usize) -> &'static str {
+    const SHIFT: [&str; 10] = [
+        "sedan",
+        "truck",
+        "suv",
+        "van",
+        "hatchback",
+        "utility_truck",
+        "truck",
+        "sedan",
+        "van",
+        "suv",
+    ];
+    SHIFT[index % SHIFT.len()]
 }
 impl VehicleSpec {
     pub fn local_point(self, point: VehiclePoint) -> [f32; 3] {
         match point {
-            VehiclePoint::Driver => [-self.half_width - 0.45, 1.5, self.window_z],
-            VehiclePoint::Passenger => [self.half_width + 0.45, 1.5, self.window_z],
+            VehiclePoint::Driver => [
+                -self.half_width - 0.45,
+                1.5 + cab_lift(self.kind),
+                self.window_z,
+            ],
+            VehiclePoint::Passenger => [
+                self.half_width + 0.45,
+                1.5 + cab_lift(self.kind),
+                self.window_z,
+            ],
             VehiclePoint::Hood => [0., 1.2, -self.half_length - 0.6],
             VehiclePoint::Cargo => [0., 1.3, self.half_length + 0.65],
         }

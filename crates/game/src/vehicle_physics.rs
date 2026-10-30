@@ -4,6 +4,7 @@ use bevy::{
     asset::RenderAssetUsages,
     mesh::{Indices, PrimitiveTopology},
 };
+use border_net::vehicle;
 use border_net::{
     VehicleStage,
     combat::{self as c, *},
@@ -18,6 +19,7 @@ pub enum DetailKind {
     Door(Side),
     Glass(Pane),
     Npc,
+    Bone(u8),
 }
 #[derive(Component)]
 pub struct GlassVisual {
@@ -83,7 +85,7 @@ fn door(
             },
         ))
         .id();
-    let truck = kind == "truck";
+    let truck = border_net::vehicle::pickup(kind);
     let sign = if side == Side::Driver { -1. } else { 1. };
     let len = 1.15;
     let paint = materials.add(StandardMaterial {
@@ -105,14 +107,22 @@ fn door(
         metallic: 0.85,
         ..default()
     });
-    let belt = if truck { 1.3 } else { 0.96 };
-    let top = if truck { 2.1 } else { 1.61 };
+    let belt = if truck {
+        1.3
+    } else {
+        0.96 + vehicle::cab_lift(kind)
+    };
+    let top = if truck {
+        2.1
+    } else {
+        1.61 + vehicle::cab_lift(kind)
+    };
     block(
         commands,
         meshes,
         root,
-        Vec3::new(0.07, 0.5, len),
-        Vec3::new(0., belt - 0.25, len / 2.),
+        Vec3::new(0.07, belt - 0.55, len),
+        Vec3::new(0., (belt + 0.55) * 0.5, len / 2.),
         paint.clone(),
     );
     block(
@@ -409,10 +419,15 @@ pub fn sync(
         Without<BodyPart>,
     >,
     mut parts: Query<(&BodyPart, &ChildOf, &mut Transform), Without<Detail>>,
+    roots: Query<(&Transform, &traffic::Vehicle), (Without<Detail>, Without<BodyPart>)>,
 ) {
     let Some(world) = &shift.world else {
         return;
     };
+    let poses: std::collections::HashMap<_, _> = roots
+        .iter()
+        .map(|(t, v)| (1 + v.lane as u64 + v.ordinal as u64 * 2, *t))
+        .collect();
     for v in &world.vehicles {
         if v.stage == VehicleStage::Exited {
             continue;
@@ -475,6 +490,83 @@ pub fn sync(
             }
         }
     }
+    for v in &world.vehicles {
+        if v.stage == VehicleStage::Exited
+            || v.physics.npc.ragdoll.is_empty()
+            || details.iter().any(|(_, d, ..)| {
+                d.vehicle == v.vehicle_id && matches!(d.kind, DetailKind::Bone(0))
+            })
+        {
+            continue;
+        }
+        let shirt = materials.add(match v.vehicle_id % 4 {
+            0 => Color::srgb(0.23, 0.3, 0.38),
+            1 => Color::srgb(0.5, 0.32, 0.2),
+            2 => Color::srgb(0.34, 0.4, 0.27),
+            _ => Color::srgb(0.48, 0.26, 0.23),
+        });
+        let pants = materials.add(Color::srgb(0.12, 0.15, 0.18));
+        let skin = materials.add(match v.vehicle_id % 3 {
+            0 => Color::srgb(0.43, 0.29, 0.20),
+            1 => Color::srgb(0.75, 0.55, 0.40),
+            _ => Color::srgb(0.62, 0.42, 0.28),
+        });
+        let dark = materials.add(Color::srgb(0.08, 0.07, 0.055));
+        for bone in 0..11u8 {
+            let (radius, length) = match bone {
+                0 => (0.14, 0.08),
+                1 => (0.17, 0.27),
+                2 => (0.165, 0.),
+                3..=6 => (0.07, 0.18),
+                _ => (0.09, 0.23),
+            };
+            let mesh = meshes.add(Capsule3d::new(radius, length));
+            let material = if bone == 2 {
+                skin.clone()
+            } else if bone == 0 || bone >= 7 {
+                pants.clone()
+            } else {
+                shirt.clone()
+            };
+            let root = commands
+                .spawn((
+                    Mesh3d(mesh),
+                    MeshMaterial3d(material),
+                    Transform::from_translation(Vec3::from_array(
+                        v.physics.npc.ragdoll[bone as usize].position,
+                    ))
+                    .with_rotation(Quat::from_array(
+                        v.physics.npc.ragdoll[bone as usize].rotation,
+                    )),
+                    Visibility::Hidden,
+                    Detail {
+                        vehicle: v.vehicle_id,
+                        kind: DetailKind::Bone(bone),
+                    },
+                ))
+                .id();
+            if bone == 2 {
+                block(
+                    &mut commands,
+                    &mut meshes,
+                    root,
+                    Vec3::new(0.25, 0.05, 0.18),
+                    Vec3::new(0., 0.15, 0.02),
+                    dark.clone(),
+                );
+                for x in [-0.065, 0.065] {
+                    block(
+                        &mut commands,
+                        &mut meshes,
+                        root,
+                        Vec3::new(0.035, 0.018, 0.015),
+                        Vec3::new(x, 0.03, -0.15),
+                        dark.clone(),
+                    );
+                }
+            }
+        }
+    }
     for (e, d, mut t, mut visible, glass, mesh) in &mut details {
         let Some(v) = world
             .vehicles
@@ -485,13 +577,21 @@ pub fn sync(
             continue;
         };
         *visible = Visibility::Visible;
+        let display = poses.get(&d.vehicle).copied().unwrap_or_else(|| {
+            Transform::from_translation(Vec3::from_array(v.position))
+                .with_rotation(Quat::from_rotation_y(v.yaw))
+        });
+        let rotation_delta = display.rotation * Quat::from_rotation_y(v.yaw).inverse();
+        let displayed = |point: V3| {
+            display.translation
+                + rotation_delta * (Vec3::from_array(point) - Vec3::from_array(v.position))
+        };
         match d.kind {
             DetailKind::Door(side) => {
                 let angle = v.physics.door_angles[side_index(side)];
-                t.translation = Vec3::from_array(c::world(v, door_pivot(&v.kind, side)));
-                t.rotation = Quat::from_rotation_y(
-                    v.yaw + if side == Side::Driver { -angle } else { angle },
-                );
+                t.translation = displayed(c::world(v, door_pivot(&v.kind, side)));
+                t.rotation = display.rotation
+                    * Quat::from_rotation_y(if side == Side::Driver { -angle } else { angle });
             }
             DetailKind::Glass(pane) => {
                 let g = &v.physics.glass[pane.index()];
@@ -525,21 +625,56 @@ pub fn sync(
                     *visible = Visibility::Hidden;
                 }
                 if let Some(f) = pane_frame(v, pane) {
-                    t.translation = Vec3::from_array(f.center);
-                    t.rotation = Quat::from_mat3(&Mat3::from_cols(
-                        Vec3::from_array(f.u).normalize(),
-                        Vec3::from_array(f.v).normalize(),
-                        Vec3::from_array(f.normal).normalize(),
-                    ));
+                    t.translation = displayed(f.center);
+                    t.rotation = rotation_delta
+                        * Quat::from_mat3(&Mat3::from_cols(
+                            Vec3::from_array(f.u).normalize(),
+                            Vec3::from_array(f.v).normalize(),
+                            Vec3::from_array(f.normal).normalize(),
+                        ));
                     t.scale = Vec3::new(f.half[0], f.half[1], 1.);
+                } else {
+                    *visible = Visibility::Hidden;
+                }
+            }
+            DetailKind::Bone(bone) => {
+                if let Some(b) = v.physics.npc.ragdoll.iter().find(|p| p.bone == bone) {
+                    let position = Vec3::from_array(b.position);
+                    let rotation = Quat::from_array(b.rotation);
+                    if *visible == Visibility::Hidden || t.translation.distance(position) > 3. {
+                        t.translation = position;
+                        t.rotation = rotation;
+                    } else {
+                        t.translation = t
+                            .translation
+                            .lerp(position, (time.delta_secs() * 22.).min(1.));
+                        t.rotation = t
+                            .rotation
+                            .slerp(rotation, (time.delta_secs() * 22.).min(1.));
+                    }
                 } else {
                     *visible = Visibility::Hidden;
                 }
             }
             DetailKind::Npc => {
                 let n = &v.physics.npc;
-                t.translation = Vec3::from_array(n.position);
-                t.rotation = Quat::from_rotation_y(n.yaw);
+                if !n.ragdoll.is_empty() {
+                    *visible = Visibility::Hidden;
+                    continue;
+                }
+                if n.mode == NpcMode::Seated {
+                    t.translation = displayed(c::seated_position(v));
+                    t.rotation = display.rotation;
+                } else {
+                    t.translation = t.translation.lerp(
+                        Vec3::from_array(n.position),
+                        (time.delta_secs() * 20.).min(1.),
+                    );
+                    t.rotation = t.rotation.slerp(
+                        Quat::from_rotation_y(n.yaw),
+                        (time.delta_secs() * 20.).min(1.),
+                    );
+                }
                 if n.mode == NpcMode::Dead && !n.died_seated {
                     t.translation.y = 0.22;
                     t.rotation *= Quat::from_rotation_z(-1.48);
@@ -614,26 +749,6 @@ pub fn effects(
         if world.server_time_ms.saturating_sub(impact.at_ms) > 500 {
             continue;
         }
-        let delta = Vec3::from_array(impact.position) - Vec3::from_array(impact.origin);
-        if delta.length() > 0.6 && delta.length() < 150. {
-            let m = materials.add(StandardMaterial {
-                base_color: Color::srgb(1., 0.82, 0.38),
-                unlit: true,
-                ..default()
-            });
-            let source = Vec3::from_array(impact.origin) + delta.normalize() * 0.5;
-            commands.spawn((
-                Mesh3d(meshes.add(Cuboid::new(0.008, 0.008, delta.length() - 0.5))),
-                MeshMaterial3d(m),
-                Transform::from_translation((Vec3::from_array(impact.position) + source) * 0.5)
-                    .with_rotation(Quat::from_rotation_arc(Vec3::Z, delta.normalize())),
-                Debris {
-                    velocity: Vec3::ZERO,
-                    spin: Vec3::ZERO,
-                    ttl: 0.065,
-                },
-            ));
-        }
         let glass = impact.kind.starts_with("glass");
         if glass
             && !patrol.muted
@@ -644,7 +759,15 @@ pub fn effects(
         {
             weapon::sound("glass");
         }
-        let count = if glass { 36 } else { 8 };
+        let count = if glass
+            || matches!(
+                impact.kind.as_str(),
+                "npc_hit" | "ragdoll_hit" | "officer_hit"
+            ) {
+            0
+        } else {
+            8
+        };
         let material = materials.add(StandardMaterial {
             base_color: if glass {
                 Color::srgba(0.65, 0.88, 0.92, 0.7)
@@ -687,7 +810,11 @@ pub fn effects(
                 },
             ));
         }
-        if !glass && impact.kind != "npc_hit" && impact.kind != "officer_hit" {
+        if !glass
+            && impact.kind != "npc_hit"
+            && impact.kind != "officer_hit"
+            && impact.kind != "ragdoll_hit"
+        {
             let m = materials.add(StandardMaterial {
                 base_color: Color::srgb(0.025, 0.025, 0.02),
                 double_sided: true,
@@ -736,6 +863,70 @@ pub fn effects(
                 d.velocity *= 0.25;
                 d.velocity.y = d.velocity.y.abs() * 0.3;
             }
+        }
+    }
+}
+
+#[derive(Component)]
+pub struct PhysicalShard(pub u64);
+#[derive(Resource, Default)]
+pub struct ShardAssets {
+    mesh: Option<Handle<Mesh>>,
+    material: Option<Handle<StandardMaterial>>,
+}
+/// Glass fragments are host-simulated thin rigid bodies, not client-only particle sprites.
+pub fn physical_shards(
+    shift: Res<shift::Shift>,
+    time: Res<Time>,
+    mut assets: ResMut<ShardAssets>,
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut shards: Query<(Entity, &PhysicalShard, &mut Transform)>,
+) {
+    let Some(world) = &shift.world else {
+        return;
+    };
+    if assets.mesh.is_none() {
+        assets.mesh = Some(meshes.add(triangle_mesh(
+            &[[[-0.5, -0.5], [0.5, -0.3], [0.1, 0.5]]],
+            0.,
+        )));
+        assets.material = Some(materials.add(StandardMaterial {
+            base_color: Color::srgba(0.64, 0.85, 0.88, 0.55),
+            alpha_mode: AlphaMode::Blend,
+            metallic: 0.15,
+            perceptual_roughness: 0.18,
+            double_sided: true,
+            cull_mode: None,
+            ..default()
+        }));
+    }
+    for s in &world.shards {
+        if !shards.iter().any(|(_, id, _)| id.0 == s.id) {
+            commands.spawn((
+                Mesh3d(assets.mesh.as_ref().unwrap().clone()),
+                MeshMaterial3d(assets.material.as_ref().unwrap().clone()),
+                Transform::from_translation(Vec3::from_array(s.position))
+                    .with_rotation(Quat::from_array(s.rotation))
+                    .with_scale(Vec3::from_array(s.size)),
+                bevy::light::NotShadowCaster,
+                PhysicalShard(s.id),
+            ));
+        }
+    }
+    for (entity, id, mut t) in &mut shards {
+        if let Some(s) = world.shards.iter().find(|s| s.id == id.0) {
+            t.translation = t.translation.lerp(
+                Vec3::from_array(s.position),
+                (time.delta_secs() * 25.).min(1.),
+            );
+            t.rotation = t.rotation.slerp(
+                Quat::from_array(s.rotation),
+                (time.delta_secs() * 25.).min(1.),
+            );
+        } else {
+            commands.entity(entity).despawn();
         }
     }
 }

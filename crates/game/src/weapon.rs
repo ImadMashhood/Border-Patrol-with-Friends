@@ -10,6 +10,7 @@ pub struct WeaponUi {
     tracer_mesh: Option<Handle<Mesh>>,
     tracer_material: Option<Handle<StandardMaterial>>,
     was_looking: bool,
+    pub aim_blend: f32,
 }
 #[derive(Component)]
 pub struct Gun;
@@ -50,7 +51,8 @@ pub fn render(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
-    camera: Query<Entity, With<Player>>,
+    mut camera: Query<(Entity, &mut Projection), With<Player>>,
+    buttons: Res<ButtonInput<MouseButton>>,
     mut guns: Query<(&mut Transform, &mut Visibility), With<Gun>>,
     mut slides: Query<(&Slide, &mut Transform), Without<Gun>>,
     mut flashes: Query<&mut Visibility, (With<Flash>, Without<Gun>)>,
@@ -63,7 +65,7 @@ pub fn render(
         return;
     };
     if ui.root.is_none()
-        && let Ok(camera) = camera.single()
+        && let Ok((camera, _)) = camera.single()
     {
         let root = commands
             .spawn((
@@ -108,20 +110,20 @@ pub fn render(
                 false,
             ),
             (
-                Vec3::new(0.04, 0.018, 0.02),
+                Vec3::new(0.008, 0.009, 0.014),
                 Vec3::new(0., 0.075, -0.175),
                 sight,
                 false,
             ),
             (
-                Vec3::new(0.012, 0.025, 0.03),
-                Vec3::new(-0.025, 0.075, 0.025),
+                Vec3::new(0.008, 0.015, 0.025),
+                Vec3::new(-0.015, 0.075, 0.025),
                 metal.clone(),
                 false,
             ),
             (
-                Vec3::new(0.012, 0.025, 0.03),
-                Vec3::new(0.025, 0.075, 0.025),
+                Vec3::new(0.008, 0.015, 0.025),
+                Vec3::new(0.015, 0.075, 0.025),
                 metal.clone(),
                 false,
             ),
@@ -202,19 +204,36 @@ pub fn render(
             }
         }
     }
-    ui.recoil = (ui.recoil - time.delta_secs() * 7.).max(0.);
+    // Adapted from Rusty Shooter's weapon offset follow/recovery (MIT), made frame-rate independent.
+    ui.recoil *= 0.8_f32.powf(time.delta_secs() * 60.);
+    let aimed = buttons.pressed(MouseButton::Right)
+        && me.weapon.drawn
+        && me.weapon.reload_until.is_none()
+        && !patrol.overlay
+        && patrol.looking;
+    let target = if aimed { 1. } else { 0. };
+    ui.aim_blend += (target - ui.aim_blend) * (1. - (-15. * time.delta_secs()).exp());
+    if let Ok((_, mut projection)) = camera.single_mut()
+        && let Projection::Perspective(ref mut p) = *projection
+    {
+        p.fov = (70. - 20. * ui.aim_blend).to_radians();
+    }
+
     for (mut t, mut visible) in &mut guns {
-        *visible = if me.weapon.drawn && me.health > 0 {
+        *visible = if me.weapon.drawn
+            && me.health > 0
+            && !smoke
+                .as_ref()
+                .is_some_and(|s| s.physics && s.elapsed > 48.5)
+        {
             Visibility::Visible
         } else {
             Visibility::Hidden
         };
         let reload = me.weapon.reload_until.is_some();
-        t.translation = Vec3::new(
-            0.17,
-            -0.15 - if reload { 0.18 } else { 0. },
-            -0.60 + ui.recoil * 0.065,
-        );
+        t.translation = Vec3::new(0.17, -0.15, -0.60)
+            .lerp(Vec3::new(0., -0.075, -0.48), ui.aim_blend)
+            + Vec3::new(0., if reload { -0.18 } else { 0. }, ui.recoil * 0.065);
         t.rotation = Quat::from_rotation_x(ui.recoil * 0.18 + if reload { -0.35 } else { 0. });
     }
     for (base, mut slide) in &mut slides {
@@ -365,6 +384,9 @@ pub fn controls(
                 shift.send(ClientCommand::OrderExit { vehicle_id: id });
             }
         }
+        if keys.just_pressed(KeyCode::KeyY) {
+            shift.send(ClientCommand::PullBody { vehicle_id: id });
+        }
         if keys.just_pressed(KeyCode::KeyT) {
             shift.send(ClientCommand::TowVehicle { vehicle_id: id });
         }
@@ -399,10 +421,10 @@ pub fn hud(ctx: &bevy_egui::egui::Context, shift: &shift::Shift, position: Vec3)
                 .monospace()
                 .size(16.),
             );
-            ui.label("B draw / holster   LMB fire   R reload");
+            ui.label("B draw / holster   LMB fire   RMB aim   R reload");
             if let Some((id, side)) = nearby(shift, position) {
                 ui.label(format!(
-                    "#{id} {side:?} · Q door · V front / Shift+V rear window · X exit / return · T recover"
+                    "#{id} {side:?} · Q door · V front / Shift+V rear window · X exit / return · Y pull body · T recover"
                 ));
             }
         });

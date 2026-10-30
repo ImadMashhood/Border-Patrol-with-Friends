@@ -10,3 +10,4 @@ anyhow.workspace = true
 border-scenarios.workspace = true
 border-caller.workspace = true
 border-net.workspace = true
+rapier3d = { version = "=0.30.1", features = ["enhanced-determinism"] }

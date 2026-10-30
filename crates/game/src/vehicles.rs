@@ -30,6 +30,7 @@ pub fn truck(
     lane: u8,
     ordinal: usize,
     paint: Handle<StandardMaterial>,
+    kind: &'static str,
 ) {
     let body = commands
         .spawn((
@@ -38,7 +39,7 @@ pub fn truck(
             Body {
                 lane,
                 ordinal,
-                kind: "truck",
+                kind,
             },
         ))
         .id();
@@ -269,19 +270,32 @@ pub fn sedan_panels(
     paint: Handle<StandardMaterial>,
     lane: u8,
     ordinal: usize,
+    kind: &str,
 ) {
     for (point, pivot, size, offset) in [
         (
             VehiclePoint::Cargo,
-            Vec3::new(0., 0.96, 1.13),
-            Vec3::new(1.9, 0.07, 1.1),
-            Vec3::new(0., 0., 0.55),
+            Vec3::new(
+                0.,
+                0.96 + vehicle::cab_lift(kind),
+                vehicle::rear_glass_z(kind),
+            ),
+            Vec3::new(
+                1.9,
+                0.07,
+                (vehicle::spec(kind).half_length - vehicle::rear_glass_z(kind)).max(0.3),
+            ),
+            Vec3::new(
+                0.,
+                0.,
+                (vehicle::spec(kind).half_length - vehicle::rear_glass_z(kind)).max(0.3) * 0.5,
+            ),
         ),
         (
             VehiclePoint::Hood,
-            Vec3::new(0., 0.96, -1.05),
-            Vec3::new(1.9, 0.07, 1.1),
-            Vec3::new(0., 0., -0.55),
+            Vec3::new(0., 0.96 + vehicle::cab_lift(kind), -1.05),
+            Vec3::new(1.9, 0.07, vehicle::spec(kind).half_length - 1.05),
+            Vec3::new(0., 0., -(vehicle::spec(kind).half_length - 1.05) * 0.5),
         ),
     ] {
         panel(
@@ -390,4 +404,248 @@ pub fn interaction(
         })
         .min_by(|a, b| a.2.total_cmp(&b.2))
         .map(|(id, point, _)| (id, point))
+}
+
+/// Shared close-up fittings plus silhouette-specific bodywork; all geometry is authored here.
+#[allow(clippy::too_many_arguments)]
+pub fn dressing(
+    commands: &mut Commands,
+    meshes: &mut Assets<Mesh>,
+    materials: &mut Assets<StandardMaterial>,
+    root: Entity,
+    lane: u8,
+    ordinal: usize,
+    kind: &str,
+    paint: Handle<StandardMaterial>,
+) {
+    let spec = vehicle::spec(kind);
+    let lift = vehicle::cab_lift(kind);
+    let pickup = vehicle::pickup(kind);
+    let dark = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.055, 0.06, 0.065),
+        perceptual_roughness: 0.75,
+        ..default()
+    });
+    let metal = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.55, 0.58, 0.60),
+        metallic: 0.85,
+        perceptual_roughness: 0.26,
+        ..default()
+    });
+    let plate = materials.add(Color::srgb(0.89, 0.88, 0.76));
+    let light = materials.add(StandardMaterial {
+        base_color: Color::srgb(0.95, 0.86, 0.62),
+        emissive: LinearRgba::rgb(0.1, 0.08, 0.04),
+        ..default()
+    });
+    let mut part = |size: Vec3, pos: Vec3, mat: Handle<StandardMaterial>| {
+        let e = commands
+            .spawn((
+                Mesh3d(meshes.add(Cuboid::from_size(size))),
+                MeshMaterial3d(mat),
+                Transform::from_translation(pos),
+            ))
+            .id();
+        commands.entity(root).add_child(e);
+    };
+    // Plates, grille slats, hood seams, wipers, sills and fuel cover are visible at officer distance.
+    for z in [-spec.half_length - 0.035, spec.half_length + 0.035] {
+        part(
+            Vec3::new(0.49, 0.16, 0.018),
+            Vec3::new(0., 0.58, z),
+            plate.clone(),
+        );
+        for i in 0..7 {
+            let h = if (i + ordinal + lane as usize).is_multiple_of(3) {
+                0.07
+            } else {
+                0.095
+            };
+            part(
+                Vec3::new(0.025, h, 0.006),
+                Vec3::new(-0.16 + i as f32 * 0.05, 0.58, z + z.signum() * 0.012),
+                dark.clone(),
+            );
+        }
+    }
+    for i in 0..9 {
+        part(
+            Vec3::new(0.085, 0.16, 0.04),
+            Vec3::new(
+                -0.62 + i as f32 * 0.155,
+                0.83 + lift,
+                -spec.half_length - 0.02,
+            ),
+            metal.clone(),
+        );
+    }
+    for x in [-0.5, 0.5] {
+        part(
+            Vec3::new(0.55, 0.025, 0.018),
+            Vec3::new(x, 1.02 + lift, if pickup { -2.13 } else { -1.07 }),
+            dark.clone(),
+        );
+    }
+    for x in [-spec.half_width, spec.half_width] {
+        part(
+            Vec3::new(0.025, 0.08, spec.half_length * 1.6),
+            Vec3::new(x, 0.55, 0.),
+            dark.clone(),
+        );
+        part(
+            Vec3::new(0.012, 0.21, 0.018),
+            Vec3::new(x * 1.001, 0.75, 0.28),
+            dark.clone(),
+        );
+        part(
+            Vec3::new(0.012, 0.18, 0.20),
+            Vec3::new(x * 1.005, 0.84, spec.half_length - 0.65),
+            paint.clone(),
+        );
+    }
+    if matches!(kind, "suv" | "van") {
+        let rear = vehicle::rear_glass_z(kind);
+        let width = spec.half_width - 0.15;
+        part(
+            Vec3::new(width * 2., 0.12, rear + 1.1),
+            Vec3::new(0., 1.65 + lift, (rear - 1.1) * 0.5),
+            paint.clone(),
+        );
+        for x in [-width, width] {
+            part(
+                Vec3::new(0.12, 0.30 + lift, rear - 0.2),
+                Vec3::new(x, 0.80 + lift * 0.5, (rear + 0.2) * 0.5),
+                paint.clone(),
+            );
+            part(
+                Vec3::new(0.09, 0.72, 0.09),
+                Vec3::new(x, 1.28 + lift, rear),
+                paint.clone(),
+            );
+            part(
+                Vec3::new(0.09, 0.07, rear - 0.25),
+                Vec3::new(x, 1.61 + lift, (rear + 0.25) * 0.5),
+                paint.clone(),
+            );
+        }
+        for z in [0.55, rear - 0.35] {
+            part(
+                Vec3::new(width * 1.95, 0.08, 0.09),
+                Vec3::new(0., 1.78 + lift, z),
+                dark.clone(),
+            );
+        }
+        part(
+            Vec3::new(width * 1.96, 0.65, 0.08),
+            Vec3::new(0., 0.92, rear + 0.03),
+            paint.clone(),
+        );
+        part(
+            Vec3::new(0.45, 0.055, 0.025),
+            Vec3::new(0., 1.1, rear + 0.09),
+            metal.clone(),
+        );
+        if kind == "van" {
+            for x in [-0.58, 0., 0.58] {
+                part(
+                    Vec3::new(0.035, 0.018, 3.5),
+                    Vec3::new(x, 2.27, 0.7),
+                    metal.clone(),
+                );
+            }
+            part(
+                Vec3::new(0.025, 0.8, 0.035),
+                Vec3::new(0., 1., spec.half_length),
+                dark.clone(),
+            );
+        }
+    }
+    if kind == "hatchback" {
+        part(
+            Vec3::new(1.65, 0.07, 0.3),
+            Vec3::new(0., 1.57, 1.3),
+            paint.clone(),
+        );
+        part(
+            Vec3::new(0.45, 0.025, 0.025),
+            Vec3::new(0., 1.25, 1.22),
+            dark.clone(),
+        );
+    }
+    if kind == "utility_truck" {
+        part(
+            Vec3::new(1.95, 0.6, 0.55),
+            Vec3::new(0., 1.38, 0.65),
+            metal.clone(),
+        );
+        for x in [-0.9, 0.9] {
+            for z in [0.5, 2.7] {
+                part(
+                    Vec3::new(0.07, 1.25, 0.07),
+                    Vec3::new(x, 1.95, z),
+                    metal.clone(),
+                );
+            }
+            part(
+                Vec3::new(0.07, 0.07, 2.4),
+                Vec3::new(x, 2.6, 1.6),
+                metal.clone(),
+            );
+        }
+        for z in [0.5, 1.6, 2.7] {
+            part(
+                Vec3::new(1.85, 0.06, 0.06),
+                Vec3::new(0., 2.6, z),
+                metal.clone(),
+            );
+        }
+        part(
+            Vec3::new(0.65, 0.25, 0.4),
+            Vec3::new(0., 1.9, 2.6),
+            dark.clone(),
+        );
+    }
+    let seat_lift = if pickup { 0.35 } else { lift };
+    // Interior dash, glove box and radio cluster are separate from the damageable driver.
+    part(
+        Vec3::new(1.7, 0.22, 0.3),
+        Vec3::new(0., 0.96 + seat_lift, spec.window_z - 0.58),
+        dark.clone(),
+    );
+    part(
+        Vec3::new(0.34, 0.10, 0.035),
+        Vec3::new(0.2, 1.04 + seat_lift, spec.window_z - 0.4),
+        metal.clone(),
+    );
+    part(
+        Vec3::new(0.27, 0.07, 0.02),
+        Vec3::new(0.2, 1.04 + seat_lift, spec.window_z - 0.375),
+        dark.clone(),
+    );
+    for x in [-0.7, 0.7] {
+        part(
+            Vec3::new(0.18, 0.07, 0.025),
+            Vec3::new(x, 1.03 + seat_lift, spec.window_z - 0.4),
+            metal.clone(),
+        );
+    }
+    for i in 0..14 {
+        let a = i as f32 * std::f32::consts::TAU / 14.;
+        part(
+            Vec3::new(0.055, 0.035, 0.035),
+            Vec3::new(
+                -0.48 + a.cos() * 0.15,
+                1.04 + seat_lift + a.sin() * 0.13,
+                spec.window_z - 0.4,
+            ),
+            dark.clone(),
+        );
+    }
+    for x in [-0.8, 0.8] {
+        part(
+            Vec3::new(0.28, 0.07, 0.06),
+            Vec3::new(x, 0.68, -spec.half_length - 0.04),
+            light.clone(),
+        );
+    }
 }

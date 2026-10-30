@@ -59,7 +59,7 @@ The detailed scene and Part 5 shared-office/host session are connected. The offi
 
 Validated on Linux with Rust 1.94.0 and the locked dependency graph:
 
-- Full workspace tests: **57 passed**, one existing explicit microphone/model fixture test ignored.
+- Full workspace tests: **60 passed**, one existing explicit microphone/model fixture test ignored.
 - Clippy for the entire workspace/all targets with warnings denied, plus Rust formatting: passed.
 - A headless connectivity test builds the actual scene and flood-fills collision-free walking routes from spawn to the office, storage, holding yard, secondary bay, driver and both ends of the bridge. It also rejects river shortcuts and the reserved future lanes.
 - `./play.sh --smoke-shift` passed with the resident GPU speech models loaded and a clean automatic exit.
@@ -84,3 +84,5 @@ Other review viewpoints are `yard`, `desert`, `north-road`, `cinematic`, `office
 [Part 6](VEHICLES.md) adds the pickup model, physical inspection panels, vehicle-sized spacing and separate entry/exit barriers for each lane.
 
 [Projectile combat and destructible glazing](COMBAT.md) extend the sedan/pickup models with moving front doors/windows and separate physical drivers.
+
+[Six vehicle bodies and updated physics](PHYSICS.md) add detailed fittings, layered glazing, rigid fragments and articulated occupants.

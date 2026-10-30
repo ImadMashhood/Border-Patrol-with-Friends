@@ -106,7 +106,7 @@ def main():
         inputs(0)
         state = tick()
         assert state['peers'][0]['hold_ms'] == 0
-        for _ in range(29):
+        for _ in range(19):
             inputs(0, held=True)
             inputs(1)
             state = tick()
@@ -179,7 +179,7 @@ def main():
         command(0, {'type': 'reset_shift'})
         state = snapshot()
         assert state['phase'] == 'lobby' and not state['door_open'] and not state['vehicles']
-        print('PASS: two peers; authoritative 3-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; sedan/truck physical cargo inspection and both departure routes; event hooks; safe restart')
+        print('PASS: two peers; authoritative 2-second hold; host override; exact ten-minute clock; two lanes; consented swaps; shared assisted interview; sedan/truck physical cargo inspection and both departure routes; event hooks; safe restart')
     finally:
         for child in reversed(children):
             child.terminate()

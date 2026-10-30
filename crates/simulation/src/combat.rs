@@ -8,6 +8,7 @@ enum Hit {
     Glass(usize, Pane, [f32; 2]),
     Npc(usize, bool),
     Officer(usize),
+    Ragdoll(u64, u8),
 }
 impl Simulation {
     pub(super) fn fire(&mut self, peer: u64, direction: V3) -> Result<()> {
@@ -178,6 +179,39 @@ impl Simulation {
         self.emit("traveler_returning", json!({"vehicle_id":id}));
         Ok(())
     }
+    pub(super) fn pull_body(&mut self, peer: u64, id: u64) -> Result<()> {
+        let i = self.physical_vehicle(peer, id, Side::Driver)?;
+        ensure!(
+            self.world
+                .lanes
+                .iter()
+                .any(|l| l.lane_id == self.world.vehicles[i].lane_id && l.owner == Some(peer))
+                || self
+                    .world
+                    .peers
+                    .iter()
+                    .any(|p| p.peer_id == peer
+                        && p.assisting == Some(self.world.vehicles[i].lane_id)),
+            "claim or assist this lane first"
+        );
+        let v = &mut self.world.vehicles[i];
+        ensure!(
+            v.physics.npc.health == 0 && v.physics.npc.died_seated && !v.physics.npc.extracted,
+            "no seated body to remove"
+        );
+        v.physics.door_open[0] = true;
+        v.physics.glass[Pane::DriverFront.index()].target_down = true;
+        ensure!(
+            self.physics.start_pull(id),
+            "body is already being pulled out"
+        );
+        self.world.vehicles[i].physics.npc.body_pull_active = true;
+        self.emit(
+            "body_extraction_started",
+            json!({"vehicle_id":id,"peer_id":peer}),
+        );
+        Ok(())
+    }
     pub(super) fn tow_vehicle(&mut self, peer: u64, id: u64) -> Result<()> {
         let i = self.physical_vehicle(peer, id, Side::Driver)?;
         ensure!(
@@ -313,6 +347,7 @@ impl Simulation {
                                 v.physics.npc.health =
                                     v.physics.npc.health.saturating_sub(damage.round() as u8);
                                 if v.physics.npc.health == 0 {
+                                    v.physics.npc.death_impulse = mul(direction, shot.energy * 2.);
                                     v.physics.npc.died_seated =
                                         v.physics.npc.mode == NpcMode::Seated;
                                     v.physics.npc.mode = NpcMode::Dead;
@@ -322,6 +357,12 @@ impl Simulation {
                                 }
                                 alive = false;
                                 ("npc_hit", Some(v.vehicle_id))
+                            }
+                            Hit::Ragdoll(id, bone) => {
+                                self.physics
+                                    .impulse(id, bone, mul(direction, shot.energy * 3.));
+                                alive = false;
+                                ("ragdoll_hit", Some(id))
                             }
                             Hit::Officer(i) => {
                                 self.world.peers[i].health = self.world.peers[i]
@@ -390,6 +431,9 @@ impl Simulation {
                 offer(d, Hit::World, mul(direction, -1.));
             }
         }
+        if let Some((distance, id, bone)) = self.physics.ray_dolls(shot.position, direction, max) {
+            offer(distance, Hit::Ragdoll(id, bone), mul(direction, -1.));
+        }
         for (i, p) in self
             .world
             .peers
@@ -442,13 +486,29 @@ impl Simulation {
                 let len = 1.15;
                 let center = add(
                     pivot,
-                    [0., if v.kind == "truck" { 1.05 } else { 0.75 }, len * 0.5],
+                    [
+                        0.,
+                        if border_net::vehicle::pickup(&v.kind) {
+                            1.05
+                        } else {
+                            0.75 + vehicle::cab_lift(&v.kind)
+                        },
+                        len * 0.5,
+                    ],
                 );
                 if let Some(d) = ray_box(origin, dir, center, [0.045, 0.25, len * 0.5], max) {
                     offer(d, Hit::Body(i), mul(direction, -1.));
                 }
-                let belt = if v.kind == "truck" { 1.3 } else { 0.96 };
-                let top = if v.kind == "truck" { 2.1 } else { 1.61 };
+                let belt = if border_net::vehicle::pickup(&v.kind) {
+                    1.3
+                } else {
+                    0.96
+                };
+                let top = if border_net::vehicle::pickup(&v.kind) {
+                    2.1
+                } else {
+                    1.61
+                };
                 for (offset, half) in [
                     (
                         [0., (belt + top) * 0.5, 0.02],

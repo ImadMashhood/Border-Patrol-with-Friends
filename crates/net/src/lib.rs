@@ -2,11 +2,12 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-pub const PROTOCOL_VERSION: u16 = 4;
-pub const READY_HOLD_MS: u64 = 3000;
+pub const PROTOCOL_VERSION: u16 = 5;
+pub const READY_HOLD_MS: u64 = 2000;
 pub const SHIFT_DURATION_MS: u64 = 600_000;
 pub mod combat;
 pub mod map;
+pub mod movement;
 pub mod vehicle;
 pub const PEER_TIMEOUT_MS: u64 = 15_000;
 pub const HTTP_TIMEOUT_SECS: u64 = 5;
@@ -63,6 +64,9 @@ pub enum ClientCommand {
     ToggleWindow {
         vehicle_id: u64,
         pane: combat::Pane,
+    },
+    PullBody {
+        vehicle_id: u64,
     },
     OrderEnter {
         vehicle_id: u64,
@@ -259,6 +263,7 @@ pub struct WorldSnapshot {
     pub notices: Vec<ShiftNotice>,
     pub projectiles: Vec<combat::Projectile>,
     pub impacts: Vec<combat::Impact>,
+    pub shards: Vec<combat::ShardPose>,
 }
 /// Only the operator endpoint may deserialize these commands. Never put them in ClientCommand.
 #[derive(Debug, Clone, Serialize, Deserialize)]

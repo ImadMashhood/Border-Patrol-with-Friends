@@ -90,96 +90,17 @@ impl Simulation {
             let fresh = now.saturating_sub(state.input_at) <= 500;
             if let Some(input) = &state.input {
                 if fresh && view.health > 0 {
-                    let axis = input.movement;
-                    let length = axis[0].hypot(axis[1]).max(1.);
                     view.yaw = input.yaw;
-                    for axis_index in [0, 1] {
-                        let mut next = view.position;
-                        let coordinate = if axis_index == 0 { 0 } else { 2 };
-                        next[coordinate] +=
-                            axis[axis_index] / length * if input.jog { 5.8 } else { 3.2 } * dt;
-                        let closed_door = border_net::map::Aabb {
-                            center: map::DOOR,
-                            half: [1.1, 1.5, 0.16],
-                        };
-                        if map::walkable(next[0], next[2])
-                            && !self
-                                .collision
-                                .iter()
-                                .any(|a| map::blocked(next[0], next[2], a))
-                            && !self
-                                .world
-                                .vehicles
-                                .iter()
-                                .filter(|v| v.stage != VehicleStage::Exited)
-                                .any(|v| {
-                                    map::blocked(
-                                        next[0],
-                                        next[2],
-                                        &vehicle::spec(&v.kind).aabb(v.position, v.yaw),
-                                    )
-                                })
-                            && !self.world.lanes.iter().any(|lane| {
-                                [
-                                    (!lane.entry_barrier_open, vehicle::ENTRY_GATE_Z),
-                                    (!lane.barrier_open, vehicle::EXIT_GATE_Z),
-                                ]
-                                .iter()
-                                .any(|(closed, z)| {
-                                    *closed
-                                        && map::blocked(
-                                            next[0],
-                                            next[2],
-                                            &map::Aabb {
-                                                center: [(lane.lane_id - 1) as f32 * 7., 1.1, *z],
-                                                half: [2.65, 0.1, 0.1],
-                                            },
-                                        )
-                                })
-                            })
-                            && !self.world.vehicles.iter().any(|v| {
-                                let n = &v.physics.npc;
-                                if matches!(
-                                    n.mode,
-                                    border_net::combat::NpcMode::Outside
-                                        | border_net::combat::NpcMode::Exiting
-                                        | border_net::combat::NpcMode::Entering
-                                ) && (next[0] - n.position[0]).hypot(next[2] - n.position[2])
-                                    < 0.42
-                                {
-                                    return true;
-                                }
-                                [
-                                    border_net::combat::Side::Driver,
-                                    border_net::combat::Side::Passenger,
-                                ]
-                                .into_iter()
-                                .any(|side| {
-                                    let angle = v.physics.door_angles
-                                        [border_net::combat::side_index(side)]
-                                        * if side == border_net::combat::Side::Driver {
-                                            -1.
-                                        } else {
-                                            1.
-                                        };
-                                    if angle.abs() < 0.05 {
-                                        return false;
-                                    }
-                                    let point = border_net::combat::local(v, next);
-                                    let pivot = border_net::combat::door_pivot(&v.kind, side);
-                                    let local = border_net::combat::rotate(
-                                        border_net::combat::sub(point, pivot),
-                                        -angle,
-                                    );
-                                    local[0].abs() < 0.27 && local[2] > -0.22 && local[2] < 1.37
-                                })
-                            })
-                            && (self.world.door_open
-                                || !map::blocked(next[0], next[2], &closed_door))
-                        {
-                            view.position = next;
-                        }
-                    }
+                    view.position = border_net::movement::step(
+                        view.position,
+                        input.movement,
+                        input.jog,
+                        dt,
+                        &self.collision,
+                        &self.world.vehicles,
+                        &self.world.lanes,
+                        self.world.door_open,
+                    );
                 }
                 if self.world.phase == ShiftPhase::Lobby && !view.ready {
                     if fresh
@@ -222,6 +143,7 @@ impl Simulation {
             self.advance_vehicles(dt);
         }
         self.tick_combat(dt);
+        self.physics.advance(&mut self.world, dt);
         if elapsed > 0 {
             self.emit(
                 "world_tick",
@@ -627,6 +549,8 @@ impl Simulation {
         self.world.vehicles.clear();
         self.world.projectiles.clear();
         self.world.impacts.clear();
+        self.world.shards.clear();
+        self.physics = physics::PhysicalWorld::new();
         self.world.ledger.clear();
         self.world.notices.clear();
         self.world.lane_swap = None;
@@ -733,7 +657,7 @@ mod tests {
         s.world.peers[1].ready = false;
         s.peers.get_mut(&2).unwrap().hold_started = None;
         s.world.peers[0].position = map::READY_TARGET;
-        for now in (3200..=6200).step_by(100) {
+        for now in (3200..=5200).step_by(100) {
             pulse(&mut s, 1, now, true, [0., 0.]);
         }
         assert_eq!(s.world.phase, ShiftPhase::Active);
@@ -752,7 +676,7 @@ mod tests {
         }
         assert!(s.world.peers[0].position[2] < -3.8);
         s.world.peers[0].position = map::READY_TARGET;
-        for now in (1900..=4900).step_by(100) {
+        for now in (1900..=3900).step_by(100) {
             pulse(&mut s, 1, now, true, [0., 0.]);
         }
         let start = s.world.shift_started_ms.unwrap();
@@ -772,7 +696,7 @@ mod tests {
         s.tick(120_000);
         assert!(s.world.notices.is_empty());
         s.world.peers[0].position = map::READY_TARGET;
-        for now in (120_100..=123_100).step_by(100) {
+        for now in (120_100..=122_100).step_by(100) {
             pulse(&mut s, 1, now, true, [0., 0.]);
         }
         s.tick(190_000);

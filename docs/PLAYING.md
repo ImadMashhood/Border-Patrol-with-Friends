@@ -31,7 +31,7 @@ For a second local player, run `./play.sh --join --name=Officer-B` in another te
 ## How to play
 
 1. Spawn in the shared office, healed and equipped. Click the scene to look and use WASD to approach its closed exit door.
-2. Hold **E for three seconds**. The host can start, or a strict majority can register ready. The door opens and the shared ten-minute clock, queues and radio/security hooks begin.
+2. Hold **E for two seconds**. The host can start, or a strict majority can register ready. The door opens and the shared ten-minute clock, queues and radio/security hooks begin.
 3. Claim a lane with **1/2**; use **J** for a consented swap and **G** to assist the other lane. **F** toggles your flashlight. The roster also offers these controls after releasing the mouse with Tab.
 4. Aim at a stopped car within 3 meters and press **E** to interview. Both officers share the same host-owned conversation and evidence when assisting.
 5. Speak normally: automatic listening sends your question after a pause. You may also type and send or press Enter. Inspect documents/cargo and compare the account against evidence.

@@ -209,3 +209,60 @@ fn fire_rate_ammunition_reload_and_friendly_damage_are_host_owned() {
     .unwrap();
     assert_eq!(s.world.peers[0].health, 100);
 }
+
+#[test]
+fn ragdoll_uses_jointed_bodies_in_the_cabin_and_can_be_physically_pulled_out() {
+    let mut s = active();
+    pose(&mut s, [-1.6, 1.47, -0.25]);
+    s.fire(1, [1., 0., 0.]).unwrap();
+    run(&mut s, 0.3);
+    let first = s.world.vehicles[0].physics.npc.ragdoll.clone();
+    assert_eq!(first.len(), 11);
+    run(&mut s, 0.6);
+    let second = &s.world.vehicles[0].physics.npc.ragdoll;
+    assert!(
+        length(sub(first[2].position, second[2].position)) > 0.01,
+        "head must fall under constraints"
+    );
+    assert!(
+        length(sub(second[0].position, [-0.48, 0.88, -0.25])) < 0.3,
+        "seat belt should hold pelvis in the cab"
+    );
+    pose(&mut s, [-1.6, 1.7, -0.25]);
+    s.pull_body(1, 1).unwrap();
+    assert!(s.pull_body(1, 1).is_err());
+    run(&mut s, 5.);
+    let n = &s.world.vehicles[0].physics.npc;
+    assert!(n.extracted);
+    assert!(!n.died_seated);
+    assert!(
+        n.ragdoll[1].position[0] < -1.4,
+        "chest did not leave vehicle: {:?}",
+        n.ragdoll[1].position
+    );
+    for b in &n.ragdoll {
+        assert!(b.position.iter().all(|x| x.is_finite()));
+        assert!(b.position[1] > -0.3, "body fell through ground");
+        assert!(
+            length(sub(b.position, n.ragdoll[0].position)) < 1.9,
+            "joint stretched apart"
+        );
+    }
+}
+#[test]
+fn shattered_glass_is_rigid_body_debris_that_falls_collides_and_expires() {
+    let mut s = active();
+    pose(&mut s, [2., 1.47, -0.25]);
+    s.fire(1, [-1., 0., 0.]).unwrap();
+    run(&mut s, 0.08);
+    assert!(s.world.shards.len() >= 24);
+    let initial: f32 =
+        s.world.shards.iter().map(|x| x.position[1]).sum::<f32>() / s.world.shards.len() as f32;
+    run(&mut s, 0.8);
+    let later: f32 =
+        s.world.shards.iter().map(|x| x.position[1]).sum::<f32>() / s.world.shards.len() as f32;
+    assert!(later < initial - 0.1, "glass did not fall");
+    assert!(s.world.shards.iter().all(|s| s.position[1] > -0.12));
+    run(&mut s, 9.);
+    assert!(s.world.shards.is_empty());
+}
