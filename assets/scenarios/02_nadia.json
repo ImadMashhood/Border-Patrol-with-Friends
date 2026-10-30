@@ -7,7 +7,9 @@
     "biography": "Nadia Ortiz is a fictional nurse crossing at Alder Crossing. Exhausted, abrupt, dry sarcasm; corrects herself on times.",
     "occupation": "Nurse",
     "speech_style": "Exhausted, abrupt, dry sarcasm; corrects herself on times.",
-    "emotion_baseline": "confused"
+    "emotion_baseline": "confused",
+    "authority_response": "pragmatic",
+    "compliance_bounds": "Exhausted and wants to leave. May say the demanded denial or wording to end the delay, with irritation or sarcasm rather than a moral lecture. Will not invent a criminal confession or endanger anyone."
   },
   "truth": {
     "purpose": "Visit my sister after a night shift.",

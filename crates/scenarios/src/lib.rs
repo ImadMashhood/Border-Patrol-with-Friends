@@ -9,6 +9,22 @@ pub struct Character {
     pub occupation: String,
     pub speech_style: String,
     pub emotion_baseline: String,
+    #[serde(default)]
+    pub authority_response: AuthorityResponse,
+    #[serde(default)]
+    pub compliance_bounds: String,
+}
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AuthorityResponse {
+    Eager,
+    Pragmatic,
+    Opportunistic,
+    Playful,
+    Reluctant,
+    #[default]
+    Principled,
+    Defiant,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Truth {

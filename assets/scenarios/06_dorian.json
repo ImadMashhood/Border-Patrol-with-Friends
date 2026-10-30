@@ -7,7 +7,9 @@
     "biography": "Dorian Pike is a fictional delivery contractor crossing at Alder Crossing. Clipped and impatient; rehearsed account, then defensive.",
     "occupation": "Delivery contractor",
     "speech_style": "Clipped and impatient; rehearsed account, then defensive.",
-    "emotion_baseline": "irritated"
+    "emotion_baseline": "irritated",
+    "authority_response": "pragmatic",
+    "compliance_bounds": "Impatient about delays. Will often say exactly what the officer demands if promised passage, including false denials of goods; may grumble while complying. Do not make him automatically principled about verbal honesty."
   },
   "truth": {
     "purpose": "Carry sealed boxes of undeclared electronics to a resale depot.",

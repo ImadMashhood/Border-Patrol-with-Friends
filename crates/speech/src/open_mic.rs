@@ -11,11 +11,11 @@ const SAMPLE_RATE: usize = 16_000;
 #[cfg(any(target_os = "linux", test))]
 const FRAME_SAMPLES: usize = 480; // 30ms at 16kHz
 #[cfg(any(target_os = "linux", test))]
-const END_SILENCE_FRAMES: usize = 16; // 480ms pause closes a phrase
+const END_SILENCE_FRAMES: usize = 50; // 1.5 seconds of silence closes a phrase
 #[cfg(any(target_os = "linux", test))]
 const MIN_VOICE_FRAMES: usize = 6; // reject clicks and short noise bursts
 #[cfg(any(target_os = "linux", test))]
-const MAX_PHRASE_SAMPLES: usize = SAMPLE_RATE * 12;
+const MAX_PHRASE_SAMPLES: usize = SAMPLE_RATE * 20;
 
 pub enum VoiceEvent {
     Listening,
@@ -159,6 +159,7 @@ struct Segmenter {
     samples: Vec<i16>,
     voice_frames: usize,
     silence_frames: usize,
+    elapsed_samples: usize,
 }
 #[cfg(any(target_os = "linux", test))]
 impl Segmenter {
@@ -169,6 +170,7 @@ impl Segmenter {
             samples: vec![],
             voice_frames: 0,
             silence_frames: 0,
+            elapsed_samples: 0,
         }
     }
     fn reset(&mut self) {
@@ -176,6 +178,7 @@ impl Segmenter {
         self.samples.clear();
         self.voice_frames = 0;
         self.silence_frames = 0;
+        self.elapsed_samples = 0;
     }
     fn is_active(&self) -> bool {
         self.voice_frames > 0
@@ -199,6 +202,7 @@ impl Segmenter {
             self.silence_frames += 1;
         }
         if self.is_active() {
+            self.elapsed_samples += frame.len();
             self.samples.extend_from_slice(frame);
         } else {
             self.pre_roll.push_back(frame.to_vec());
@@ -206,7 +210,7 @@ impl Segmenter {
                 self.pre_roll.pop_front();
             }
         }
-        if self.silence_frames >= END_SILENCE_FRAMES || self.samples.len() >= MAX_PHRASE_SAMPLES {
+        if self.silence_frames >= END_SILENCE_FRAMES || self.elapsed_samples >= MAX_PHRASE_SAMPLES {
             let accepted = self.voice_frames >= MIN_VOICE_FRAMES;
             let samples = std::mem::take(&mut self.samples);
             self.reset();
@@ -266,7 +270,7 @@ mod tests {
             .chunks_exact(2)
             .map(|b| i16::from_le_bytes([b[0], b[1]]))
             .collect();
-        samples.extend(vec![0; SAMPLE_RATE]);
+        samples.extend(vec![0; SAMPLE_RATE * 2]);
         let mut gate = Segmenter::new(0.015);
         let phrases: Vec<_> = samples
             .chunks(FRAME_SAMPLES)
@@ -305,6 +309,37 @@ mod tests {
         }
     }
     #[test]
+    fn conversational_pause_does_not_cut_off_the_next_clause() {
+        let mut gate = Segmenter::new(0.015);
+        for _ in 0..10 {
+            assert!(gate.feed(&[2000; FRAME_SAMPLES]).is_none());
+        }
+        for _ in 0..40 {
+            assert!(gate.feed(&[0; FRAME_SAMPLES]).is_none());
+        } // 1.2s pause
+        for _ in 0..10 {
+            assert!(gate.feed(&[2000; FRAME_SAMPLES]).is_none());
+        }
+        for _ in 0..49 {
+            assert!(gate.feed(&[0; FRAME_SAMPLES]).is_none());
+        }
+        let phrase = gate.feed(&[0; FRAME_SAMPLES]).unwrap();
+        assert_eq!(
+            phrase.iter().filter(|s| **s == 2000).count(),
+            20 * FRAME_SAMPLES
+        );
+    }
+    #[test]
+    fn continuous_speech_forces_submission_at_twenty_seconds() {
+        let mut gate = Segmenter::new(0.015);
+        for _ in 0..666 {
+            assert!(gate.feed(&[2000; FRAME_SAMPLES]).is_none());
+        }
+        let phrase = gate.feed(&[2000; FRAME_SAMPLES]).unwrap();
+        assert!(phrase.len() >= SAMPLE_RATE * 20);
+        assert!(phrase.len() < SAMPLE_RATE * 20 + FRAME_SAMPLES);
+    }
+    #[test]
     fn reset_discards_paused_audio_and_long_phrases_are_bounded() {
         let mut gate = Segmenter::new(0.015);
         gate.feed(&[2000; FRAME_SAMPLES]);
@@ -313,9 +348,9 @@ mod tests {
             assert!(gate.feed(&[0; FRAME_SAMPLES]).is_none());
         }
         let mut chunks = 0;
-        for _ in 0..900 {
+        for _ in 0..1400 {
             if let Some(samples) = gate.feed(&[2000; FRAME_SAMPLES]) {
-                assert!(samples.len() <= MAX_PHRASE_SAMPLES + FRAME_SAMPLES);
+                assert!(samples.len() <= MAX_PHRASE_SAMPLES + FRAME_SAMPLES * 7);
                 chunks += 1;
             }
         }

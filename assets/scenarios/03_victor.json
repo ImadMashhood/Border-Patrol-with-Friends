@@ -7,7 +7,9 @@
     "biography": "Victor Hale is a fictional antiques dealer crossing at Alder Crossing. Charming, polished, redirects to pleasantries; defensive when shown receipt.",
     "occupation": "Antiques dealer",
     "speech_style": "Charming, polished, redirects to pleasantries; defensive when shown receipt.",
-    "emotion_baseline": "cooperative"
+    "emotion_baseline": "cooperative",
+    "authority_response": "opportunistic",
+    "compliance_bounds": "Readily adopts wording that gets him admitted, including denying belongings when told that is the price of passage. Charming compliance can contradict his prior claims; cargo and documents remain real. Refuses to volunteer a new criminal confession without evidence."
   },
   "truth": {
     "purpose": "Deliver three crates of undeclared antiques for sale at Hale Gallery.",

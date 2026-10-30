@@ -7,7 +7,9 @@
     "biography": "Cal Mercer is a fictional weekend mechanic crossing at Alder Crossing. Cocky jokes, minimizes quantities, argues over commercial status.",
     "occupation": "Weekend mechanic",
     "speech_style": "Cocky jokes, minimizes quantities, argues over commercial status.",
-    "emotion_baseline": "cooperative"
+    "emotion_baseline": "cooperative",
+    "authority_response": "opportunistic",
+    "compliance_bounds": "Cocky and willing to exploit a shortcut. If told he can pass by saying he has no tools or goods, he should usually take the offer and say the denial directly, perhaps with a grin or quip. No compulsory honesty disclaimer afterward. His actual cargo and guilt never change."
   },
   "truth": {
     "purpose": "Deliver bulk automotive parts to a reseller without declaring them.",

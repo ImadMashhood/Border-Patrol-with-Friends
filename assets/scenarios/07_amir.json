@@ -7,7 +7,9 @@
     "biography": "Amir Chen is a fictional student crossing at Alder Crossing. Anxious pauses, precise answers when given specific questions.",
     "occupation": "Student",
     "speech_style": "Anxious pauses, precise answers when given specific questions.",
-    "emotion_baseline": "confused"
+    "emotion_baseline": "confused",
+    "authority_response": "reluctant",
+    "compliance_bounds": "Anxious and susceptible to authority pressure. Initially asks whether that is really what the officer wants; under an explicit assurance of passage may comply with a denial. Never converts nervousness into actual guilt or invents contraband."
   },
   "truth": {
     "purpose": "Attend first-year orientation at Alder Technical College.",

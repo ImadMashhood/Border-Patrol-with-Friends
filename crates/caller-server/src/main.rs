@@ -96,7 +96,7 @@ impl Provider for OpenRouter {
                     .post("https://openrouter.ai/api/v1/chat/completions")
                     .bearer_auth(&self.key)
                     .json(&json!({"model":self.model,"messages":messages,
-                    "max_tokens":1024,"temperature":0.5,"response_format":{"type":"json_object"}}))
+                    "max_tokens":1024,"temperature":0.5,"response_format":response_format(s,secondary),"provider":{"require_parameters":true}}))
                     .send()
                     .await?;
                 // Never return provider bodies/credentials to the client or logs.
@@ -117,15 +117,18 @@ impl Provider for OpenRouter {
                 let raw = body["choices"][0]["message"]["content"]
                     .as_str()
                     .ok_or_else(|| anyhow::anyhow!("Provider missing dialogue"))?;
-                match validate_turn_reply(s, secondary, h, raw) {
+                match validate_turn_reply(s, secondary, h, q, raw) {
                     Ok(r) => return Ok(r),
                     Err(e) if attempt == 0 => {
-                        messages.push(json!({"role":"assistant","content":raw}));
-                        messages.push(json!({"role":"user","content":format!("Contract validation failed: {e}. Rewrite the response to fix this issue, answer the latest officer question, and preserve immutable scenario facts. Return only the required JSON.")}));
+                        eprintln!("provider output rejected before repair: {e}");
+                        messages = repair_messages(s, secondary, h, q);
                     }
-                    Err(_) => anyhow::bail!(
-                        "Provider returned invalid dialogue after repair. Retry the question."
-                    ),
+                    Err(e) => {
+                        eprintln!("provider output rejected after repair: {e}");
+                        anyhow::bail!(
+                            "Provider returned invalid dialogue after repair. Retry the question."
+                        )
+                    }
                 }
             }
             unreachable!()

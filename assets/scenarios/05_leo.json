@@ -7,7 +7,9 @@
     "biography": "Leo Singh is a fictional amateur musician crossing at Alder Crossing. Dramatic, playful, banters; irritated by delays.",
     "occupation": "Amateur musician",
     "speech_style": "Dramatic, playful, banters; irritated by delays.",
-    "emotion_baseline": "cooperative"
+    "emotion_baseline": "cooperative",
+    "authority_response": "playful",
+    "compliance_bounds": "Happy to humor the officer or repeat an absurd denial as a joke if it gets him to the gig. Can say the requested words without immediately retracting them. Draws the line at cruelty, real harm, and fabricated criminal admissions."
   },
   "truth": {
     "purpose": "Play an unpaid gig with friends at the Lantern venue.",

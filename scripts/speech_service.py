@@ -72,8 +72,8 @@ class Speech:
         with self.lock:
             audio,sr=self.sf.read(io.BytesIO(data),dtype='float32')
             if audio.ndim>1: audio=audio.mean(axis=1)
-            if not 0 < len(audio)/sr <= 15:
-                raise ValueError('Audio must contain at most 15 seconds')
+            if not 0 < len(audio)/sr <= 22:
+                raise ValueError('Audio must contain at most 22 seconds (20 second utterance plus capture padding)')
             if sr != 16000:
                 import scipy.signal
                 import math

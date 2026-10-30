@@ -9,7 +9,7 @@ The user-selected reference is **six physical CPU cores, 16 GB RAM, and an NVIDI
 - A persistent loopback service keeps both models in memory, preloads both voices and warms inference before the game opens. Requests run away from the Bevy main thread.
 - Only one GPU speech operation runs at a time. Four CPU threads are used for speech, preserving CPU headroom on the six-core reference.
 - The speech allocation target is at most 3 GiB VRAM, leaving space for rendering and the desktop in a 6 GiB card. Setup checks observed resident GPU process memory against that budget. It does not enforce a hardware-level GPU allocation ceiling.
-- Phrase completion now uses 480 ms of silence instead of 720 ms. Always-on listening, automatic submission and playback echo suppression remain enabled.
+- Phrase completion uses 1.5 seconds of silence, with automatic submission at 20 seconds of elapsed utterance audio. The local backend accepts up to 22 seconds to allow pre-roll and frame padding. Always-on listening, automatic submission and playback echo suppression remain enabled.
 - Speech recognition and synthesis are local after models are downloaded. The conversation model is separately configured as **Gemini 2.5 Flash-Lite**, per user preference.
 
 ## Install and launch
