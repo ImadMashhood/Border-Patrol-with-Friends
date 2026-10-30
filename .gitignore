@@ -1,0 +1,10 @@
+/target/
+.env
+*.log
+/tmp/
+/output/
+*.wav
+*.onnx
+*.bin
+
+/.tools/

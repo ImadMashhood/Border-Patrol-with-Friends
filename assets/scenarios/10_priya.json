@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "10_priya",
+  "seed": 1010,
+  "character": {
+    "name": "Priya Das",
+    "biography": "Priya Das is a fictional food blogger crossing at Alder Crossing. Witty, curious; turns absurd questions back on the officer.",
+    "occupation": "Food blogger",
+    "speech_style": "Witty, curious; turns absurd questions back on the officer.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "Review three restaurants for my food blog.",
+    "itinerary": "Table bookings Saturday noon, Saturday 19:00 and Sunday 12:00; return Sunday.",
+    "cargo": "A phone, notebook and two declared sealed snack packets.",
+    "smuggling": false,
+    "documents": [
+      "Three restaurant bookings match itinerary; declaration lists two sealed snack packets."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "Two sealed snack packets, both declared, plus my phone and notebook."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Three restaurant bookings match itinerary; declaration lists two sealed snack packets.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Bag inspection: phone, notebook and two sealed snacks matching declaration.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Hi! Three restaurants in two days. I have a reservation and a very ambitious appetite.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Review three restaurants for my food blog.",
+    "itinerary": "Table bookings Saturday noon, Saturday 19:00 and Sunday 12:00; return Sunday.",
+    "cargo": "Two sealed snack packets, both declared, plus my phone and notebook.",
+    "repeat": "Same three bookings. I could rank them for you while we wait.",
+    "irrelevant": "Would you like to be quoted asking me that in the review?",
+    "confront": "The snacks are sealed and declared. My only undeclared item is a strong opinion about soup."
+  }
+}

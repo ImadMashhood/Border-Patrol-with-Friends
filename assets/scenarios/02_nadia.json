@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "02_nadia",
+  "seed": 1002,
+  "character": {
+    "name": "Nadia Ortiz",
+    "biography": "Nadia Ortiz is a fictional nurse crossing at Alder Crossing. Exhausted, abrupt, dry sarcasm; corrects herself on times.",
+    "occupation": "Nurse",
+    "speech_style": "Exhausted, abrupt, dry sarcasm; corrects herself on times.",
+    "emotion_baseline": "confused"
+  },
+  "truth": {
+    "purpose": "Visit my sister after a night shift.",
+    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
+    "cargo": "A change of clothes and a wrapped birthday present.",
+    "smuggling": false,
+    "documents": [
+      "Family invitation: June, 14 Willow Lane, dinner 18:00. Return booking Monday."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "Clothes and a birthday present for my sister."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Family invitation: June, 14 Willow Lane, dinner 18:00. Return booking Monday.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Bag inspection: clothing and one wrapped birthday present.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Evening. Morning? Sorry. Twelve-hour shift. I am visiting my sister.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Visit my sister after a night shift.",
+    "itinerary": "Arrive at my sister June’s at 18:00; leave Monday.",
+    "cargo": "Clothes and a birthday present for my sister.",
+    "repeat": "Yes, still my sister. I have not acquired a second destination since you asked.",
+    "irrelevant": "I have been awake all night. Could we keep this practical?",
+    "confront": "I said eight earlier. Six, eighteen hundred, is on the invitation. I mixed the hours up."
+  }
+}

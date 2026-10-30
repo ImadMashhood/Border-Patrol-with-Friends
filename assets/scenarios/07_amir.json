@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "07_amir",
+  "seed": 1007,
+  "character": {
+    "name": "Amir Chen",
+    "biography": "Amir Chen is a fictional student crossing at Alder Crossing. Anxious pauses, precise answers when given specific questions.",
+    "occupation": "Student",
+    "speech_style": "Anxious pauses, precise answers when given specific questions.",
+    "emotion_baseline": "confused"
+  },
+  "truth": {
+    "purpose": "Attend first-year orientation at Alder Technical College.",
+    "itinerary": "Orientation Monday 09:00; campus housing Cedar Hall room 12.",
+    "cargo": "Clothing, textbooks and a used laptop.",
+    "smuggling": false,
+    "documents": [
+      "Student ID AC-12 and orientation email: Monday 09:00, Cedar Hall room 12."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "My clothes, textbooks and my old laptop."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Student ID AC-12 and orientation email: Monday 09:00, Cedar Hall room 12.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Bag inspection: clothing, textbooks, one used laptop.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Hi. I have my student ID ready. This is my first time crossing on my own.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Attend first-year orientation at Alder Technical College.",
+    "itinerary": "Orientation Monday 09:00; campus housing Cedar Hall room 12.",
+    "cargo": "My clothes, textbooks and my old laptop.",
+    "repeat": "Did I get it wrong? The email still says Monday at nine.",
+    "irrelevant": "I do not understand. Could you ask me something specific?",
+    "confront": "I am nervous because I have never done this alone. My college email has the details."
+  }
+}

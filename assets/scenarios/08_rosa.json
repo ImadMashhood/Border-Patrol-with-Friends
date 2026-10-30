@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "08_rosa",
+  "seed": 1008,
+  "character": {
+    "name": "Rosa Kim",
+    "biography": "Rosa Kim is a fictional dog trainer crossing at Alder Crossing. Dry humor, distracted by dogs, protective if pressed.",
+    "occupation": "Dog trainer",
+    "speech_style": "Dry humor, distracted by dogs, protective if pressed.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "Visit a friend for a hiking weekend with my two dogs.",
+    "itinerary": "Stay at Pine Guesthouse Friday through Sunday.",
+    "cargo": "Two dogs in two carriers, dog food and hiking gear.",
+    "smuggling": false,
+    "documents": [
+      "Pet certificates RK-1 and RK-2; Pine Guesthouse pet booking Friday to Sunday for two dogs."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "Two dogs, their food and hiking bags."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Pet certificates RK-1 and RK-2; Pine Guesthouse pet booking Friday to Sunday for two dogs.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Inspection: two dogs in two carriers; sealed dog food and hiking bags.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Two dogs, two passports. They have better paperwork than I do.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Visit a friend for a hiking weekend with my two dogs.",
+    "itinerary": "Stay at Pine Guesthouse Friday through Sunday.",
+    "cargo": "Two dogs, their food and hiking bags.",
+    "repeat": "Still two dogs. I would notice if the number changed.",
+    "irrelevant": "The dogs decline to comment. I am beginning to agree with them.",
+    "confront": "Please do not frighten them. Their certificates match the two carriers."
+  }
+}

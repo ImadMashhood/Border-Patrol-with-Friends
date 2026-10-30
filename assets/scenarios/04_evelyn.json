@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "04_evelyn",
+  "seed": 1004,
+  "character": {
+    "name": "Evelyn Park",
+    "biography": "Evelyn Park is a fictional retired librarian crossing at Alder Crossing. Warm, patient, meandering; puzzled by irrelevant questions.",
+    "occupation": "Retired librarian",
+    "speech_style": "Warm, patient, meandering; puzzled by irrelevant questions.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "Visit my grandchildren for their school play.",
+    "itinerary": "22 Maple Court, apartment 4B; return Tuesday.",
+    "cargo": "Knitted scarves, storybooks and a small suitcase.",
+    "smuggling": false,
+    "documents": [
+      "Phone contact and invitation: 22 Maple Court, apartment 4B. School play Saturday; return Tuesday."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "Gifts for my grandchildren, books and scarves."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Phone contact and invitation: 22 Maple Court, apartment 4B. School play Saturday; return Tuesday.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Suitcase inspection: knitted scarves, storybooks and clothing.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Hello dear. My grandchildren are waiting. I wrote the address down somewhere.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Visit my grandchildren for their school play.",
+    "itinerary": "22 Maple Court, apartment 4B; return Tuesday.",
+    "cargo": "Gifts for my grandchildren, books and scarves.",
+    "repeat": "I can check the note again, dear, but it will be the same address.",
+    "irrelevant": "Is that part of the crossing rules now? My goodness.",
+    "confront": "The apartment is 4B. I could not remember without looking at my phone."
+  }
+}

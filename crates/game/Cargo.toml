@@ -1,0 +1,14 @@
+[package]
+name = "border-game"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+[dependencies]
+bevy = { version = "=0.17.3", default-features = false, features = ["std", "async_executor", "bevy_asset", "bevy_log", "bevy_window", "bevy_winit", "bevy_pbr", "bevy_core_pipeline", "multi_threaded", "x11", "png", "tonemapping_luts"] }
+bevy_egui = { version = "=0.38.1", default-features = false, features = ["render", "default_fonts"] }
+serde.workspace = true
+serde_json.workspace = true
+border-scenarios.workspace = true
+border-caller.workspace = true
+border-speech.workspace = true
+reqwest.workspace = true

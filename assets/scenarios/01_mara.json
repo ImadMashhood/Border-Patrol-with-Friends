@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "01_mara",
+  "seed": 1001,
+  "character": {
+    "name": "Mara Bell",
+    "biography": "Mara Bell is a fictional photographer crossing at Alder Crossing. Chatty, observant, enthusiastic; embarrassed when interrupted.",
+    "occupation": "Photographer",
+    "speech_style": "Chatty, observant, enthusiastic; embarrassed when interrupted.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "A weekend photographing the Alder wetlands.",
+    "itinerary": "Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
+    "cargo": "One camera, two lenses, a tripod and an overnight bag.",
+    "smuggling": false,
+    "documents": [
+      "Reed Hotel RB-204: Mara Bell, Friday to Sunday."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "Only my camera equipment and an overnight bag."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Reed Hotel RB-204: Mara Bell, Friday to Sunday.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Camera bag inspection: one camera, two lenses, tripod, overnight bag.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Morning! Is the light always this good here? I am heading to the wetlands.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "A weekend photographing the Alder wetlands.",
+    "itinerary": "Arrive Friday; leave Sunday. Stay at Reed Hotel, booking RB-204.",
+    "cargo": "Only my camera equipment and an overnight bag.",
+    "repeat": "Oh, I said that already! Sorry, I can talk for ages about lenses.",
+    "irrelevant": "I am not sure what that has to do with my photographs.",
+    "confront": "No secret compartment, unless you count the pocket where lens caps disappear."
+  }
+}

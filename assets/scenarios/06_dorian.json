@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "scenario_id": "06_dorian",
+  "seed": 1006,
+  "character": {
+    "name": "Dorian Pike",
+    "biography": "Dorian Pike is a fictional delivery contractor crossing at Alder Crossing. Clipped and impatient; rehearsed account, then defensive.",
+    "occupation": "Delivery contractor",
+    "speech_style": "Clipped and impatient; rehearsed account, then defensive.",
+    "emotion_baseline": "irritated"
+  },
+  "truth": {
+    "purpose": "Carry sealed boxes of undeclared electronics to a resale depot.",
+    "itinerary": "Load today at 08:10; depot appointment today 13:00.",
+    "cargo": "Six sealed boxes of undeclared electronics for resale.",
+    "smuggling": true,
+    "documents": [
+      "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "The delivery is finished. The cargo compartment is empty."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Cargo inspection: six sealed electronics boxes, serial labels match DP-08.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "document",
+      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Today’s loading docket DP-08: six electronics boxes loaded 08:10; resale depot due 13:00."
+    },
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "cargo_inspection",
+      "explanation": "The claim \"The delivery is finished. The cargo compartment is empty.\" is contradicted by Cargo inspection: six sealed electronics boxes, serial labels match DP-08."
+    }
+  ],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "I already finished the delivery. Empty now. I have places to be.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "The delivery is done. I am heading back.",
+    "itinerary": "I finished earlier today. I am heading home.",
+    "cargo": "The delivery is finished. The cargo compartment is empty.",
+    "repeat": "Empty. That was my answer the first time. Can we move on?",
+    "irrelevant": "Do you ask every contractor that, or am I special?",
+    "confront": "Fine. There are six boxes still aboard. The depot has not received them, and I did not declare them."
+  }
+}

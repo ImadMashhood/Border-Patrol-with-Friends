@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "scenario_id": "09_cal",
+  "seed": 1009,
+  "character": {
+    "name": "Cal Mercer",
+    "biography": "Cal Mercer is a fictional weekend mechanic crossing at Alder Crossing. Cocky jokes, minimizes quantities, argues over commercial status.",
+    "occupation": "Weekend mechanic",
+    "speech_style": "Cocky jokes, minimizes quantities, argues over commercial status.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "Deliver bulk automotive parts to a reseller without declaring them.",
+    "itinerary": "Mercer Parts resale pickup Saturday noon; return tonight.",
+    "cargo": "Forty boxed automotive parts for commercial resale.",
+    "smuggling": true,
+    "documents": [
+      "Packing list CM-40: forty boxed automotive parts, Mercer Parts reseller, pickup Saturday noon."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "No commercial goods. Just my personal tools."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Packing list CM-40: forty boxed automotive parts, Mercer Parts reseller, pickup Saturday noon.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Trunk inspection: forty boxed automotive parts with resale labels matching CM-40.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "document",
+      "explanation": "The claim \"No commercial goods. Just my personal tools.\" is contradicted by Packing list CM-40: forty boxed automotive parts, Mercer Parts reseller, pickup Saturday noon."
+    },
+    {
+      "claim_id": "cargo_claim",
+      "evidence_id": "cargo_inspection",
+      "explanation": "The claim \"No commercial goods. Just my personal tools.\" is contradicted by Trunk inspection: forty boxed automotive parts with resale labels matching CM-40."
+    }
+  ],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "How is it going? Just me and my personal tools. Nothing commercial.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Just a personal trip with my tools.",
+    "itinerary": "Back tonight. Just a weekend trip.",
+    "cargo": "No commercial goods. Just my personal tools.",
+    "repeat": "Personal tools. Want me to say it in a different gear?",
+    "irrelevant": "Is that on the form or are we just making conversation?",
+    "confront": "Okay, forty parts for resale. I was calling them tools so I would not have to declare them."
+  }
+}

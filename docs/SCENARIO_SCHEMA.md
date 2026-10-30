@@ -1,0 +1,7 @@
+# Scenario authoring contract, version 1
+
+`assets/scenarios/*.json` is loaded into the Rust Scenario structure. Each manifest contains schema_version, scenario_id, seed, character (name, biography, occupation, speech_style, emotion_baseline), truth (purpose, itinerary, cargo, smuggling, documents), public_claims (id/text), evidence (id/description/reveal_condition), contradictions (claim_id/evidence_id/explanation), allowed_actions, opening_line, resolution_rules, and actor (topic responses and personality reactions).
+
+Evidence is either `documents` (available on interview) or `secondary` (available after requesting secondary inspection). Actor facts use `purpose`, `itinerary`, `cargo`, public claim IDs and evidence IDs. Secondary fact IDs are forbidden until inspected. Cargo ground truth is known to the actor but cannot be disclosed until a corresponding secondary evidence item is visible; public cargo claims remain usable before inspection. Smuggler confessions require visible cargo evidence and explicit confrontation. Truth stays internally consistent; the deliberately false public claim creates the discoverable contradiction.
+
+Validation rejects wrong schema version, empty required facts, duplicate case/claim/evidence IDs, dangling contradiction references, unsupported actions and honest cases with contradictions. The pack must contain exactly ten unique cases and exactly three smugglers. One fixed seed controls pack order without replacement.

@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "scenario_id": "05_leo",
+  "seed": 1005,
+  "character": {
+    "name": "Leo Singh",
+    "biography": "Leo Singh is a fictional amateur musician crossing at Alder Crossing. Dramatic, playful, banters; irritated by delays.",
+    "occupation": "Amateur musician",
+    "speech_style": "Dramatic, playful, banters; irritated by delays.",
+    "emotion_baseline": "cooperative"
+  },
+  "truth": {
+    "purpose": "Play an unpaid gig with friends at the Lantern venue.",
+    "itinerary": "Lantern soundcheck Saturday 16:00; return that night.",
+    "cargo": "A guitar, small amplifier and a stage outfit.",
+    "smuggling": false,
+    "documents": [
+      "Lantern confirmation: Leo Singh, unpaid guest set, Saturday 16:00 soundcheck."
+    ]
+  },
+  "public_claims": [
+    {
+      "id": "cargo_claim",
+      "text": "A guitar and amp for an unpaid gig."
+    }
+  ],
+  "evidence": [
+    {
+      "id": "document",
+      "description": "Lantern confirmation: Leo Singh, unpaid guest set, Saturday 16:00 soundcheck.",
+      "reveal_condition": "documents"
+    },
+    {
+      "id": "cargo_inspection",
+      "description": "Equipment inspection: one guitar, one small amplifier, stage clothing.",
+      "reveal_condition": "secondary"
+    }
+  ],
+  "contradictions": [],
+  "allowed_actions": [
+    "none"
+  ],
+  "opening_line": "Please tell me this checkpoint has a fast lane for extremely minor rock stars.",
+  "resolution_rules": {
+    "admit_if": "no_undeclared_commercial_goods",
+    "deny_if": "undeclared_commercial_goods"
+  },
+  "actor": {
+    "purpose": "Play an unpaid gig with friends at the Lantern venue.",
+    "itinerary": "Lantern soundcheck Saturday 16:00; return that night.",
+    "cargo": "A guitar and amp for an unpaid gig.",
+    "repeat": "Same gig, same guitar. We are doing the chorus again, apparently.",
+    "irrelevant": "I could turn that into a lyric. Not a good lyric.",
+    "confront": "The amp is mine. If I were selling it, I would have cleaned it first."
+  }
+}

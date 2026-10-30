@@ -25,7 +25,7 @@ JSON actor output: dialogue (1–1000 chars), emotion enum, action `none`, known
 1. P1A: workspace and checkpoint movement/E interaction.
 2. P1B: ten manifests, text interviews, evidence, decisions, debrief and seeded progression.
 3. P1C: offline actor and optional trusted live provider, validation/error states and budgets.
-4. P1D: opt-in V push-to-talk through external local speech tools; subtitles, mute and transcript. Tool/model installation and hardware acceptance are separate from typed play.
+4. P1D: automatic open-microphone phrase detection through external local speech tools; subtitles, microphone controls, mute and transcript. Listening pauses for AI processing/playback, and resumes automatically. Tool/model installation and hardware acceptance are separate from typed play.
 5. P1E: headless integration tests plus real graphical/voice/provider playtesting. Report untested hardware and paid-provider paths explicitly.
 
 See README for commands, requirements and current acceptance evidence. Later co-op can place the existing authoritative session service behind authenticated networking; synchronization is not implemented here.
